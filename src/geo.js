@@ -279,6 +279,51 @@
     }
     return pts;
   }
+  // Where one ring of a polygon touches another partway along an edge (a hole meeting the outline at a point),
+  // add that point to the edge, so caps and walls built from these rings share every vertex.
+  function insertTouching(rings) {
+    const G = 2, grid = new Map(), cell = (x, y) => Math.floor(x / G) + "," + Math.floor(y / G);
+    rings.forEach(r => r.forEach(p => { const k = cell(p[0], p[1]); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(p); }));
+    return rings.map(r => {
+      const out = [];
+      for (let i = 0; i < r.length; i++) {
+        const a = r[i], b = r[(i + 1) % r.length];
+        out.push(a);
+        const L2 = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2; if (L2 < 1e-12) continue;
+        const x0 = Math.floor(Math.min(a[0], b[0]) / G), x1 = Math.floor(Math.max(a[0], b[0]) / G), y0 = Math.floor(Math.min(a[1], b[1]) / G), y1 = Math.floor(Math.max(a[1], b[1]) / G);
+        if ((x1 - x0 + 1) * (y1 - y0 + 1) > 4000) continue;
+        const hits = [];
+        for (let gx = x0; gx <= x1; gx++) for (let gy = y0; gy <= y1; gy++) for (const p of grid.get(gx + "," + gy) || []) {
+          if ((p[0] === a[0] && p[1] === a[1]) || (p[0] === b[0] && p[1] === b[1])) continue;
+          const t = ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / L2;
+          if (t <= 1e-6 || t >= 1 - 1e-6) continue;
+          if (Math.abs((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])) / Math.sqrt(L2) > 1e-4) continue;
+          hits.push([t, p]);
+        }
+        hits.sort((u, v) => u[0] - v[0]);
+        for (const [, p] of hits) { const q = out[out.length - 1]; if (q[0] !== p[0] || q[1] !== p[1]) out.push(p); }
+      }
+      return out;
+    });
+  }
+  // Canonical rings for regions that become one solid: tidied, with every touching point inserted in all of them.
+  function canon(...mps) {
+    const flat = [];
+    const tidy = mps.map(mp => mp.map(poly => poly.map(r => { const t = tidyRing(open(r)); flat.push(t); return t; })));
+    const done = insertTouching(flat);
+    // a point shared by two rings (or twice by one) pinches the solid there: move every later copy 10 µm
+    // towards the midpoint of its neighbours, which is into its own ring's side of the pinch
+    const seenPt = new Set();
+    for (const r of done) for (let i = 0; i < r.length; i++) {
+      const key = r[i][0] + "," + r[i][1];
+      if (!seenPt.has(key)) { seenPt.add(key); continue; }
+      const pv = r[(i + r.length - 1) % r.length], nx = r[(i + 1) % r.length];
+      const mx = (pv[0] + nx[0]) / 2 - r[i][0], my = (pv[1] + nx[1]) / 2 - r[i][1], m = Math.hypot(mx, my);
+      if (m > 1e-9) r[i] = [r[i][0] + 0.01 * mx / m, r[i][1] + 0.01 * my / m];
+    }
+    let k = 0;
+    return tidy.map(mp => mp.map(poly => poly.map(() => { const r = done[k++]; return [...r, r[0]]; })));
+  }
   // Rings of one polygon in model space: outer CCW, holes CW.
   function normRings(poly, xf, map) {
     return poly.map((ring, i) => {
@@ -317,7 +362,13 @@
           found.push([t, i]);
         }
       }
-      return found.sort((p, q) => p[0] - q[0]).map(p => p[1]);
+      // a point where two rings touch appears twice: insert it once
+      const out = [];
+      for (const [, i] of found.sort((p, q) => p[0] - q[0])) {
+        const j = out[out.length - 1];
+        if (j === undefined || flat[2 * j] !== flat[2 * i] || flat[2 * j + 1] !== flat[2 * i + 1]) out.push(i);
+      }
+      return out;
     };
     return (a, b, c) => {
       const e1 = onEdge(a, b), e2 = onEdge(b, c), e3 = onEdge(c, a);
@@ -365,8 +416,11 @@
         for (let i = 0; i < n; i++) { bot.push(mesh.addVertex(r[i][0], r[i][1], z0)); top.push(mesh.addVertex(rt[i][0], rt[i][1], z1)); }
         for (let i = 0; i < n; i++) {
           const a = i, b = (i + 1) % n;
-          if (outward) { mesh.addTri(bot[a], bot[b], top[b]); mesh.addTri(bot[a], top[b], top[a]); }
-          else { mesh.addTri(bot[a], top[b], bot[b]); mesh.addTri(bot[a], top[a], top[b]); }
+          // split the quad on a diagonal chosen by position alone, so two walls back to back (one each way)
+          // come out as exact mirror twins, which the 3MF writer drops
+          const aFirst = r[a][0] < r[b][0] || (r[a][0] === r[b][0] && r[a][1] < r[b][1]);
+          const q = aFirst ? [[bot[a], bot[b], top[b]], [bot[a], top[b], top[a]]] : [[bot[a], bot[b], top[a]], [bot[b], top[b], top[a]]];
+          for (const [x, y, z] of q) { if (outward) mesh.addTri(x, y, z); else mesh.addTri(x, z, y); }
         }
       }
     }
@@ -399,21 +453,27 @@
     return polys;
   }
   // Simple extrusion between z0 and z1.
+  // Snapping can leave two pieces of a region touching along an edge; merge them before meshing.
+  const solid = mp => mp.length > 1 ? ops.union(mp) : mp;
   function extrude(mp, z0, z1, mesh, xf, topMap) {
+    mp = canon(solid(mp))[0];
     cap(mp, z1, true, mesh, xf, topMap);
     cap(mp, z0, false, mesh, xf);
     walls(mp, z0, z1, mesh, xf, true, topMap);
   }
   // Slab 0..T with pockets (depth d, open at z=0) for the given regions: one closed shell.
   function extrudePocketed(mp, pockets, d, T, mesh, xf, topMap) {
+    mp = solid(mp);
+    let pocket = pockets.length ? ops.union(...pockets) : []; // one region: no coincident inner walls
+    [mp, pocket] = canon(mp, pocket);                          // shared vertices wherever they touch
     cap(mp, T, true, mesh, xf, topMap);
     walls(mp, 0, T, mesh, xf, true, topMap);
-    if (!pockets.length) { cap(mp, 0, false, mesh, xf); return; }
-    const pocket = ops.union(...pockets); // one region: no coincident inner walls
-    cap(ringsInside(mp, pocket) ? minusFrom(mp, pocket) : ops.difference(mp, pocket), 0, false, mesh, xf);
+    if (!pocket.length) { cap(mp, 0, false, mesh, xf); return; }
+    cap(ringsInside(mp, pocket) ? minusFrom(mp, pocket) : canon(ops.difference(mp, pocket))[0], 0, false, mesh, xf);
     cap(pocket, d, false, mesh, xf);        // pocket ceiling faces down into the pocket
     walls(pocket, 0, d, mesh, xf, false);   // pocket walls face into the pocket
   }
+
 
   // ---------- parts ----------
   // Returns { parts: [{ name, color, mesh }], mode, notes }
@@ -423,7 +483,13 @@
     const d = Math.min(design.inkDepth || 0.6, lv.skinT - 0.3);
     const W = spec.width, L = spec.length;
     const regions = buildRegions(spec, design);
-    if (clip) { regions.plate = K(regions.plate); regions.inks = regions.inks.map(K); regions.groups = regions.groups.map(g => ({ ...g, region: K(g.region) })).filter(g => g.region.length); }
+    if (clip) {
+      // ink stops 0.3 mm short of the cut, so pockets stay inside the clipped panel (a closed mesh needs that)
+      const b = bbox(clip), m = 0.3, inner = [[[[b[0] + m, b[1] + m], [b[2] - m, b[1] + m], [b[2] - m, b[3] - m], [b[0] + m, b[3] - m], [b[0] + m, b[1] + m]]]];
+      const Ki = mp => mp.length ? ops.intersection(mp, inner) : mp;
+      regions.plate = K(regions.plate); regions.inks = regions.inks.map(Ki); regions.allInk = Ki(regions.allInk);
+      regions.groups = regions.groups.map(g => ({ ...g, region: Ki(g.region) })).filter(g => g.region.length);
+    }
     const parts = [], eps = 0.02;
     const inks = regions.inks.filter(r => r.length);
     const collars = collarOn(spec, design);
@@ -433,7 +499,7 @@
       // Inks run the full panel thickness: the panel edge shows the drawing, no plate-colour stripe.
       const inlay = design.mode === "inlay";
       const xf = inlay ? (x, y) => [W - x, L - y] : (x, y) => [x, L - y];
-      const T = lv.skinT, used = K(regions.allInk);   // colour-blind: no seams where two inks meet
+      const T = lv.skinT, used = regions.allInk;   // colour-blind: no seams where two inks meet
       const bare = used.length ? clean(ops.difference(regions.plate, used)) : regions.plate;
       const m = new Mesh();
       if (bare.length) extrude(bare, 0, T, m, xf);
@@ -456,7 +522,7 @@
       // Outer face on the bed. Rotate 180° about Y so the design reads correctly on the outside.
       const xf = (x, y) => [W - x, L - y];
       const m = new Mesh();
-      extrudePocketed(regions.plate, regions.allInk.length ? [K(regions.allInk)] : [], d, lv.skinT, m, xf);
+      extrudePocketed(regions.plate, regions.allInk.length ? [regions.allInk] : [], d, lv.skinT, m, xf);
       if (collars) {
         // short collars round each camera hole key into the body's oversized cutouts
         for (const c of spec.cutouts) {
@@ -687,7 +753,91 @@
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
   function f3(n) { return (Math.round(n * 1000) / 1000).toString(); }
 
+  // Faces are built with their own copies of shared corners. Slicers judge a mesh closed by vertex index, not
+  // position, so merge corners that write to the same 0.001 mm position and drop triangles that collapse.
+  function weld(mesh) {
+    const map = new Map(), v = [], t = [], idx = [];
+    for (let i = 0; i < mesh.v.length; i += 3) {
+      const k = f3(mesh.v[i]) + "," + f3(mesh.v[i + 1]) + "," + f3(mesh.v[i + 2]);
+      let j = map.get(k);
+      if (j === undefined) { j = v.length / 3; map.set(k, j); v.push(mesh.v[i], mesh.v[i + 1], mesh.v[i + 2]); }
+      idx.push(j);
+    }
+    for (let i = 0; i < mesh.t.length; i += 3) {
+      const a = idx[mesh.t[i]], b = idx[mesh.t[i + 1]], c = idx[mesh.t[i + 2]];
+      if (a !== b && b !== c && c !== a) t.push(a, b, c);
+    }
+    // a triangle and its mirror twin (same corners, opposite facing) enclose nothing: drop both
+    const seen = new Map(), drop = new Set();
+    for (let i = 0; i < t.length; i += 3) {
+      const tri = [t[i], t[i + 1], t[i + 2]], r = tri.indexOf(Math.min(...tri));
+      const rot = [tri[r], tri[(r + 1) % 3], tri[(r + 2) % 3]];
+      const key = rot.join(","), twin = [rot[0], rot[2], rot[1]].join(",");
+      const list = seen.get(twin);
+      if (list && list.length) { drop.add(list.pop()); drop.add(i); }
+      else { if (!seen.has(key)) seen.set(key, []); seen.get(key).push(i); }
+    }
+    if (drop.size) { const kept = []; for (let i = 0; i < t.length; i += 3) if (!drop.has(i)) kept.push(t[i], t[i + 1], t[i + 2]); t.length = 0; t.push(...kept); }
+    const out = new Mesh(); out.v = v; out.t = t; return splitPinches(out);
+  }
+  // Where two patches of one part touch only at a point, their side walls share a vertical edge (four faces on
+  // one edge: "non-manifold"). Around each vertex, group its triangles into fans joined by ordinary two-face
+  // edges and give every fan after the first its own copy of the vertex. Nothing moves; the shells just separate.
+  function splitPinches(mesh) {
+    const t = mesh.t, nv = mesh.v.length / 3, ek = (a, b) => a < b ? a * nv + b : b * nv + a;
+    const edges = new Map();
+    for (let i = 0; i < t.length; i += 3) for (let j = 0; j < 3; j++) {
+      const a = t[i + j], b = t[i + (j + 1) % 3], k = ek(a, b);
+      const e = edges.get(k) || { fwd: 0, rev: 0, tris: [], f: [], r: [] };
+      if (a < b) { e.fwd++; e.f.push(i / 3); } else { e.rev++; e.r.push(i / 3); }
+      e.tris.push(i / 3); edges.set(k, e);
+    }
+    const good = e => e.fwd === 1 && e.rev === 1;
+    let bad = false; for (const e of edges.values()) if (!good(e)) { bad = true; break; }
+    if (!bad) return mesh;
+    // Pair the faces on each over-shared edge once (one forward with one reverse, from the same surface where
+    // possible, found by flood fill over ordinary edges), and use that pairing at both ends of the edge.
+    const nt = t.length / 3, comp = new Int32Array(nt).fill(-1);
+    const triEdges = i => [ek(t[3 * i], t[3 * i + 1]), ek(t[3 * i + 1], t[3 * i + 2]), ek(t[3 * i + 2], t[3 * i])];
+    for (let s0 = 0, c = 0; s0 < nt; s0++) {
+      if (comp[s0] >= 0) continue;
+      const stack = [s0]; comp[s0] = c;
+      while (stack.length) { const i = stack.pop(); for (const k of triEdges(i)) { const e = edges.get(k); if (!good(e)) continue; for (const o of e.tris) if (comp[o] < 0) { comp[o] = c; stack.push(o); } } }
+      c++;
+    }
+    const pairOf = new Map();   // edge key -> [[fwdTri, revTri], ...]
+    for (const [k, e] of edges) {
+      if (good(e) || e.fwd !== e.rev) continue;
+      const rev = e.r.slice(), pairs = [];
+      for (const f of e.f) { let j = rev.findIndex(r => comp[r] === comp[f]); if (j < 0) j = 0; pairs.push([f, rev.splice(j, 1)[0]]); }
+      pairOf.set(k, pairs);
+    }
+    const t0 = t.slice();   // original ids for lookups while t is rewritten
+    const around = Array.from({ length: nv }, () => []);
+    for (let i = 0; i < t.length; i += 3) for (let j = 0; j < 3; j++) around[t[i + j]].push(i / 3);
+    for (let vtx = 0; vtx < nv; vtx++) {
+      const tris = around[vtx]; if (tris.length < 2) continue;
+      const parent = new Map(tris.map(x => [x, x]));
+      const find = x => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
+      for (const tri of tris) for (let j = 0; j < 3; j++) {
+        const o = t0[3 * tri + j]; if (o === vtx) continue;
+        const k = ek(vtx, o), e = edges.get(k); if (!e) continue;
+        const pairs = good(e) ? [e.tris] : (pairOf.get(k) || []);
+        for (const [p, q] of pairs) if (parent.has(p) && parent.has(q)) parent.set(find(p), find(q));
+      }
+      const groups = new Map(); for (const tri of tris) { const r = find(tri); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(tri); }
+      if (groups.size < 2) continue;
+      let first = true;
+      for (const g of groups.values()) {
+        if (first) { first = false; continue; }
+        const nvId = mesh.v.length / 3; mesh.v.push(mesh.v[3 * vtx], mesh.v[3 * vtx + 1], mesh.v[3 * vtx + 2]);
+        for (const tri of g) for (let j = 0; j < 3; j++) if (t0[3 * tri + j] === vtx) t[3 * tri + j] = nvId;
+      }
+    }
+    return mesh;
+  }
   function modelXml(parts, title) {
+    parts = parts.map(p => ({ ...p, mesh: weld(p.mesh) }));
     let res = "";
     res += `  <basematerials id="1">\n`;
     parts.forEach(p => { res += `    <base name="${esc(p.name)}" displaycolor="${esc(p.color)}FF"/>\n`; });

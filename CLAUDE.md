@@ -38,8 +38,12 @@ main multi-colour target) and a Bambu with AMS. Filament: PLA to start.
 ## Testing without a browser
 `npm i earcut polygon-clipping` then in Node: `const G = require('./src/geo.js')`, call `G.buildParts(spec, design)`,
 `G.buildFrame(spec, design)`, `G.buildCoupon(...)`, write `G.to3MF(parts, title)` to a file. Meshes were validated
-with Python `trimesh` (winding consistent, positive volumes, closed slices). Keep that standard: every part must
-have every directed edge matched by its reverse. Robustness rules learnt the hard way: snap every region that
+with Python `trimesh` (winding consistent, positive volumes, closed slices). Keep that standard, judged the way Orca judges
+it, BY VERTEX INDEX in the written 3MF: `node test/manifold.js [n]` (after `npm i earcut polygon-clipping`) exports
+bands/scribble designs in every mode, side style and the coupon and fails on any edge not used exactly once each
+way. The 3MF writer welds corners by their written 0.001 mm position, drops mirror-twin triangles and splits pinch
+vertices; walls pick quad diagonals by position so back-to-back walls cancel. Known residual (Sept 2026): 2 of
+480 test exports (one scribble design, raised panel) keep a 3-edge sliver earcut can't fill. Robustness rules learnt the hard way: snap every region that
 meets another (plate and inks both go through `ops`); build a pocketed face from the pocket's own rings
 (`minusFrom`), not a second boolean op; use the colour-blind `allInk` region for pockets/through-cuts (per-ink
 unions leave hairline seams); `cap` repairs earcut T-junctions on diagonals and takes winding from total area.
