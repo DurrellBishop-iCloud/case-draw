@@ -159,7 +159,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.5.1</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.5.2</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -1473,6 +1473,8 @@ const DEFAULT_DESIGN = {
   rule: "free",           // drawing rule: free | line | vstripe | hstripe
   mirrorX: false,         // mirror left-right
   mirrorY: false,         // mirror top-bottom
+  mirrorCX: null,         // mirror lines (mm from the left / top); null = the middle
+  mirrorCY: null,
   textStyle: { family: "system-ui, -apple-system, Helvetica, Arial, sans-serif", weight: 700, size: 8, lead: 120, track: 0, align: "center" },
   strokes: []            // { c: inkIndex, w: mm, pts: [[x,y],...] } or a filled shape { c, fill: MultiPolygon mm }
 };
@@ -1626,9 +1628,17 @@ function render(){
   // mirror lines
   if(design.mirrorX || design.mirrorY){
     ctx.save(); ctx.setLineDash([2, 2]); ctx.lineWidth = 1 / view.scale; ctx.strokeStyle = "rgba(0,0,0,.45)"; ctx.beginPath();
-    if(design.mirrorX){ ctx.moveTo(spec.width / 2, -3); ctx.lineTo(spec.width / 2, spec.length + 3); }
-    if(design.mirrorY){ ctx.moveTo(-3, spec.length / 2); ctx.lineTo(spec.width + 3, spec.length / 2); }
-    ctx.stroke(); ctx.restore();
+    const hx = mirCX(), hy = mirCY(), fo = frameOuter();
+    if(design.mirrorX){ ctx.moveTo(hx, -fo - 1); ctx.lineTo(hx, spec.length + 3); }
+    if(design.mirrorY){ ctx.moveTo(-fo - 1, hy); ctx.lineTo(spec.width + 3, hy); }
+    ctx.stroke(); ctx.setLineDash([]);
+    // drag handles: above the top for the left-right mirror, left of the side for top-bottom, the crossing for both
+    for(const h of mirrorHandles()){
+      ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2);
+      ctx.fillStyle = mirDrag && mirDrag.kind === h.kind ? "#000" : "#fff"; ctx.fill();
+      ctx.lineWidth = 1.5 / view.scale; ctx.strokeStyle = "#000"; ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // plate edge and phone outline
@@ -1714,7 +1724,17 @@ canvas.addEventListener("pointerdown", e => {
   if(activeId !== null) return;          // one drawing finger at a time
   activeId = e.pointerId;
   const [x, y] = toMM(e.offsetX, e.offsetY);
-  if(placing){
+  const mh = !placing && tool !== "cutouts" && hitMirrorHandle(x, y);
+  if(mh){
+    const now = performance.now();
+    if(mirTap.kind === mh.kind && now - mirTap.t < 400){   // double-tap a handle: back to the middle
+      if(mh.kind !== "y") design.mirrorCX = null;
+      if(mh.kind !== "x") design.mirrorCY = null;
+      mirTap = { kind: null, t: 0 }; save(); showHint("Mirror back in the middle."); render(); activeId = null; return;
+    }
+    mirTap = { kind: mh.kind, t: now };
+    mirDrag = { kind: mh.kind, dx: mirCX() - x, dy: mirCY() - y };
+  }else if(placing){
     placeDrag = { dx: placing.cx - x, dy: placing.cy - y };
   }else if(tool === "draw"){
     liveStart = [round2(x), round2(y)];
@@ -1750,7 +1770,9 @@ canvas.addEventListener("pointermove", e => {
   const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
   for(const ev of events){
     const [x, y] = toMM(ev.offsetX, ev.offsetY);
-    if(placing){
+    if(mirDrag){
+      moveMirror(mirDrag.kind, x + mirDrag.dx, y + mirDrag.dy);
+    }else if(placing){
       if(placeDrag){ placing.cx = x + placeDrag.dx; placing.cy = y + placeDrag.dy; }
     }else if(tool === "draw" && live){
       if(design.rule === "free"){
@@ -1773,6 +1795,7 @@ function endPointer(e){
   if(pinch){ if(touches.size < 2) pinch = null; return; }
   if(e.pointerId !== activeId) return;
   activeId = null; placeDrag = null;
+  if(mirDrag){ mirDrag = null; save(); setTimeout(() => showHint(""), 1500); render(); return; }
   if(tool === "draw" && live && !placing){
     const add = mirrored(live);
     commit(() => design.strokes.push(...add));
@@ -1898,14 +1921,41 @@ function rulePts(a, b){
   if(design.rule === "hstripe") return [[-10, b[1]], [W + 10, b[1]]];
   return [a];
 }
+// Where the mirror lines are (they can be dragged off-centre by their handles).
+const mirCX = () => design.mirrorCX != null ? design.mirrorCX : spec.width / 2;
+const mirCY = () => design.mirrorCY != null ? design.mirrorCY : spec.length / 2;
 // A stroke or filled shape plus its mirror copies, duplicates dropped (a V stripe mirrored top-bottom is itself).
 function mirrored(s){
   const W = spec.width, L = spec.length, out = [s];
   const mapS = (st, f) => st.fill ? { c: st.c, fill: st.fill.map(poly => poly.map(r => r.map(f))) } : { c: st.c, w: st.w, pts: st.pts.map(f) };
-  if(design.mirrorX) out.push(mapS(s, q => [round2(W - q[0]), q[1]]));
-  if(design.mirrorY) for(const t of out.slice()) out.push(mapS(t, q => [q[0], round2(L - q[1])]));
+  const cx2 = 2 * mirCX(), cy2 = 2 * mirCY();
+  if(design.mirrorX) out.push(mapS(s, q => [round2(cx2 - q[0]), q[1]]));
+  if(design.mirrorY) for(const t of out.slice()) out.push(mapS(t, q => [q[0], round2(cy2 - q[1])]));
   const seen = new Set();
   return out.filter(t => { const k = JSON.stringify(t.fill || t.pts.slice().sort()); if(seen.has(k)) return false; seen.add(k); return true; });
+}
+function mirrorHandles(){
+  const r = Math.max(1.6, 9 / view.scale), fo = frameOuter(), hs = [];
+  if(design.mirrorX) hs.push({ kind: "x", x: mirCX(), y: -fo - 0.8 - r, r });
+  if(design.mirrorY) hs.push({ kind: "y", x: -fo - 0.8 - r, y: mirCY(), r });
+  if(design.mirrorX && design.mirrorY) hs.push({ kind: "xy", x: mirCX(), y: mirCY(), r: r * 0.8 });
+  return hs;
+}
+let mirDrag = null, mirTap = { kind: null, t: 0 };
+function hitMirrorHandle(x, y){
+  const hs = mirrorHandles(), tol = 16 / view.scale;
+  let best = null, bd = Infinity;
+  for(const h of hs){ const d = Math.hypot(x - h.x, y - h.y); if(d <= Math.max(h.r * 1.4, tol) && d < bd){ bd = d; best = h; } }
+  return best;
+}
+// Snap to the middle within 1 mm; keep the line on the case.
+function moveMirror(kind, x, y){
+  const sx = Math.abs(x - spec.width / 2) < 1 ? null : round1(clamp(x, 0, spec.width));
+  const sy = Math.abs(y - spec.length / 2) < 1 ? null : round1(clamp(y, 0, spec.length));
+  if(kind !== "y") design.mirrorCX = sx;
+  if(kind !== "x") design.mirrorCY = sy;
+  const f = (v, m) => v == null ? "middle" : `${v.toFixed(1)} mm` + (Math.abs(v - m) >= 0.05 ? ` (${v > m ? "+" : ""}${(v - m).toFixed(1)})` : "");
+  showHint((kind !== "y" ? `↔ line: ${f(design.mirrorCX, spec.width / 2)} from the left` : "") + (kind === "xy" ? " · " : "") + (kind !== "x" ? `↕ line: ${f(design.mirrorCY, spec.length / 2)} from the top` : ""), true);
 }
 const ruleBtns = [...document.querySelectorAll("#rules [data-rule]")];
 function syncRules(){
@@ -1986,7 +2036,7 @@ function drawPlacing(){
   const draws = [[1, 1]]; if(design.mirrorX) draws.push([-1, 1]); if(design.mirrorY) for(const t of draws.slice()) draws.push([t[0], -1]);
   for(const [sx, sy] of draws){
     ctx.save();
-    ctx.translate(sx < 0 ? W : 0, sy < 0 ? L : 0); ctx.scale(sx, sy);
+    ctx.translate(sx < 0 ? 2 * mirCX() : 0, sy < 0 ? 2 * mirCY() : 0); ctx.scale(sx, sy);
     ctx.translate(P.cx, P.cy); ctx.rotate(P.rot);
     ctx.globalAlpha = sx === 1 && sy === 1 ? 1 : 0.6;
     ctx.imageSmoothingEnabled = P.kind === "text";
