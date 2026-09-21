@@ -144,7 +144,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.2.4</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.3.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -273,7 +273,7 @@
       <h3>Phone and case dimensions <span class="tag">mm</span></h3>
       <p>Back view: x from the left edge, y from the top edge. A cutout is a circle (<code>x, y, d</code>) or a rounded rectangle (<code>x, y</code> = centre, <code>w, h, r</code>), like the camera island. <code>cutoutClearance</code> is added all round. Side cutouts run along an edge, measured from the top-left corner. Anything marked <code>placeholder</code> is a guess, so measure and correct it, or drag camera cutouts with the Cutouts tool.</p>
       <p><code>inkMargin</code> keeps strokes clear of the plate edge and the cutouts, so raised ink never sits flush with an edge where it could catch.</p>
-      <p>Case: one piece, printed back-down. A back slab (<code>slabThickness</code>) with the wall (<code>frameWall</code>) rising from it and a lip over the screen (<code>lipDepth</code>, <code>lipThickness</code>). Button openings are windows with <code>windowRadius</code> corners.</p>
+      <p>Case: one piece, printed back-down. A back slab (<code>slabThickness</code>) with the wall (<code>frameWall</code>) rising from it and a lip over the screen (<code>lipDepth</code>, <code>lipThickness</code>). Button holes are rounded slots in the wall: <code>from</code>/<code>to</code> along the edge from the top-left corner, <code>fromScreen</code> = centre below the screen face, <code>height</code>; <code>buttonClearance</code> is added at each end. A side cutout without <code>fromScreen</code> runs the full wall height with <code>windowRadius</code> corners.</p>
       <p>Panel: a flat plate the size of the case back (<code>panelThickness</code>), glued to the slab. In inlay mode it carries short collars round the camera holes (<code>collars</code>, <code>collarWall</code>, <code>collarClearance</code>) that key into oversized holes in the slab, so it can only go on straight.</p>
       <textarea id="specJson" spellcheck="false"></textarea>
       <div class="row" style="margin-top:8px">
@@ -316,10 +316,10 @@
 // ---------- defaults ----------
 const DEFAULT_SPEC = {
   phone: "Nothing Phone (3)",
-  specVersion: 2,        // 2: measured Phone (3) outline and camera island
+  specVersion: 3,        // 2: measured outline and camera island; 3: measured thickness and buttons
   width: 76.8,
   length: 163.8,
-  thickness: 9.0,
+  thickness: 8.2,         // measured; the case adds phoneClearance under the phone as play
   cornerRadius: 11.7,
   phoneClearance: 0.25,
   frameWall: 1.5,
@@ -333,10 +333,13 @@ const DEFAULT_SPEC = {
   collarClearance: 0.15,
   cutoutClearance: 0.6,
   inkMargin: 0.6,
+  buttonClearance: 0.4,   // added to each end of every side opening
+  // Back view: the phone's right side (screen towards you) is on the left here. Measured from the top edge;
+  // fromScreen = button centre below the screen face, height = hole height (rounded ends).
   sideCutouts: [
-    { side: "left",   name: "Button 1",      from: 40, to: 49, placeholder: true },
-    { side: "left",   name: "Button 2",      from: 51, to: 64, placeholder: true },
-    { side: "left",   name: "Button 3",      from: 68, to: 81, placeholder: true },
+    { side: "left",   name: "Volume",        from: 45.8, to: 67.5, fromScreen: 2.8, height: 4 },
+    { side: "left",   name: "Power",         from: 75.3, to: 85.2, fromScreen: 2.8, height: 4 },
+    { side: "right",  name: "Essential key", from: 45.5, to: 56.8, fromScreen: 2.8, height: 4 },
     { side: "bottom", name: "USB-C + speakers", from: 18, to: 58, placeholder: true }
   ],
   cutouts: [
@@ -378,7 +381,8 @@ function load(){
     const raw = localStorage.getItem(STORE_KEY);
     if(!raw) return;
     const s = JSON.parse(raw);
-    if(s.spec && !(s.spec.specVersion >= 2)) for(const k of ["specVersion", "width", "length", "cornerRadius", "cutouts", "sideCutouts"]) s.spec[k] = clone(DEFAULT_SPEC[k]);
+    if(s.spec && !(s.spec.specVersion >= 2)) for(const k of ["width", "length", "cornerRadius", "cutouts"]) s.spec[k] = clone(DEFAULT_SPEC[k]);
+    if(s.spec && !(s.spec.specVersion >= 3)) for(const k of ["specVersion", "thickness", "sideCutouts", "buttonClearance"]) s.spec[k] = clone(DEFAULT_SPEC[k]);
     if(s.spec){ spec = Object.assign(clone(DEFAULT_SPEC), s.spec); for(const k of ["plateThickness", "ledge", "dovetail", "skinThickness", "tongueThickness", "tipHeight", "bumpHeight", "bumpRise", "bumpLength", "snapClearance", "snapBumps"]) delete spec[k]; }
     if(s.design) design = Object.assign(clone(DEFAULT_DESIGN), s.design);
   }catch(e){ /* storage unavailable; run in memory */ }
@@ -811,7 +815,7 @@ const specJson = document.getElementById("specJson"), specErr = document.getElem
 function syncSpecText(){ specJson.value = JSON.stringify(spec, null, 2); }
 function validateSpec(s){
   s = Object.assign(clone(DEFAULT_SPEC), s);
-  const nums = ["width", "length", "thickness", "cornerRadius", "phoneClearance", "frameWall", "lipDepth", "lipThickness", "windowRadius", "slabThickness", "panelThickness", "collarWall", "collarClearance", "cutoutClearance", "inkMargin"];
+  const nums = ["width", "length", "thickness", "cornerRadius", "phoneClearance", "frameWall", "lipDepth", "lipThickness", "windowRadius", "buttonClearance", "slabThickness", "panelThickness", "collarWall", "collarClearance", "cutoutClearance", "inkMargin"];
   for(const k of ["plateThickness", "ledge", "dovetail", "skinThickness", "tongueThickness", "tipHeight", "bumpHeight", "bumpRise", "bumpLength", "snapClearance", "snapBumps"]) delete s[k];
   for(const k of nums) if(typeof s[k] !== "number" || !isFinite(s[k])) throw new Error(`"${k}" must be a number`);
   if(!Array.isArray(s.sideCutouts)) throw new Error('"sideCutouts" must be a list');

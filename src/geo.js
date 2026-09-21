@@ -566,19 +566,28 @@
     const zLip = zPhone + spec.thickness;           // top of the side wall
     return { slabT, zPhone, zLip, H: zLip + lipT };
   }
-  // Button windows through the wall only; inset shortens both ends (used to round the corners).
-  function windowRects(spec, inset) {
+  // Openings through the side wall at height z (case print coordinates). A cutout with `fromScreen` is a button
+  // hole: a rounded slot `height` tall (default 4) centred that far below the screen face, with `radius` ends
+  // (default: fully round). Without it the opening runs the whole wall height with `windowRadius` corners.
+  // `buttonClearance` is added to each end along the edge.
+  function windowRects(spec, z) {
     const c = spec.phoneClearance || 0, wall = spec.frameWall, W = spec.width, L = spec.length, m = c + wall + 1;
+    const { zPhone, zLip } = frameLevels(spec), gap = spec.buttonClearance || 0;
     const out = [];
     for (const k of spec.sideCutouts || []) {
-      const a = Math.min(k.from, k.to) + inset, b = Math.max(k.from, k.to) - inset;
+      let zc, h, r;
+      if (typeof k.fromScreen === "number") { h = k.height || 4; zc = zLip - k.fromScreen; r = Math.min(k.radius != null ? k.radius : h / 2, h / 2); }
+      else { h = zLip - zPhone; zc = (zPhone + zLip) / 2; r = Math.min(spec.windowRadius || 0, h / 2); }
+      const dz = Math.abs(z - zc); if (dz >= h / 2) continue;
+      const e = dz - (h / 2 - r), inset = e > 0 ? r - Math.sqrt(Math.max(0, r * r - e * e)) : 0;
+      const a = Math.min(k.from, k.to) - gap + inset, b = Math.max(k.from, k.to) + gap - inset;
       if (b - a < 0.2) continue;
       let x0, y0, x1, y1;
       if (k.side === "left") { x0 = -m; x1 = 1; y0 = a; y1 = b; }
       else if (k.side === "right") { x0 = W - 1; x1 = W + m; y0 = a; y1 = b; }
       else if (k.side === "top") { y0 = -m; y1 = 1; x0 = a; x1 = b; }
       else { y0 = L - 1; y1 = L + m; x0 = a; x1 = b; }
-      out.push([[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]]);
+      out.push([[[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]]]);   // MultiPolygon, like every region (bbox relies on it)
     }
     return out;
   }
@@ -640,11 +649,10 @@
     const slabInterior = minusHoles(slabBand ? phoneOutline(spec, c, 16) : outer);
 
     // z intervals: [z0, z1, kind]  kind: slab | band | window | lip
-    const r = spec.windowRadius || 0, step = 0.2, n = Math.ceil(r / step);
-    const zs = [[0, slabT, "slab"], [slabT, zPhone, "band"]];
-    for (let k = 0; k < n; k++) zs.push([zPhone + k * step, zPhone + (k + 1) * step, "window"]);
-    zs.push([zPhone + n * step, zLip - n * step, "window"]);
-    for (let k = n - 1; k >= 0; k--) zs.push([zLip - (k + 1) * step, zLip - k * step, "window"]);
+    // the wall in 0.2 mm layers (the print's layer height), so rounded openings are exact where sliced;
+    // layers whose footprint doesn't change are merged back into one solid below
+    const step = 0.2, zs = [[0, slabT, "slab"], [slabT, zPhone, "band"]];
+    for (let z = zPhone; z < zLip - 1e-6; z += step) zs.push([z, Math.min(zLip, z + step), "window"]);
     zs.push([zLip, H, "lip"]);
     let intervals = zs;
     if (style === "stripes") {
@@ -665,7 +673,6 @@
     const meshFor = key => { if (!meshes.has(key)) meshes.set(key, new Mesh()); return meshes.get(key); };
     const eps = 0.02, xf = (x, y) => [x, y];
     const pieces = [];
-    const windowInset = zmid => { const dz = Math.min(zmid - zPhone, zLip - zmid); return dz >= r ? 0 : r - Math.sqrt(Math.max(0, r * r - (r - dz) * (r - dz))); };
     for (const iv of intervals) {
       const [z0, z1, kind] = iv, stripeKey = iv[3];
       let runs;
@@ -677,7 +684,7 @@
       } else {
         runs = wallRuns.map(b => ({ key: stripeKey || b.key, region: b.region }));
         if (kind === "window") {
-          const w = windowRects(spec, windowInset((z0 + z1) / 2));
+          const w = windowRects(spec, (z0 + z1) / 2);
           if (w.length) {
             const wb = w.map(bbox);   // only cut the runs a window actually reaches, so the rest stay identical and merge
             runs = runs.map(b => { const bb = bbox(b.region); const hit = w.filter((_, i) => bboxHit(bb, wb[i])); return hit.length ? { key: b.key, region: ops.difference(b.region, ...hit) } : b; }).filter(b => b.region.length);
