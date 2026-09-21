@@ -1,0 +1,1876 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<title>Case Draw</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bed:#E3E4E6;
+    --bed-dot:#C9CBCF;
+    --panel:#FFFFFF;
+    --line:#D3D5D9;
+    --text:#000000;
+    --muted:#70737A;
+    --danger:#B3261E;
+    --dot:'Doto', ui-monospace, "SF Mono", Menlo, monospace;
+    --sans:system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --sat:env(safe-area-inset-top, 0px);
+    --sab:env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font-family:var(--sans); color:var(--text); background:var(--bed);
+    display:flex; flex-direction:column; overflow:hidden;
+    -webkit-user-select:none; user-select:none; overscroll-behavior:none;
+  }
+  header{
+    padding:calc(8px + var(--sat)) 14px 8px; background:var(--panel);
+    border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:12px;
+  }
+  header h1{font:700 22px/1 var(--dot); margin:0; letter-spacing:.02em}
+  header .sub{font-size:13px; color:var(--muted); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  header button{align-self:center}
+
+  main{flex:1; position:relative; min-height:0}
+  canvas{display:block; width:100%; height:100%; touch-action:none; cursor:crosshair}
+
+  .chip{
+    position:absolute; left:50%; top:10px; transform:translateX(-50%);
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:8px 12px; font-size:13px; display:none; align-items:center; gap:10px;
+    max-width:calc(100% - 20px); white-space:nowrap;
+  }
+  .chip.show{display:flex}
+  .chip b{font:700 15px var(--dot)}
+  .chip input[type=range]{width:90px}
+  .hint{
+    position:absolute; left:50%; bottom:10px; transform:translateX(-50%);
+    background:rgba(255,255,255,.9); border:1px solid var(--line); border-radius:8px;
+    padding:6px 10px; font-size:12px; color:var(--muted); pointer-events:none; white-space:nowrap;
+  }
+
+  footer{
+    background:var(--panel); border-top:1px solid var(--line);
+    padding:8px 10px calc(8px + var(--sab)); display:flex; flex-direction:column; gap:8px;
+  }
+  .row{display:flex; align-items:center; gap:8px}
+  .seg{display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden}
+  .seg button{border:0; border-radius:0; border-right:1px solid var(--line)}
+  .seg button:last-child{border-right:0}
+  .seg button.on, button.on{background:var(--text); color:#fff}
+  button{
+    font:inherit; font-size:14px; background:var(--panel); color:var(--text);
+    border:1px solid var(--line); border-radius:8px; padding:8px 12px; min-height:38px; cursor:pointer;
+  }
+  button:disabled{opacity:.35; cursor:default}
+  button:focus-visible, input:focus-visible, textarea:focus-visible{outline:2px solid var(--text); outline-offset:2px}
+  .spacer{flex:1}
+  .inks{display:flex; gap:8px; align-items:center}
+  .ink{
+    width:34px; height:34px; border-radius:50%; border:2px solid var(--panel);
+    box-shadow:0 0 0 1px var(--line); position:relative; cursor:pointer; padding:0;
+  }
+  .ink.on{box-shadow:0 0 0 2px var(--text)}
+  .ink input{position:absolute; inset:0; opacity:0; width:100%; height:100%; pointer-events:none}
+  .ink.plate{border-radius:6px; width:26px; height:26px; margin-left:6px}
+  .width{display:flex; align-items:center; gap:8px; flex:1; min-width:0}
+  .width input{flex:1; min-width:0}
+  .width output{font:700 16px var(--dot); width:56px; text-align:right}
+  input[type=range]{accent-color:#000}
+
+  /* settings sheet */
+  .scrim{position:fixed; inset:0; background:rgba(0,0,0,.35); display:none}
+  .scrim.open{display:block}
+  .sheet{
+    position:fixed; left:0; right:0; bottom:0; max-height:88%; background:var(--panel);
+    border-radius:16px 16px 0 0; transform:translateY(100%); transition:transform .22s ease;
+    display:flex; flex-direction:column; padding:0 0 var(--sab);
+  }
+  .sheet.open{transform:none}
+  @media (prefers-reduced-motion: reduce){.sheet{transition:none}}
+  .sheet header{border:0; padding:14px 16px 6px}
+  .sheet header h2{font:700 20px var(--dot); margin:0; flex:1}
+  .sheet .body{overflow:auto; padding:4px 16px 16px; -webkit-user-select:text; user-select:text}
+  .sheet section{padding:12px 0; border-top:1px solid var(--line)}
+  .sheet section:first-child{border-top:0}
+  .sheet h3{font-size:14px; margin:0 0 8px; font-weight:600}
+  .sheet p{font-size:13px; color:var(--muted); margin:0 0 8px; line-height:1.45}
+  .sheet .row{flex-wrap:wrap}
+  .sheet label.field{display:flex; align-items:center; gap:8px; font-size:14px}
+  .sheet input[type=color]{width:34px; height:34px; border:1px solid var(--line); border-radius:8px; padding:2px; background:var(--panel)}
+  textarea{
+    width:100%; min-height:220px; font:12px/1.4 ui-monospace, Menlo, monospace;
+    border:1px solid var(--line); border-radius:8px; padding:10px; resize:vertical;
+  }
+  .err{color:var(--danger); font-size:13px; min-height:1.2em; margin-top:6px}
+  .ok{color:var(--muted); font-size:13px; min-height:1.2em; margin-top:6px}
+  .danger{color:var(--danger); border-color:var(--danger)}
+  /* 3D viewer */
+  .viewer{position:fixed; inset:0; background:var(--bed); display:none; flex-direction:column; z-index:5}
+  .viewer.open{display:flex}
+  .viewer header{padding-top:calc(8px + var(--sat))}
+  .viewer .vbar{display:flex; gap:10px; align-items:center; padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--line); font-size:13px}
+  .viewer .vsliders{flex:1; display:flex; flex-direction:column; gap:4px; min-width:0}
+  .viewer .vsliders .vrow{display:flex; align-items:center; gap:8px; font-size:13px}
+  .viewer .vsliders output{padding:4px 6px; border-radius:6px; border:1px dashed var(--line)}
+  .viewer .vsliders .dot{width:14px; height:14px; border-radius:50%; flex:none; box-shadow:0 0 0 1px var(--line)}
+  .viewer .vsliders .dot.sq{border-radius:3px}
+  .viewer .vsliders input{flex:1; min-width:0}
+  .viewer .vsliders output{font:700 14px var(--dot); width:58px; text-align:right}
+  .viewer .stage{flex:1; position:relative; min-height:0}
+  .viewer .stage canvas{touch-action:none; cursor:grab}
+  .viewer .note{position:absolute; left:50%; bottom:calc(12px + var(--sab)); transform:translateX(-50%);
+    background:rgba(255,255,255,.9); border:1px solid var(--line); border-radius:8px; padding:6px 10px;
+    font-size:12px; color:var(--muted); white-space:nowrap; max-width:calc(100% - 20px); overflow:hidden; text-overflow:ellipsis}
+  .tag{display:inline-block; font:700 11px var(--dot); padding:2px 6px; border:1px solid var(--line); border-radius:4px; color:var(--muted); vertical-align:middle}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.0.0</span>
+  <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
+  <button id="btn3d" aria-label="3D preview">3D</button>
+  <button id="btnSettings" aria-label="Settings">Settings</button>
+</header>
+
+<main>
+  <canvas id="c"></canvas>
+  <div class="chip" id="chip">
+    <span id="chipName">Cutout</span>
+    <span>x <b id="chipX">0</b></span>
+    <span>y <b id="chipY">0</b></span>
+    <span>⌀ <b id="chipD">0</b></span>
+    <input type="range" id="chipDia" min="3" max="40" step="0.5" aria-label="Cutout diameter">
+  </div>
+</main>
+
+<footer>
+  <div class="row">
+    <div class="seg" role="group" aria-label="Tool">
+      <button id="toolDraw" class="on">Draw</button>
+      <button id="toolErase">Erase</button>
+      <button id="toolCut">Cutouts</button>
+    </div>
+    <div class="spacer"></div>
+    <button id="btnFit" aria-label="Fit to screen">Fit</button>
+    <button id="btnUndo" disabled aria-label="Undo">Undo</button>
+    <button id="btnRedo" disabled aria-label="Redo">Redo</button>
+  </div>
+  <div class="row">
+    <div class="inks" id="inks"></div>
+    <div class="width">
+      <input type="range" id="width" min="0.8" max="8" step="0.1" value="2.5" aria-label="Stroke width">
+      <output id="widthOut">2.5 mm</output>
+    </div>
+  </div>
+</footer>
+
+<div class="viewer" id="viewer" role="dialog" aria-label="3D preview">
+  <header>
+    <h1>3D</h1>
+    <div class="sub" id="viewerSub"></div>
+    <button id="btnFlip">Flip</button>
+    <button id="btnCloseViewer">Close</button>
+  </header>
+  <div class="vbar">
+    <div class="vsliders" id="vsliders"></div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="seg" role="group" aria-label="Mode">
+        <button id="vModeInlay">Inlay</button>
+        <button id="vModeRelief">Relief</button>
+      </div>
+      <button id="btnFrame">Case</button>
+    </div>
+  </div>
+  <div class="stage" id="stage"><div class="note" id="viewerNote">Building…</div></div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-label="Settings">
+  <header>
+    <h2>Settings</h2>
+    <button id="btnClose">Done</button>
+  </header>
+  <div class="body">
+
+    <section>
+      <h3>Drawing sits</h3>
+      <div class="seg" role="group" aria-label="Mode">
+        <button id="modeInlay">Flush inlay</button>
+        <button id="modeRelief">Raised relief</button>
+      </div>
+      <p id="modeHelp"></p>
+      <label class="field">Slider range
+        <input type="number" id="maxInkHeight" min="1" max="20" step="0.5" style="width:70px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm
+      </label>
+      <label class="field">Flush ink depth
+        <input type="range" id="inkDepth" min="0.2" max="1.2" step="0.2" value="0.6" aria-label="Ink depth">
+        <output id="inkDepthOut" style="font:700 15px var(--dot)">0.6 mm</output>
+      </label>
+    </section>
+
+    <section>
+      <h3>Case sides</h3>
+      <div class="seg" role="group" aria-label="Case style">
+        <button id="styPlain">Plain</button>
+        <button id="styExtrude">Extend the panel</button>
+        <button id="styStripes">Stripes</button>
+      </div>
+      <p id="styHelp"></p>
+      <div id="stripeOpts" class="row" style="display:none">
+        <label class="field">Stripe height
+          <input type="number" id="stripeHeight" min="0.2" max="10" step="0.1" style="width:64px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm
+        </label>
+        <span style="font-size:13px">Cycle through:</span>
+        <label class="field"><input type="checkbox" id="sc_case"> Case</label>
+        <label class="field"><input type="checkbox" id="sc_plate"> Panel</label>
+        <label class="field"><input type="checkbox" id="sc_ink0"> Ink 1</label>
+        <label class="field"><input type="checkbox" id="sc_ink1"> Ink 2</label>
+        <label class="field"><input type="checkbox" id="sc_ink2"> Ink 3</label>
+      </div>
+    </section>
+
+    <section>
+      <h3>Colours</h3>
+      <p>The plate plus three inks matches the four tools on the U1. Tap a selected ink in the toolbar to change its colour.</p>
+      <div class="row">
+        <label class="field">Plate <input type="color" id="plateColor"></label>
+        <label class="field">Case <input type="color" id="frameColor"></label>
+        <label class="field">Ink 1 <input type="color" id="ink0"></label>
+        <label class="field">Ink 2 <input type="color" id="ink1"></label>
+        <label class="field">Ink 3 <input type="color" id="ink2"></label>
+      </div>
+    </section>
+
+    <section>
+      <h3>Phone and case dimensions <span class="tag">mm</span></h3>
+      <p>Back view: x from the left edge, y from the top edge, d is the lens diameter (clearance is added on top). Side cutouts run along an edge, measured from the top-left corner. Anything marked <code>placeholder</code> is a guess, so measure and correct it, or drag camera cutouts with the Cutouts tool.</p>
+      <p><code>inkMargin</code> keeps strokes clear of the plate edge and the cutouts, so raised ink never sits flush with an edge where it could catch.</p>
+      <p>Case: one piece, printed back-down. A back slab (<code>slabThickness</code>) with the wall (<code>frameWall</code>) rising from it and a lip over the screen (<code>lipDepth</code>, <code>lipThickness</code>). Button openings are windows with <code>windowRadius</code> corners.</p>
+      <p>Panel: a flat plate the size of the case back (<code>panelThickness</code>), glued to the slab. In inlay mode it carries short collars round the camera holes (<code>collars</code>, <code>collarWall</code>, <code>collarClearance</code>) that key into oversized holes in the slab, so it can only go on straight.</p>
+      <textarea id="specJson" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="btnApplySpec">Apply</button>
+        <button id="btnResetSpec">Reset to defaults</button>
+      </div>
+      <div class="err" id="specErr"></div>
+    </section>
+
+    <section>
+      <h3>Files</h3>
+      <div class="row">
+        <button id="btnExportJson">Save design (.json)</button>
+        <button id="btnImportJson">Open design</button>
+        <button id="btnExportSvg">Export SVG</button>
+        <button id="btnExport3mf">Export panel 3MF</button>
+        <button id="btnExportFrame">Export case 3MF</button>
+        <button id="btnExportCoupon">Export test coupon</button>
+      </div>
+      <input type="file" id="fileIn" accept="application/json,.json" hidden>
+      <div class="ok" id="fileMsg"></div>
+      <p style="margin-top:8px">The test coupon is the top-left 32 mm corner of the case and of the panel, side by side: press the phone's corner in to check the lip and clearance, and drop the panel corner on to check the camera collar. Print it before the whole case.</p>
+      <p>The case 3MF is oriented back-down, ready to slice. The panel 3MF opens in Snapmaker Orca or Bambu Studio as one object with a Panel part and one part per ink. Right-click each part to assign its filament. Where inks overlap, the stroke drawn last wins, as on screen.</p>
+    </section>
+
+    <section>
+      <div class="row">
+        <button id="btnClear" class="danger">Clear drawing</button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>/* earcut 2.2.4 — ISC License, Copyright (c) 2016, Mapbox */
+!function(e){"object"==typeof exports&&"undefined"!=typeof module?module.exports=e():"function"==typeof define&&define.amd?define([],e):("undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof self?self:this).earcut=e()}(function(){return function r(x,i,u){function f(n,e){if(!i[n]){if(!x[n]){var t="function"==typeof require&&require;if(!e&&t)return t(n,!0);if(o)return o(n,!0);throw(e=new Error("Cannot find module '"+n+"'")).code="MODULE_NOT_FOUND",e}t=i[n]={exports:{}},x[n][0].call(t.exports,function(e){return f(x[n][1][e]||e)},t,t.exports,r,x,i,u)}return i[n].exports}for(var o="function"==typeof require&&require,e=0;e<u.length;e++)f(u[e]);return f}({1:[function(e,n,t){"use strict";function r(e,n,t){t=t||2;var r,x,i,u,f,o=n&&n.length,v=o?n[0]*t:e.length,p=s(e,0,v,t,!0),y=[];if(p&&p.next!==p.prev){if(o&&(p=function(e,n,t,r){var x,i,u,f,o=[];for(x=0,i=n.length;x<i;x++)f=n[x]*r,u=x<i-1?n[x+1]*r:e.length,(f=s(e,f,u,r,!1))===f.next&&(f.steiner=!0),o.push(function(e){var n=e,t=e;for(;(n.x<t.x||n.x===t.x&&n.y<t.y)&&(t=n),n=n.next,n!==e;);return t}(f));for(o.sort(c),x=0;x<o.length;x++)t=function(e,n){var t=function(e,n){var t,r=n,x=e.x,i=e.y,u=-1/0;do{if(i<=r.y&&i>=r.next.y&&r.next.y!==r.y){var f=r.x+(i-r.y)*(r.next.x-r.x)/(r.next.y-r.y);if(f<=x&&u<f&&(u=f,t=r.x<r.next.x?r:r.next,f===x))return t}}while(r=r.next,r!==n);if(!t)return null;var o,v=t,p=t.x,y=t.y,a=1/0;r=t;for(;x>=r.x&&r.x>=p&&x!==r.x&&D(i<y?x:u,i,p,y,i<y?u:x,i,r.x,r.y)&&(o=Math.abs(i-r.y)/(x-r.x),_(r,e)&&(o<a||o===a&&(r.x>t.x||r.x===t.x&&function(e,n){return E(e.prev,e,n.prev)<0&&E(n.next,e,e.next)<0}(t,r)))&&(t=r,a=o)),r=r.next,r!==v;);return t}(e,n);if(!t)return n;n=j(t,e);return q(n,n.next),q(t,t.next)}(o[x],t);return t}(e,n,p,t)),e.length>80*t){for(var a=r=e[0],l=x=e[1],h=t;h<v;h+=t)(i=e[h])<a&&(a=i),(u=e[h+1])<l&&(l=u),r<i&&(r=i),x<u&&(x=u);f=0!==(f=Math.max(r-a,x-l))?32767/f:0}O(p,y,t,a,l,f,0)}return y}function s(e,n,t,r,x){var i,u;if(x===0<d(e,n,t,r))for(i=n;i<t;i+=r)u=f(i,e[i],e[i+1],u);else for(i=t-r;n<=i;i-=r)u=f(i,e[i],e[i+1],u);return u&&N(u,u.next)&&(C(u),u=u.next),u}function q(e,n){if(!e)return e;n=n||e;var t,r=e;do{if(t=!1,r.steiner||!N(r,r.next)&&0!==E(r.prev,r,r.next))r=r.next;else{if(C(r),(r=n=r.prev)===r.next)break;t=!0}}while(t||r!==n);return n}function O(e,n,t,r,x,i,u){if(e){if(!u&&i){for(var f=e,o=r,v=x,p=i,y=f;0===y.z&&(y.z=k(y.x,y.y,o,v,p)),y.prevZ=y.prev,y.nextZ=y.next,(y=y.next)!==f;);y.prevZ.nextZ=null,y.prevZ=null;var a,l,h,s,c,d,Z,g,w=y,M=1;do{for(l=w,c=w=null,d=0;l;){for(d++,h=l,a=Z=0;a<M&&(Z++,h=h.nextZ);a++);for(g=M;0<Z||0<g&&h;)0!==Z&&(0===g||!h||l.z<=h.z)?(l=(s=l).nextZ,Z--):(h=(s=h).nextZ,g--),c?c.nextZ=s:w=s,s.prevZ=c,c=s;l=h}}while(c.nextZ=null,M*=2,1<d)}for(var b,m,z=e;e.prev!==e.next;)if(b=e.prev,m=e.next,i?function(e,n,t,r){var x=e.prev,i=e,u=e.next;if(0<=E(x,i,u))return;var f=x.x,o=i.x,v=u.x,p=x.y,y=i.y,a=u.y,l=f<o?f<v?f:v:o<v?o:v,h=p<y?p<a?p:a:y<a?y:a,s=o<f?v<f?f:v:v<o?o:v,c=y<p?a<p?p:a:a<y?y:a,d=k(l,h,n,t,r),Z=k(s,c,n,t,r),g=e.prevZ,w=e.nextZ;for(;g&&g.z>=d&&w&&w.z<=Z;){if(g.x>=l&&g.x<=s&&g.y>=h&&g.y<=c&&g!==x&&g!==u&&D(f,p,o,y,v,a,g.x,g.y)&&0<=E(g.prev,g,g.next))return;if(g=g.prevZ,w.x>=l&&w.x<=s&&w.y>=h&&w.y<=c&&w!==x&&w!==u&&D(f,p,o,y,v,a,w.x,w.y)&&0<=E(w.prev,w,w.next))return;w=w.nextZ}for(;g&&g.z>=d;){if(g.x>=l&&g.x<=s&&g.y>=h&&g.y<=c&&g!==x&&g!==u&&D(f,p,o,y,v,a,g.x,g.y)&&0<=E(g.prev,g,g.next))return;g=g.prevZ}for(;w&&w.z<=Z;){if(w.x>=l&&w.x<=s&&w.y>=h&&w.y<=c&&w!==x&&w!==u&&D(f,p,o,y,v,a,w.x,w.y)&&0<=E(w.prev,w,w.next))return;w=w.nextZ}return 1}(e,r,x,i):function(e){var n=e.prev,t=e,e=e.next;if(0<=E(n,t,e))return;var r=n.x,x=t.x,i=e.x,u=n.y,f=t.y,o=e.y,v=r<x?r<i?r:i:x<i?x:i,p=u<f?u<o?u:o:f<o?f:o,y=x<r?i<r?r:i:i<x?x:i,a=f<u?o<u?u:o:o<f?f:o,l=e.next;for(;l!==n;){if(l.x>=v&&l.x<=y&&l.y>=p&&l.y<=a&&D(r,u,x,f,i,o,l.x,l.y)&&0<=E(l.prev,l,l.next))return;l=l.next}return 1}(e))n.push(b.i/t|0),n.push(e.i/t|0),n.push(m.i/t|0),C(e),e=m.next,z=m.next;else if((e=m)===z){u?1===u?O(e=function(e,n,t){var r=e;do{var x=r.prev,i=r.next.next}while(!N(x,i)&&U(x,r,r.next,i)&&_(x,i)&&_(i,x)&&(n.push(x.i/t|0),n.push(r.i/t|0),n.push(i.i/t|0),C(r),C(r.next),r=e=i),r=r.next,r!==e);return q(r)}(q(e),n,t),n,t,r,x,i,2):2===u&&function(e,n,t,r,x,i){var u=e;do{for(var f,o=u.next.next;o!==u.prev;){if(u.i!==o.i&&function(e,n){return e.next.i!==n.i&&e.prev.i!==n.i&&!function(e,n){var t=e;do{if(t.i!==e.i&&t.next.i!==e.i&&t.i!==n.i&&t.next.i!==n.i&&U(t,t.next,e,n))return 1}while(t=t.next,t!==e);return}(e,n)&&(_(e,n)&&_(n,e)&&function(e,n){var t=e,r=!1,x=(e.x+n.x)/2,i=(e.y+n.y)/2;for(;t.y>i!=t.next.y>i&&t.next.y!==t.y&&x<(t.next.x-t.x)*(i-t.y)/(t.next.y-t.y)+t.x&&(r=!r),t=t.next,t!==e;);return r}(e,n)&&(E(e.prev,e,n.prev)||E(e,n.prev,n))||N(e,n)&&0<E(e.prev,e,e.next)&&0<E(n.prev,n,n.next))}(u,o))return f=j(u,o),u=q(u,u.next),f=q(f,f.next),O(u,n,t,r,x,i,0),O(f,n,t,r,x,i,0);o=o.next}}while(u=u.next,u!==e)}(e,n,t,r,x,i):O(q(e),n,t,r,x,i,1);break}}}function c(e,n){return e.x-n.x}function k(e,n,t,r,x){return(e=1431655765&((e=858993459&((e=252645135&((e=16711935&((e=(e-t)*x|0)|e<<8))|e<<4))|e<<2))|e<<1))|(n=1431655765&((n=858993459&((n=252645135&((n=16711935&((n=(n-r)*x|0)|n<<8))|n<<4))|n<<2))|n<<1))<<1}function D(e,n,t,r,x,i,u,f){return(e-u)*(i-f)<=(x-u)*(n-f)&&(t-u)*(n-f)<=(e-u)*(r-f)&&(x-u)*(r-f)<=(t-u)*(i-f)}function E(e,n,t){return(n.y-e.y)*(t.x-n.x)-(n.x-e.x)*(t.y-n.y)}function N(e,n){return e.x===n.x&&e.y===n.y}function U(e,n,t,r){var x=v(E(e,n,t)),i=v(E(e,n,r)),u=v(E(t,r,e)),f=v(E(t,r,n));return x!==i&&u!==f||(0===x&&o(e,t,n)||(0===i&&o(e,r,n)||(0===u&&o(t,e,r)||!(0!==f||!o(t,n,r)))))}function o(e,n,t){return n.x<=Math.max(e.x,t.x)&&n.x>=Math.min(e.x,t.x)&&n.y<=Math.max(e.y,t.y)&&n.y>=Math.min(e.y,t.y)}function v(e){return 0<e?1:e<0?-1:0}function _(e,n){return E(e.prev,e,e.next)<0?0<=E(e,n,e.next)&&0<=E(e,e.prev,n):E(e,n,e.prev)<0||E(e,e.next,n)<0}function j(e,n){var t=new u(e.i,e.x,e.y),r=new u(n.i,n.x,n.y),x=e.next,i=n.prev;return(e.next=n).prev=e,(t.next=x).prev=t,(r.next=t).prev=r,(i.next=r).prev=i,r}function f(e,n,t,r){e=new u(e,n,t);return r?(e.next=r.next,(e.prev=r).next.prev=e,r.next=e):(e.prev=e).next=e,e}function C(e){e.next.prev=e.prev,e.prev.next=e.next,e.prevZ&&(e.prevZ.nextZ=e.nextZ),e.nextZ&&(e.nextZ.prevZ=e.prevZ)}function u(e,n,t){this.i=e,this.x=n,this.y=t,this.prev=null,this.next=null,this.z=0,this.prevZ=null,this.nextZ=null,this.steiner=!1}function d(e,n,t,r){for(var x=0,i=n,u=t-r;i<t;i+=r)x+=(e[u]-e[i])*(e[i+1]+e[u+1]),u=i;return x}n.exports=r,(n.exports.default=r).deviation=function(e,n,t,r){var x=n&&n.length,i=x?n[0]*t:e.length,u=Math.abs(d(e,0,i,t));if(x)for(var f=0,o=n.length;f<o;f++){var v=n[f]*t,p=f<o-1?n[f+1]*t:e.length;u-=Math.abs(d(e,v,p,t))}for(var y=0,f=0;f<r.length;f+=3){var a=r[f]*t,l=r[f+1]*t,h=r[f+2]*t;y+=Math.abs((e[a]-e[h])*(e[1+l]-e[1+a])-(e[a]-e[l])*(e[1+h]-e[1+a]))}return 0===u&&0===y?0:Math.abs((y-u)/u)},r.flatten=function(e){for(var n=e[0][0].length,t={vertices:[],holes:[],dimensions:n},r=0,x=0;x<e.length;x++){for(var i=0;i<e[x].length;i++)for(var u=0;u<n;u++)t.vertices.push(e[x][i][u]);0<x&&(r+=e[x-1].length,t.holes.push(r))}return t}},{}]},{},[1])(1)});
+
+</script>
+<script>/* polygon-clipping 0.15.7 — MIT License, Copyright (c) 2018 Mike Fogel (bundles splaytree, robust-predicates, bignumber.js) */
+!function(t,e){"object"==typeof exports&&"undefined"!=typeof module?module.exports=e():"function"==typeof define&&define.amd?define(e):(t="undefined"!=typeof globalThis?globalThis:t||self).polygonClipping=e()}(this,(function(){"use strict";
+/**
+     * splaytree v3.1.2
+     * Fast Splay tree for Node and browser
+     *
+     * @author Alexander Milevski <info@w8r.name>
+     * @license MIT
+     * @preserve
+     */
+/*! *****************************************************************************
+    Copyright (c) Microsoft Corporation. All rights reserved.
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+    this file except in compliance with the License. You may obtain a copy of the
+    License at http://www.apache.org/licenses/LICENSE-2.0
+
+    THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
+    WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+    MERCHANTABLITY OR NON-INFRINGEMENT.
+
+    See the Apache Version 2.0 License for specific language governing permissions
+    and limitations under the License.
+    ***************************************************************************** */function t(t,e){var n,r,i,o,s={label:0,sent:function(){if(1&i[0])throw i[1];return i[1]},trys:[],ops:[]};return o={next:l(0),throw:l(1),return:l(2)},"function"==typeof Symbol&&(o[Symbol.iterator]=function(){return this}),o;function l(o){return function(l){return function(o){if(n)throw new TypeError("Generator is already executing.");for(;s;)try{if(n=1,r&&(i=2&o[0]?r.return:o[0]?r.throw||((i=r.return)&&i.call(r),0):r.next)&&!(i=i.call(r,o[1])).done)return i;switch(r=0,i&&(o=[2&o[0],i.value]),o[0]){case 0:case 1:i=o;break;case 4:return s.label++,{value:o[1],done:!1};case 5:s.label++,r=o[1],o=[0];continue;case 7:o=s.ops.pop(),s.trys.pop();continue;default:if(!(i=s.trys,(i=i.length>0&&i[i.length-1])||6!==o[0]&&2!==o[0])){s=0;continue}if(3===o[0]&&(!i||o[1]>i[0]&&o[1]<i[3])){s.label=o[1];break}if(6===o[0]&&s.label<i[1]){s.label=i[1],i=o;break}if(i&&s.label<i[2]){s.label=i[2],s.ops.push(o);break}i[2]&&s.ops.pop(),s.trys.pop();continue}o=e.call(t,s)}catch(t){o=[6,t],r=0}finally{n=i=0}if(5&o[0])throw o[1];return{value:o[0]?o[1]:void 0,done:!0}}([o,l])}}}var e=function(t,e){this.next=null,this.key=t,this.data=e,this.left=null,this.right=null};function n(t,e){return t>e?1:t<e?-1:0}function r(t,n,r){for(var i=new e(null,null),o=i,s=i;;){var l=r(t,n.key);if(l<0){if(null===n.left)break;if(r(t,n.left.key)<0){var h=n.left;if(n.left=h.right,h.right=n,null===(n=h).left)break}s.left=n,s=n,n=n.left}else{if(!(l>0))break;if(null===n.right)break;if(r(t,n.right.key)>0){h=n.right;if(n.right=h.left,h.left=n,null===(n=h).right)break}o.right=n,o=n,n=n.right}}return o.right=n.left,s.left=n.right,n.left=i.right,n.right=i.left,n}function i(t,n,i,o){var s=new e(t,n);if(null===i)return s.left=s.right=null,s;var l=o(t,(i=r(t,i,o)).key);return l<0?(s.left=i.left,s.right=i,i.left=null):l>=0&&(s.right=i.right,s.left=i,i.right=null),s}function o(t,e,n){var i=null,o=null;if(e){var s=n((e=r(t,e,n)).key,t);0===s?(i=e.left,o=e.right):s<0?(o=e.right,e.right=null,i=e):(i=e.left,e.left=null,o=e)}return{left:i,right:o}}function s(t,e,n,r,i){if(t){r(e+(n?"└── ":"├── ")+i(t)+"\n");var o=e+(n?"    ":"│   ");t.left&&s(t.left,o,!1,r,i),t.right&&s(t.right,o,!0,r,i)}}var l=function(){function l(t){void 0===t&&(t=n),this._root=null,this._size=0,this._comparator=t}return l.prototype.insert=function(t,e){return this._size++,this._root=i(t,e,this._root,this._comparator)},l.prototype.add=function(t,n){var i=new e(t,n);null===this._root&&(i.left=i.right=null,this._size++,this._root=i);var o=this._comparator,s=r(t,this._root,o),l=o(t,s.key);return 0===l?this._root=s:(l<0?(i.left=s.left,i.right=s,s.left=null):l>0&&(i.right=s.right,i.left=s,s.right=null),this._size++,this._root=i),this._root},l.prototype.remove=function(t){this._root=this._remove(t,this._root,this._comparator)},l.prototype._remove=function(t,e,n){var i;return null===e?null:0===n(t,(e=r(t,e,n)).key)?(null===e.left?i=e.right:(i=r(t,e.left,n)).right=e.right,this._size--,i):e},l.prototype.pop=function(){var t=this._root;if(t){for(;t.left;)t=t.left;return this._root=r(t.key,this._root,this._comparator),this._root=this._remove(t.key,this._root,this._comparator),{key:t.key,data:t.data}}return null},l.prototype.findStatic=function(t){for(var e=this._root,n=this._comparator;e;){var r=n(t,e.key);if(0===r)return e;e=r<0?e.left:e.right}return null},l.prototype.find=function(t){return this._root&&(this._root=r(t,this._root,this._comparator),0!==this._comparator(t,this._root.key))?null:this._root},l.prototype.contains=function(t){for(var e=this._root,n=this._comparator;e;){var r=n(t,e.key);if(0===r)return!0;e=r<0?e.left:e.right}return!1},l.prototype.forEach=function(t,e){for(var n=this._root,r=[],i=!1;!i;)null!==n?(r.push(n),n=n.left):0!==r.length?(n=r.pop(),t.call(e,n),n=n.right):i=!0;return this},l.prototype.range=function(t,e,n,r){for(var i=[],o=this._comparator,s=this._root;0!==i.length||s;)if(s)i.push(s),s=s.left;else{if(o((s=i.pop()).key,e)>0)break;if(o(s.key,t)>=0&&n.call(r,s))return this;s=s.right}return this},l.prototype.keys=function(){var t=[];return this.forEach((function(e){var n=e.key;return t.push(n)})),t},l.prototype.values=function(){var t=[];return this.forEach((function(e){var n=e.data;return t.push(n)})),t},l.prototype.min=function(){return this._root?this.minNode(this._root).key:null},l.prototype.max=function(){return this._root?this.maxNode(this._root).key:null},l.prototype.minNode=function(t){if(void 0===t&&(t=this._root),t)for(;t.left;)t=t.left;return t},l.prototype.maxNode=function(t){if(void 0===t&&(t=this._root),t)for(;t.right;)t=t.right;return t},l.prototype.at=function(t){for(var e=this._root,n=!1,r=0,i=[];!n;)if(e)i.push(e),e=e.left;else if(i.length>0){if(e=i.pop(),r===t)return e;r++,e=e.right}else n=!0;return null},l.prototype.next=function(t){var e=this._root,n=null;if(t.right){for(n=t.right;n.left;)n=n.left;return n}for(var r=this._comparator;e;){var i=r(t.key,e.key);if(0===i)break;i<0?(n=e,e=e.left):e=e.right}return n},l.prototype.prev=function(t){var e=this._root,n=null;if(null!==t.left){for(n=t.left;n.right;)n=n.right;return n}for(var r=this._comparator;e;){var i=r(t.key,e.key);if(0===i)break;i<0?e=e.left:(n=e,e=e.right)}return n},l.prototype.clear=function(){return this._root=null,this._size=0,this},l.prototype.toList=function(){return function(t){var n=t,r=[],i=!1,o=new e(null,null),s=o;for(;!i;)n?(r.push(n),n=n.left):r.length>0?n=(n=s=s.next=r.pop()).right:i=!0;return s.next=null,o.next}(this._root)},l.prototype.load=function(t,n,r){void 0===n&&(n=[]),void 0===r&&(r=!1);var i=t.length,o=this._comparator;if(r&&f(t,n,0,i-1,o),null===this._root)this._root=h(t,n,0,i),this._size=i;else{var s=function(t,n,r){var i=new e(null,null),o=i,s=t,l=n;for(;null!==s&&null!==l;)r(s.key,l.key)<0?(o.next=s,s=s.next):(o.next=l,l=l.next),o=o.next;null!==s?o.next=s:null!==l&&(o.next=l);return i.next}(this.toList(),function(t,n){for(var r=new e(null,null),i=r,o=0;o<t.length;o++)i=i.next=new e(t[o],n[o]);return i.next=null,r.next}(t,n),o);i=this._size+i,this._root=u({head:s},0,i)}return this},l.prototype.isEmpty=function(){return null===this._root},Object.defineProperty(l.prototype,"size",{get:function(){return this._size},enumerable:!0,configurable:!0}),Object.defineProperty(l.prototype,"root",{get:function(){return this._root},enumerable:!0,configurable:!0}),l.prototype.toString=function(t){void 0===t&&(t=function(t){return String(t.key)});var e=[];return s(this._root,"",!0,(function(t){return e.push(t)}),t),e.join("")},l.prototype.update=function(t,e,n){var s=this._comparator,l=o(t,this._root,s),h=l.left,u=l.right;s(t,e)<0?u=i(e,n,u,s):h=i(e,n,h,s),this._root=function(t,e,n){return null===e?t:(null===t||((e=r(t.key,e,n)).left=t),e)}(h,u,s)},l.prototype.split=function(t){return o(t,this._root,this._comparator)},l.prototype[Symbol.iterator]=function(){var e,n,r;return t(this,(function(t){switch(t.label){case 0:e=this._root,n=[],r=!1,t.label=1;case 1:return r?[3,6]:null===e?[3,2]:(n.push(e),e=e.left,[3,5]);case 2:return 0===n.length?[3,4]:[4,e=n.pop()];case 3:return t.sent(),e=e.right,[3,5];case 4:r=!0,t.label=5;case 5:return[3,1];case 6:return[2]}}))},l}();function h(t,n,r,i){var o=i-r;if(o>0){var s=r+Math.floor(o/2),l=t[s],u=n[s],f=new e(l,u);return f.left=h(t,n,r,s),f.right=h(t,n,s+1,i),f}return null}function u(t,e,n){var r=n-e;if(r>0){var i=e+Math.floor(r/2),o=u(t,e,i),s=t.head;return s.left=o,t.head=t.head.next,s.right=u(t,i+1,n),s}return null}function f(t,e,n,r,i){if(!(n>=r)){for(var o=t[n+r>>1],s=n-1,l=r+1;;){do{s++}while(i(t[s],o)<0);do{l--}while(i(t[l],o)>0);if(s>=l)break;var h=t[s];t[s]=t[l],t[l]=h,h=e[s],e[s]=e[l],e[l]=h}f(t,e,n,l,i),f(t,e,l+1,r,i)}}const c=(t,e)=>t.ll.x<=e.x&&e.x<=t.ur.x&&t.ll.y<=e.y&&e.y<=t.ur.y,p=(t,e)=>{if(e.ur.x<t.ll.x||t.ur.x<e.ll.x||e.ur.y<t.ll.y||t.ur.y<e.ll.y)return null;const n=t.ll.x<e.ll.x?e.ll.x:t.ll.x,r=t.ur.x<e.ur.x?t.ur.x:e.ur.x;return{ll:{x:n,y:t.ll.y<e.ll.y?e.ll.y:t.ll.y},ur:{x:r,y:t.ur.y<e.ur.y?t.ur.y:e.ur.y}}};let g=Number.EPSILON;void 0===g&&(g=Math.pow(2,-52));const a=g*g,y=(t,e)=>{if(-g<t&&t<g&&-g<e&&e<g)return 0;const n=t-e;return n*n<a*t*e?0:t<e?-1:1};class x{constructor(){this.tree=new l,this.round(0)}round(t){const e=this.tree.add(t),n=this.tree.prev(e);if(null!==n&&0===y(e.key,n.key))return this.tree.remove(t),n.key;const r=this.tree.next(e);return null!==r&&0===y(e.key,r.key)?(this.tree.remove(t),r.key):t}}const b=new class{constructor(){this.reset()}reset(){this.xRounder=new x,this.yRounder=new x}round(t,e){return{x:this.xRounder.round(t),y:this.yRounder.round(e)}}},v=11102230246251565e-32,d=134217729,m=(3+8*v)*v;function E(t,e,n,r,i){let o,s,l,h,u=e[0],f=r[0],c=0,p=0;f>u==f>-u?(o=u,u=e[++c]):(o=f,f=r[++p]);let g=0;if(c<t&&p<n)for(f>u==f>-u?(s=u+o,l=o-(s-u),u=e[++c]):(s=f+o,l=o-(s-f),f=r[++p]),o=s,0!==l&&(i[g++]=l);c<t&&p<n;)f>u==f>-u?(s=o+u,h=s-o,l=o-(s-h)+(u-h),u=e[++c]):(s=o+f,h=s-o,l=o-(s-h)+(f-h),f=r[++p]),o=s,0!==l&&(i[g++]=l);for(;c<t;)s=o+u,h=s-o,l=o-(s-h)+(u-h),u=e[++c],o=s,0!==l&&(i[g++]=l);for(;p<n;)s=o+f,h=s-o,l=o-(s-h)+(f-h),f=r[++p],o=s,0!==l&&(i[g++]=l);return 0===o&&0!==g||(i[g++]=o),g}function S(t){return new Float64Array(t)}const _=22204460492503146e-32,w=11093356479670487e-47,k=S(4),R=S(8),I=S(12),P=S(16),N=S(4);function A(t,e,n,r,i,o){const s=(e-o)*(n-i),l=(t-i)*(r-o),h=s-l,u=Math.abs(s+l);return Math.abs(h)>=33306690738754716e-32*u?h:-function(t,e,n,r,i,o,s){let l,h,u,f,c,p,g,a,y,x,b,v,S,A,O,L,$,M;const z=t-i,B=n-i,G=e-o,T=r-o;A=z*T,p=d*z,g=p-(p-z),a=z-g,p=d*T,y=p-(p-T),x=T-y,O=a*x-(A-g*y-a*y-g*x),L=G*B,p=d*G,g=p-(p-G),a=G-g,p=d*B,y=p-(p-B),x=B-y,$=a*x-(L-g*y-a*y-g*x),b=O-$,c=O-b,k[0]=O-(b+c)+(c-$),v=A+b,c=v-A,S=A-(v-c)+(b-c),b=S-L,c=S-b,k[1]=S-(b+c)+(c-L),M=v+b,c=M-v,k[2]=v-(M-c)+(b-c),k[3]=M;let q=function(t,e){let n=e[0];for(let r=1;r<t;r++)n+=e[r];return n}(4,k),C=_*s;if(q>=C||-q>=C)return q;if(c=t-z,l=t-(z+c)+(c-i),c=n-B,u=n-(B+c)+(c-i),c=e-G,h=e-(G+c)+(c-o),c=r-T,f=r-(T+c)+(c-o),0===l&&0===h&&0===u&&0===f)return q;if(C=w*s+m*Math.abs(q),q+=z*f+T*l-(G*u+B*h),q>=C||-q>=C)return q;A=l*T,p=d*l,g=p-(p-l),a=l-g,p=d*T,y=p-(p-T),x=T-y,O=a*x-(A-g*y-a*y-g*x),L=h*B,p=d*h,g=p-(p-h),a=h-g,p=d*B,y=p-(p-B),x=B-y,$=a*x-(L-g*y-a*y-g*x),b=O-$,c=O-b,N[0]=O-(b+c)+(c-$),v=A+b,c=v-A,S=A-(v-c)+(b-c),b=S-L,c=S-b,N[1]=S-(b+c)+(c-L),M=v+b,c=M-v,N[2]=v-(M-c)+(b-c),N[3]=M;const F=E(4,k,4,N,R);A=z*f,p=d*z,g=p-(p-z),a=z-g,p=d*f,y=p-(p-f),x=f-y,O=a*x-(A-g*y-a*y-g*x),L=G*u,p=d*G,g=p-(p-G),a=G-g,p=d*u,y=p-(p-u),x=u-y,$=a*x-(L-g*y-a*y-g*x),b=O-$,c=O-b,N[0]=O-(b+c)+(c-$),v=A+b,c=v-A,S=A-(v-c)+(b-c),b=S-L,c=S-b,N[1]=S-(b+c)+(c-L),M=v+b,c=M-v,N[2]=v-(M-c)+(b-c),N[3]=M;const j=E(F,R,4,N,I);A=l*f,p=d*l,g=p-(p-l),a=l-g,p=d*f,y=p-(p-f),x=f-y,O=a*x-(A-g*y-a*y-g*x),L=h*u,p=d*h,g=p-(p-h),a=h-g,p=d*u,y=p-(p-u),x=u-y,$=a*x-(L-g*y-a*y-g*x),b=O-$,c=O-b,N[0]=O-(b+c)+(c-$),v=A+b,c=v-A,S=A-(v-c)+(b-c),b=S-L,c=S-b,N[1]=S-(b+c)+(c-L),M=v+b,c=M-v,N[2]=v-(M-c)+(b-c),N[3]=M;const U=E(j,I,4,N,P);return P[U-1]}(t,e,n,r,i,o,u)}const O=(t,e)=>t.x*e.y-t.y*e.x,L=(t,e)=>t.x*e.x+t.y*e.y,$=(t,e,n)=>{const r=A(t.x,t.y,e.x,e.y,n.x,n.y);return r>0?-1:r<0?1:0},M=t=>Math.sqrt(L(t,t)),z=(t,e,n)=>{const r={x:e.x-t.x,y:e.y-t.y},i={x:n.x-t.x,y:n.y-t.y};return O(i,r)/M(i)/M(r)},B=(t,e,n)=>{const r={x:e.x-t.x,y:e.y-t.y},i={x:n.x-t.x,y:n.y-t.y};return L(i,r)/M(i)/M(r)},G=(t,e,n)=>0===e.y?null:{x:t.x+e.x/e.y*(n-t.y),y:n},T=(t,e,n)=>0===e.x?null:{x:n,y:t.y+e.y/e.x*(n-t.x)};class q{static compare(t,e){const n=q.comparePoints(t.point,e.point);return 0!==n?n:(t.point!==e.point&&t.link(e),t.isLeft!==e.isLeft?t.isLeft?1:-1:F.compare(t.segment,e.segment))}static comparePoints(t,e){return t.x<e.x?-1:t.x>e.x?1:t.y<e.y?-1:t.y>e.y?1:0}constructor(t,e){void 0===t.events?t.events=[this]:t.events.push(this),this.point=t,this.isLeft=e}link(t){if(t.point===this.point)throw new Error("Tried to link already linked events");const e=t.point.events;for(let t=0,n=e.length;t<n;t++){const n=e[t];this.point.events.push(n),n.point=this.point}this.checkForConsuming()}checkForConsuming(){const t=this.point.events.length;for(let e=0;e<t;e++){const n=this.point.events[e];if(void 0===n.segment.consumedBy)for(let r=e+1;r<t;r++){const t=this.point.events[r];void 0===t.consumedBy&&(n.otherSE.point.events===t.otherSE.point.events&&n.segment.consume(t.segment))}}}getAvailableLinkedEvents(){const t=[];for(let e=0,n=this.point.events.length;e<n;e++){const n=this.point.events[e];n!==this&&!n.segment.ringOut&&n.segment.isInResult()&&t.push(n)}return t}getLeftmostComparator(t){const e=new Map,n=n=>{const r=n.otherSE;e.set(n,{sine:z(this.point,t.point,r.point),cosine:B(this.point,t.point,r.point)})};return(t,r)=>{e.has(t)||n(t),e.has(r)||n(r);const{sine:i,cosine:o}=e.get(t),{sine:s,cosine:l}=e.get(r);return i>=0&&s>=0?o<l?1:o>l?-1:0:i<0&&s<0?o<l?-1:o>l?1:0:s<i?-1:s>i?1:0}}}let C=0;class F{static compare(t,e){const n=t.leftSE.point.x,r=e.leftSE.point.x,i=t.rightSE.point.x,o=e.rightSE.point.x;if(o<n)return 1;if(i<r)return-1;const s=t.leftSE.point.y,l=e.leftSE.point.y,h=t.rightSE.point.y,u=e.rightSE.point.y;if(n<r){if(l<s&&l<h)return 1;if(l>s&&l>h)return-1;const n=t.comparePoint(e.leftSE.point);if(n<0)return 1;if(n>0)return-1;const r=e.comparePoint(t.rightSE.point);return 0!==r?r:-1}if(n>r){if(s<l&&s<u)return-1;if(s>l&&s>u)return 1;const n=e.comparePoint(t.leftSE.point);if(0!==n)return n;const r=t.comparePoint(e.rightSE.point);return r<0?1:r>0?-1:1}if(s<l)return-1;if(s>l)return 1;if(i<o){const n=e.comparePoint(t.rightSE.point);if(0!==n)return n}if(i>o){const n=t.comparePoint(e.rightSE.point);if(n<0)return 1;if(n>0)return-1}if(i!==o){const t=h-s,e=i-n,f=u-l,c=o-r;if(t>e&&f<c)return 1;if(t<e&&f>c)return-1}return i>o?1:i<o||h<u?-1:h>u?1:t.id<e.id?-1:t.id>e.id?1:0}constructor(t,e,n,r){this.id=++C,this.leftSE=t,t.segment=this,t.otherSE=e,this.rightSE=e,e.segment=this,e.otherSE=t,this.rings=n,this.windings=r}static fromRing(t,e,n){let r,i,o;const s=q.comparePoints(t,e);if(s<0)r=t,i=e,o=1;else{if(!(s>0))throw new Error(`Tried to create degenerate segment at [${t.x}, ${t.y}]`);r=e,i=t,o=-1}const l=new q(r,!0),h=new q(i,!1);return new F(l,h,[n],[o])}replaceRightSE(t){this.rightSE=t,this.rightSE.segment=this,this.rightSE.otherSE=this.leftSE,this.leftSE.otherSE=this.rightSE}bbox(){const t=this.leftSE.point.y,e=this.rightSE.point.y;return{ll:{x:this.leftSE.point.x,y:t<e?t:e},ur:{x:this.rightSE.point.x,y:t>e?t:e}}}vector(){return{x:this.rightSE.point.x-this.leftSE.point.x,y:this.rightSE.point.y-this.leftSE.point.y}}isAnEndpoint(t){return t.x===this.leftSE.point.x&&t.y===this.leftSE.point.y||t.x===this.rightSE.point.x&&t.y===this.rightSE.point.y}comparePoint(t){if(this.isAnEndpoint(t))return 0;const e=this.leftSE.point,n=this.rightSE.point,r=this.vector();if(e.x===n.x)return t.x===e.x?0:t.x<e.x?1:-1;const i=(t.y-e.y)/r.y,o=e.x+i*r.x;if(t.x===o)return 0;const s=(t.x-e.x)/r.x,l=e.y+s*r.y;return t.y===l?0:t.y<l?-1:1}getIntersection(t){const e=this.bbox(),n=t.bbox(),r=p(e,n);if(null===r)return null;const i=this.leftSE.point,o=this.rightSE.point,s=t.leftSE.point,l=t.rightSE.point,h=c(e,s)&&0===this.comparePoint(s),u=c(n,i)&&0===t.comparePoint(i),f=c(e,l)&&0===this.comparePoint(l),g=c(n,o)&&0===t.comparePoint(o);if(u&&h)return g&&!f?o:!g&&f?l:null;if(u)return f&&i.x===l.x&&i.y===l.y?null:i;if(h)return g&&o.x===s.x&&o.y===s.y?null:s;if(g&&f)return null;if(g)return o;if(f)return l;const a=((t,e,n,r)=>{if(0===e.x)return T(n,r,t.x);if(0===r.x)return T(t,e,n.x);if(0===e.y)return G(n,r,t.y);if(0===r.y)return G(t,e,n.y);const i=O(e,r);if(0==i)return null;const o={x:n.x-t.x,y:n.y-t.y},s=O(o,e)/i,l=O(o,r)/i;return{x:(t.x+l*e.x+(n.x+s*r.x))/2,y:(t.y+l*e.y+(n.y+s*r.y))/2}})(i,this.vector(),s,t.vector());return null===a?null:c(r,a)?b.round(a.x,a.y):null}split(t){const e=[],n=void 0!==t.events,r=new q(t,!0),i=new q(t,!1),o=this.rightSE;this.replaceRightSE(i),e.push(i),e.push(r);const s=new F(r,o,this.rings.slice(),this.windings.slice());return q.comparePoints(s.leftSE.point,s.rightSE.point)>0&&s.swapEvents(),q.comparePoints(this.leftSE.point,this.rightSE.point)>0&&this.swapEvents(),n&&(r.checkForConsuming(),i.checkForConsuming()),e}swapEvents(){const t=this.rightSE;this.rightSE=this.leftSE,this.leftSE=t,this.leftSE.isLeft=!0,this.rightSE.isLeft=!1;for(let t=0,e=this.windings.length;t<e;t++)this.windings[t]*=-1}consume(t){let e=this,n=t;for(;e.consumedBy;)e=e.consumedBy;for(;n.consumedBy;)n=n.consumedBy;const r=F.compare(e,n);if(0!==r){if(r>0){const t=e;e=n,n=t}if(e.prev===n){const t=e;e=n,n=t}for(let t=0,r=n.rings.length;t<r;t++){const r=n.rings[t],i=n.windings[t],o=e.rings.indexOf(r);-1===o?(e.rings.push(r),e.windings.push(i)):e.windings[o]+=i}n.rings=null,n.windings=null,n.consumedBy=e,n.leftSE.consumedBy=e.leftSE,n.rightSE.consumedBy=e.rightSE}}prevInResult(){return void 0!==this._prevInResult||(this.prev?this.prev.isInResult()?this._prevInResult=this.prev:this._prevInResult=this.prev.prevInResult():this._prevInResult=null),this._prevInResult}beforeState(){if(void 0!==this._beforeState)return this._beforeState;if(this.prev){const t=this.prev.consumedBy||this.prev;this._beforeState=t.afterState()}else this._beforeState={rings:[],windings:[],multiPolys:[]};return this._beforeState}afterState(){if(void 0!==this._afterState)return this._afterState;const t=this.beforeState();this._afterState={rings:t.rings.slice(0),windings:t.windings.slice(0),multiPolys:[]};const e=this._afterState.rings,n=this._afterState.windings,r=this._afterState.multiPolys;for(let t=0,r=this.rings.length;t<r;t++){const r=this.rings[t],i=this.windings[t],o=e.indexOf(r);-1===o?(e.push(r),n.push(i)):n[o]+=i}const i=[],o=[];for(let t=0,r=e.length;t<r;t++){if(0===n[t])continue;const r=e[t],s=r.poly;if(-1===o.indexOf(s))if(r.isExterior)i.push(s);else{-1===o.indexOf(s)&&o.push(s);const t=i.indexOf(r.poly);-1!==t&&i.splice(t,1)}}for(let t=0,e=i.length;t<e;t++){const e=i[t].multiPoly;-1===r.indexOf(e)&&r.push(e)}return this._afterState}isInResult(){if(this.consumedBy)return!1;if(void 0!==this._isInResult)return this._isInResult;const t=this.beforeState().multiPolys,e=this.afterState().multiPolys;switch(H.type){case"union":{const n=0===t.length,r=0===e.length;this._isInResult=n!==r;break}case"intersection":{let n,r;t.length<e.length?(n=t.length,r=e.length):(n=e.length,r=t.length),this._isInResult=r===H.numMultiPolys&&n<r;break}case"xor":{const n=Math.abs(t.length-e.length);this._isInResult=n%2==1;break}case"difference":{const n=t=>1===t.length&&t[0].isSubject;this._isInResult=n(t)!==n(e);break}default:throw new Error(`Unrecognized operation type found ${H.type}`)}return this._isInResult}}class j{constructor(t,e,n){if(!Array.isArray(t)||0===t.length)throw new Error("Input geometry is not a valid Polygon or MultiPolygon");if(this.poly=e,this.isExterior=n,this.segments=[],"number"!=typeof t[0][0]||"number"!=typeof t[0][1])throw new Error("Input geometry is not a valid Polygon or MultiPolygon");const r=b.round(t[0][0],t[0][1]);this.bbox={ll:{x:r.x,y:r.y},ur:{x:r.x,y:r.y}};let i=r;for(let e=1,n=t.length;e<n;e++){if("number"!=typeof t[e][0]||"number"!=typeof t[e][1])throw new Error("Input geometry is not a valid Polygon or MultiPolygon");let n=b.round(t[e][0],t[e][1]);n.x===i.x&&n.y===i.y||(this.segments.push(F.fromRing(i,n,this)),n.x<this.bbox.ll.x&&(this.bbox.ll.x=n.x),n.y<this.bbox.ll.y&&(this.bbox.ll.y=n.y),n.x>this.bbox.ur.x&&(this.bbox.ur.x=n.x),n.y>this.bbox.ur.y&&(this.bbox.ur.y=n.y),i=n)}r.x===i.x&&r.y===i.y||this.segments.push(F.fromRing(i,r,this))}getSweepEvents(){const t=[];for(let e=0,n=this.segments.length;e<n;e++){const n=this.segments[e];t.push(n.leftSE),t.push(n.rightSE)}return t}}class U{constructor(t,e){if(!Array.isArray(t))throw new Error("Input geometry is not a valid Polygon or MultiPolygon");this.exteriorRing=new j(t[0],this,!0),this.bbox={ll:{x:this.exteriorRing.bbox.ll.x,y:this.exteriorRing.bbox.ll.y},ur:{x:this.exteriorRing.bbox.ur.x,y:this.exteriorRing.bbox.ur.y}},this.interiorRings=[];for(let e=1,n=t.length;e<n;e++){const n=new j(t[e],this,!1);n.bbox.ll.x<this.bbox.ll.x&&(this.bbox.ll.x=n.bbox.ll.x),n.bbox.ll.y<this.bbox.ll.y&&(this.bbox.ll.y=n.bbox.ll.y),n.bbox.ur.x>this.bbox.ur.x&&(this.bbox.ur.x=n.bbox.ur.x),n.bbox.ur.y>this.bbox.ur.y&&(this.bbox.ur.y=n.bbox.ur.y),this.interiorRings.push(n)}this.multiPoly=e}getSweepEvents(){const t=this.exteriorRing.getSweepEvents();for(let e=0,n=this.interiorRings.length;e<n;e++){const n=this.interiorRings[e].getSweepEvents();for(let e=0,r=n.length;e<r;e++)t.push(n[e])}return t}}class Y{constructor(t,e){if(!Array.isArray(t))throw new Error("Input geometry is not a valid Polygon or MultiPolygon");try{"number"==typeof t[0][0][0]&&(t=[t])}catch(t){}this.polys=[],this.bbox={ll:{x:Number.POSITIVE_INFINITY,y:Number.POSITIVE_INFINITY},ur:{x:Number.NEGATIVE_INFINITY,y:Number.NEGATIVE_INFINITY}};for(let e=0,n=t.length;e<n;e++){const n=new U(t[e],this);n.bbox.ll.x<this.bbox.ll.x&&(this.bbox.ll.x=n.bbox.ll.x),n.bbox.ll.y<this.bbox.ll.y&&(this.bbox.ll.y=n.bbox.ll.y),n.bbox.ur.x>this.bbox.ur.x&&(this.bbox.ur.x=n.bbox.ur.x),n.bbox.ur.y>this.bbox.ur.y&&(this.bbox.ur.y=n.bbox.ur.y),this.polys.push(n)}this.isSubject=e}getSweepEvents(){const t=[];for(let e=0,n=this.polys.length;e<n;e++){const n=this.polys[e].getSweepEvents();for(let e=0,r=n.length;e<r;e++)t.push(n[e])}return t}}class V{static factory(t){const e=[];for(let n=0,r=t.length;n<r;n++){const r=t[n];if(!r.isInResult()||r.ringOut)continue;let i=null,o=r.leftSE,s=r.rightSE;const l=[o],h=o.point,u=[];for(;i=o,o=s,l.push(o),o.point!==h;)for(;;){const t=o.getAvailableLinkedEvents();if(0===t.length){const t=l[0].point,e=l[l.length-1].point;throw new Error(`Unable to complete output ring starting at [${t.x}, ${t.y}]. Last matching segment found ends at [${e.x}, ${e.y}].`)}if(1===t.length){s=t[0].otherSE;break}let n=null;for(let t=0,e=u.length;t<e;t++)if(u[t].point===o.point){n=t;break}if(null!==n){const t=u.splice(n)[0],r=l.splice(t.index);r.unshift(r[0].otherSE),e.push(new V(r.reverse()));continue}u.push({index:l.length,point:o.point});const r=o.getLeftmostComparator(i);s=t.sort(r)[0].otherSE;break}e.push(new V(l))}return e}constructor(t){this.events=t;for(let e=0,n=t.length;e<n;e++)t[e].segment.ringOut=this;this.poly=null}getGeom(){let t=this.events[0].point;const e=[t];for(let n=1,r=this.events.length-1;n<r;n++){const r=this.events[n].point,i=this.events[n+1].point;0!==$(r,t,i)&&(e.push(r),t=r)}if(1===e.length)return null;const n=e[0],r=e[1];0===$(n,t,r)&&e.shift(),e.push(e[0]);const i=this.isExteriorRing()?1:-1,o=this.isExteriorRing()?0:e.length-1,s=this.isExteriorRing()?e.length:-1,l=[];for(let t=o;t!=s;t+=i)l.push([e[t].x,e[t].y]);return l}isExteriorRing(){if(void 0===this._isExteriorRing){const t=this.enclosingRing();this._isExteriorRing=!t||!t.isExteriorRing()}return this._isExteriorRing}enclosingRing(){return void 0===this._enclosingRing&&(this._enclosingRing=this._calcEnclosingRing()),this._enclosingRing}_calcEnclosingRing(){let t=this.events[0];for(let e=1,n=this.events.length;e<n;e++){const n=this.events[e];q.compare(t,n)>0&&(t=n)}let e=t.segment.prevInResult(),n=e?e.prevInResult():null;for(;;){if(!e)return null;if(!n)return e.ringOut;if(n.ringOut!==e.ringOut)return n.ringOut.enclosingRing()!==e.ringOut?e.ringOut:e.ringOut.enclosingRing();e=n.prevInResult(),n=e?e.prevInResult():null}}}class X{constructor(t){this.exteriorRing=t,t.poly=this,this.interiorRings=[]}addInterior(t){this.interiorRings.push(t),t.poly=this}getGeom(){const t=[this.exteriorRing.getGeom()];if(null===t[0])return null;for(let e=0,n=this.interiorRings.length;e<n;e++){const n=this.interiorRings[e].getGeom();null!==n&&t.push(n)}return t}}class Q{constructor(t){this.rings=t,this.polys=this._composePolys(t)}getGeom(){const t=[];for(let e=0,n=this.polys.length;e<n;e++){const n=this.polys[e].getGeom();null!==n&&t.push(n)}return t}_composePolys(t){const e=[];for(let n=0,r=t.length;n<r;n++){const r=t[n];if(!r.poly)if(r.isExteriorRing())e.push(new X(r));else{const t=r.enclosingRing();t.poly||e.push(new X(t)),t.poly.addInterior(r)}}return e}}class W{constructor(t){let e=arguments.length>1&&void 0!==arguments[1]?arguments[1]:F.compare;this.queue=t,this.tree=new l(e),this.segments=[]}process(t){const e=t.segment,n=[];if(t.consumedBy)return t.isLeft?this.queue.remove(t.otherSE):this.tree.remove(e),n;const r=t.isLeft?this.tree.add(e):this.tree.find(e);if(!r)throw new Error(`Unable to find segment #${e.id} [${e.leftSE.point.x}, ${e.leftSE.point.y}] -> [${e.rightSE.point.x}, ${e.rightSE.point.y}] in SweepLine tree.`);let i,o,s=r,l=r;for(;void 0===i;)s=this.tree.prev(s),null===s?i=null:void 0===s.key.consumedBy&&(i=s.key);for(;void 0===o;)l=this.tree.next(l),null===l?o=null:void 0===l.key.consumedBy&&(o=l.key);if(t.isLeft){let r=null;if(i){const t=i.getIntersection(e);if(null!==t&&(e.isAnEndpoint(t)||(r=t),!i.isAnEndpoint(t))){const e=this._splitSafely(i,t);for(let t=0,r=e.length;t<r;t++)n.push(e[t])}}let s=null;if(o){const t=o.getIntersection(e);if(null!==t&&(e.isAnEndpoint(t)||(s=t),!o.isAnEndpoint(t))){const e=this._splitSafely(o,t);for(let t=0,r=e.length;t<r;t++)n.push(e[t])}}if(null!==r||null!==s){let t=null;if(null===r)t=s;else if(null===s)t=r;else{t=q.comparePoints(r,s)<=0?r:s}this.queue.remove(e.rightSE),n.push(e.rightSE);const i=e.split(t);for(let t=0,e=i.length;t<e;t++)n.push(i[t])}n.length>0?(this.tree.remove(e),n.push(t)):(this.segments.push(e),e.prev=i)}else{if(i&&o){const t=i.getIntersection(o);if(null!==t){if(!i.isAnEndpoint(t)){const e=this._splitSafely(i,t);for(let t=0,r=e.length;t<r;t++)n.push(e[t])}if(!o.isAnEndpoint(t)){const e=this._splitSafely(o,t);for(let t=0,r=e.length;t<r;t++)n.push(e[t])}}}this.tree.remove(e)}return n}_splitSafely(t,e){this.tree.remove(t);const n=t.rightSE;this.queue.remove(n);const r=t.split(e);return r.push(n),void 0===t.consumedBy&&this.tree.add(t),r}}const Z="undefined"!=typeof process&&process.env.POLYGON_CLIPPING_MAX_QUEUE_SIZE||1e6,D="undefined"!=typeof process&&process.env.POLYGON_CLIPPING_MAX_SWEEPLINE_SEGMENTS||1e6;const H=new class{run(t,e,n){H.type=t,b.reset();const r=[new Y(e,!0)];for(let t=0,e=n.length;t<e;t++)r.push(new Y(n[t],!1));if(H.numMultiPolys=r.length,"difference"===H.type){const t=r[0];let e=1;for(;e<r.length;)null!==p(r[e].bbox,t.bbox)?e++:r.splice(e,1)}if("intersection"===H.type)for(let t=0,e=r.length;t<e;t++){const e=r[t];for(let n=t+1,i=r.length;n<i;n++)if(null===p(e.bbox,r[n].bbox))return[]}const i=new l(q.compare);for(let t=0,e=r.length;t<e;t++){const e=r[t].getSweepEvents();for(let t=0,n=e.length;t<n;t++)if(i.insert(e[t]),i.size>Z)throw new Error("Infinite loop when putting segment endpoints in a priority queue (queue size too big).")}const o=new W(i);let s=i.size,h=i.pop();for(;h;){const t=h.key;if(i.size===s){const e=t.segment;throw new Error(`Unable to pop() ${t.isLeft?"left":"right"} SweepEvent [${t.point.x}, ${t.point.y}] from segment #${e.id} [${e.leftSE.point.x}, ${e.leftSE.point.y}] -> [${e.rightSE.point.x}, ${e.rightSE.point.y}] from queue.`)}if(i.size>Z)throw new Error("Infinite loop when passing sweep line over endpoints (queue size too big).");if(o.segments.length>D)throw new Error("Infinite loop when passing sweep line over endpoints (too many sweep line segments).");const e=o.process(t);for(let t=0,n=e.length;t<n;t++){const n=e[t];void 0===n.consumedBy&&i.insert(n)}s=i.size,h=i.pop()}b.reset();const u=V.factory(o.segments);return new Q(u).getGeom()}};var J={union:function(t){for(var e=arguments.length,n=new Array(e>1?e-1:0),r=1;r<e;r++)n[r-1]=arguments[r];return H.run("union",t,n)},intersection:function(t){for(var e=arguments.length,n=new Array(e>1?e-1:0),r=1;r<e;r++)n[r-1]=arguments[r];return H.run("intersection",t,n)},xor:function(t){for(var e=arguments.length,n=new Array(e>1?e-1:0),r=1;r<e;r++)n[r-1]=arguments[r];return H.run("xor",t,n)},difference:function(t){for(var e=arguments.length,n=new Array(e>1?e-1:0),r=1;r<e;r++)n[r-1]=arguments[r];return H.run("difference",t,n)}};return J}));
+
+
+</script>
+<script>
+/* Case Draw geometry: strokes -> clean 2D regions -> extruded meshes -> 3MF.
+   Works in the browser (globals earcut, polygonClipping) and in Node (require). */
+(function (root, factory) {
+  if (typeof module === "object" && module.exports) module.exports = factory(require("earcut"), require("polygon-clipping"));
+  else root.CaseGeo = factory(root.earcut, root.polygonClipping);
+})(typeof self !== "undefined" ? self : this, function (earcut, pc) {
+  "use strict";
+
+  // ---------- 2D helpers ----------
+  function circle(cx, cy, r, n) {
+    const ring = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      ring.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+    }
+    ring.push(ring[0]);
+    return [ring];
+  }
+  function roundedRect(w, h, r, segs) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    const ring = [];
+    const corner = (cx, cy, a0) => {
+      for (let i = 0; i <= segs; i++) {
+        const a = a0 + (i / segs) * (Math.PI / 2);
+        ring.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+      }
+    };
+    corner(w - r, h - r, 0);
+    corner(r, h - r, Math.PI / 2);
+    corner(r, r, Math.PI);
+    corner(w - r, r, 1.5 * Math.PI);
+    ring.push(ring[0]);
+    return [ring];
+  }
+  // Phone outline offset outward by o (negative = inset). Corner centres stay fixed; radius becomes R+o.
+  function phoneOutline(spec, o, segs) {
+    const W = spec.width, L = spec.length;
+    const R = Math.max(0.01, Math.min(spec.cornerRadius, W / 2, L / 2));
+    const r = R + o;
+    if (r <= 0) throw new Error("outline offset smaller than the corner radius");
+    const ring = [];
+    const corner = (cx, cy, a0) => {
+      for (let i = 0; i <= segs; i++) {
+        const a = a0 + (i / segs) * (Math.PI / 2);
+        ring.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+      }
+    };
+    corner(W - R, L - R, 0);
+    corner(R, L - R, Math.PI / 2);
+    corner(R, R, Math.PI);
+    corner(W - R, R, 1.5 * Math.PI);
+    ring.push(ring[0]);
+    return [ring];
+  }
+  // Map points lying on the outline of radius R+from to the outline of radius R+to; leave other points alone.
+  function outlineMapper(spec, from, to) {
+    const W = spec.width, L = spec.length;
+    const R = Math.max(0.01, Math.min(spec.cornerRadius, W / 2, L / 2));
+    const rFrom = R + from, rTo = R + to;
+    return p => {
+      const qx = Math.max(R, Math.min(W - R, p[0])), qy = Math.max(R, Math.min(L - R, p[1]));
+      const nx = p[0] - qx, ny = p[1] - qy, n = Math.hypot(nx, ny);
+      if (Math.abs(n - rFrom) > 1e-3) return p;
+      return [qx + nx * rTo / n, qy + ny * rTo / n];
+    };
+  }
+  function segmentQuad(a, b, hw) {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) return null;
+    const nx = (-dy / len) * hw, ny = (dx / len) * hw;
+    const ring = [
+      [a[0] + nx, a[1] + ny], [b[0] + nx, b[1] + ny],
+      [b[0] - nx, b[1] - ny], [a[0] - nx, a[1] - ny]
+    ];
+    ring.push(ring[0]);
+    return [ring];
+  }
+  function simplify(pts, tol) {
+    if (pts.length < 3) return pts.slice();
+    const keep = new Uint8Array(pts.length);
+    keep[0] = keep[pts.length - 1] = 1;
+    const stack = [[0, pts.length - 1]];
+    while (stack.length) {
+      const [s, e] = stack.pop();
+      let maxD = -1, idx = -1;
+      const ax = pts[s][0], ay = pts[s][1], bx = pts[e][0], by = pts[e][1];
+      const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+      for (let i = s + 1; i < e; i++) {
+        let d;
+        if (l2 === 0) d = Math.hypot(pts[i][0] - ax, pts[i][1] - ay);
+        else {
+          let t = ((pts[i][0] - ax) * dx + (pts[i][1] - ay) * dy) / l2;
+          t = Math.max(0, Math.min(1, t));
+          d = Math.hypot(pts[i][0] - (ax + t * dx), pts[i][1] - (ay + t * dy));
+        }
+        if (d > maxD) { maxD = d; idx = i; }
+      }
+      if (maxD > tol) { keep[idx] = 1; stack.push([s, idx], [idx, e]); }
+    }
+    return pts.filter((_, i) => keep[i]);
+  }
+  function bbox(mp) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const poly of mp) for (const ring of poly) for (const p of ring) {
+      if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0];
+      if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1];
+    }
+    return [x0, y0, x1, y1];
+  }
+  // Snap coordinates to a 1 µm grid: keeps repeated boolean ops numerically stable.
+  function snap(mp) { return mp.map(poly => poly.map(ring => ring.map(p => [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]))); }
+  const ops = {
+    union: (...a) => snap(pc.union(...a)),
+    intersection: (a, b) => snap(pc.intersection(a, b)),
+    difference: (a, ...b) => snap(pc.difference(a, ...b))
+  };
+  function bboxHit(a, b) { return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3]; }
+
+  // One stroke -> a single clean MultiPolygon (union of capsules).
+  function strokeRegion(stroke) {
+    const hw = stroke.w / 2;
+    const pts = simplify(stroke.pts, 0.08);
+    const n = Math.max(10, Math.min(36, Math.round(hw * 10)));
+    const polys = [];
+    if (pts.length === 1) return pc.union(circle(pts[0][0], pts[0][1], hw, n));
+    for (let i = 0; i < pts.length; i++) {
+      polys.push(circle(pts[i][0], pts[i][1], hw, n));
+      if (i < pts.length - 1) { const q = segmentQuad(pts[i], pts[i + 1], hw); if (q) polys.push(q); }
+    }
+    return ops.union(...polys);
+  }
+
+  // ---------- paint partition (cached) ----------
+  let cellCache = { ref: null, len: -1, inks: -1, cells: [] };
+  function paintCells(strokes, inkCount) {
+    if (cellCache.ref === strokes && cellCache.len === strokes.length && cellCache.inks === inkCount) return cellCache.cells;
+    let cells = []; // { ink, chain, region, bbox }
+    for (const st of strokes) {
+      if (!(st.c >= 0 && st.c < inkCount)) continue;
+      const S = strokeRegion(st), sb = bbox(S);
+      let remaining = S;
+      const next = [];
+      for (const C of cells) {
+        if (!remaining.length || !bboxHit(sb, C.bbox)) { next.push(C); continue; }
+        let overlap, rest;
+        try { overlap = ops.intersection(C.region, S); }
+        catch (e) { next.push(C); continue; }               // numerically awkward pair: leave that cell as it was
+        if (!overlap.length) { next.push(C); continue; }
+        if (C.ink === st.c) { next.push(C); try { remaining = ops.difference(remaining, C.region); } catch (e) {} continue; }
+        try { rest = ops.difference(C.region, S); } catch (e) { rest = []; }
+        if (rest.length) next.push({ ink: C.ink, chain: C.chain, region: rest, bbox: bbox(rest) });
+        next.push({ ink: st.c, chain: C.chain.concat(st.c), region: overlap, bbox: bbox(overlap) });
+        try { remaining = ops.difference(remaining, overlap); } catch (e) { remaining = []; }
+      }
+      if (remaining.length) next.push({ ink: st.c, chain: [st.c], region: remaining, bbox: bbox(remaining) });
+      cells = next;
+    }
+    cellCache = { ref: strokes, len: strokes.length, inks: inkCount, cells };
+    return cells;
+  }
+
+  // ---------- regions ----------
+  // Returns { plate: MultiPolygon (with cutout holes), inks: [MultiPolygon per ink] } in design coords (mm, y down).
+  // Panel: a flat plate the size of the whole case back, glued to the body. Same outline everywhere.
+  function plateOffsets(spec) {
+    const o = (spec.phoneClearance || 0) + spec.frameWall;
+    return { wide: o, narrow: o, skin: o };
+  }
+  function plateLevels(spec) {
+    const skinT = spec.panelThickness || spec.skinThickness || 1.0;
+    return { skinT, total: skinT };
+  }
+  function cutR(spec, c) { return (c.d + (spec.cutoutClearance || 0)) / 2; }
+  function collarOn(spec, design) { return spec.collars !== false && design.mode === "inlay" && spec.cutouts.length > 0; }
+  function buildRegions(spec, design) {
+    const off = plateOffsets(spec);
+    const holes = spec.cutouts.map(c => circle(c.x, c.y, (c.d + (spec.cutoutClearance || 0)) / 2, 48));
+    const region = (o, hs) => { const p = phoneOutline(spec, o, 12); return hs.length ? pc.difference(p, ...hs) : pc.union(p); };
+    const plateRegion = region(off.narrow, holes);
+    const plateWide = region(off.wide, holes);
+    // inks keep clear of the plate edge and the cutouts by inkMargin
+    const m = spec.inkMargin || 0;
+    const inkArea = m > 0
+      ? region(off.narrow - m, spec.cutouts.map(c => circle(c.x, c.y, (c.d + (spec.cutoutClearance || 0)) / 2 + m, 48)))
+      : plateRegion;
+
+    // Height field: the plate is partitioned into cells (region, ink) by the strokes in draw order, later
+    // strokes covering earlier ones. The partition depends only on the strokes, so it is cached. Each ink
+    // has one height above the plate, independent of the others; 0 = pocketed flush into the skin.
+    const heights = design.mode === "relief" ? design.inks.map((_, i) => Math.max(0, (design.inkHeights && design.inkHeights[i]) || 0)) : design.inks.map(() => 0);
+    const r2 = v => Math.round(v * 100) / 100;
+    const cells = paintCells(design.strokes, design.inks.length).map(C => ({ ink: C.ink, top: r2(heights[C.ink]), region: C.region }));
+    // groups: one region per (ink, top), clipped to the ink area
+    const groupMap = new Map();
+    for (const C of cells) {
+      const key = C.ink + "@" + C.top;
+      if (!groupMap.has(key)) groupMap.set(key, { ink: C.ink, top: C.top, list: [] });
+      groupMap.get(key).list.push(C.region);
+    }
+    const groups = [];
+    for (const g of groupMap.values()) {
+      const u = g.list.length === 1 ? g.list[0] : ops.union(...g.list);
+      const r = ops.intersection(u, inkArea);
+      if (r.length) groups.push({ ink: g.ink, top: g.top, region: r });
+    }
+    groups.sort((a, b) => a.ink - b.ink || a.top - b.top);
+    const inks = design.inks.map((_, i) => { const l = groups.filter(g => g.ink === i).map(g => g.region); return l.length ? (l.length === 1 ? l[0] : pc.union(...l)) : []; });
+    return { plate: plateRegion, plateWide, inks, groups, off };
+  }
+
+  // ---------- meshing ----------
+  function Mesh() { this.v = []; this.t = []; }
+  Mesh.prototype.addVertex = function (x, y, z) { this.v.push(x, y, z); return this.v.length / 3 - 1; };
+  Mesh.prototype.addTri = function (a, b, c) { this.t.push(a, b, c); };
+  Mesh.prototype.triCount = function () { return this.t.length / 3; };
+  Mesh.prototype.append = function (o) { const base = this.v.length / 3; for (const x of o.v) this.v.push(x); for (const i of o.t) this.t.push(i + base); };
+
+  function ringArea(r) {
+    let a = 0;
+    for (let i = 0; i < r.length - 1; i++) a += r[i][0] * r[i + 1][1] - r[i + 1][0] * r[i][1];
+    return a / 2;
+  }
+  function open(ring) { // drop closing duplicate
+    const r = ring.slice();
+    if (r.length > 1 && r[0][0] === r[r.length - 1][0] && r[0][1] === r[r.length - 1][1]) r.pop();
+    return r;
+  }
+
+  // Rings of one polygon in model space: outer CCW, holes CW.
+  function normRings(poly, xf, map) {
+    return poly.map((ring, i) => {
+      let r = open(ring).map(p => { if (map) p = map(p); return xf(p[0], p[1]); });
+      if (r.length < 3) return null;
+      const area = ringArea([...r, r[0]]);
+      if ((i === 0 && area < 0) || (i > 0 && area > 0)) r.reverse();
+      return r;
+    }).filter(Boolean);
+  }
+  // Flat cap for a MultiPolygon at height z. up=true -> normal +z.
+  function cap(mp, z, up, mesh, xf, map) {
+    for (const poly of mp) {
+      const rings = normRings(poly, xf, map);
+      if (!rings.length) continue;
+      const flat = [], holeIdx = [];
+      rings.forEach((r, i) => { if (i > 0) holeIdx.push(flat.length / 2); for (const p of r) flat.push(p[0], p[1]); });
+      const tris = earcut(flat, holeIdx.length ? holeIdx : undefined);
+      const base = [];
+      for (let i = 0; i < flat.length / 2; i++) base.push(mesh.addVertex(flat[2 * i], flat[2 * i + 1], z));
+      for (let i = 0; i < tris.length; i += 3) {
+        const a = tris[i], b = tris[i + 1], c = tris[i + 2];
+        const ccw = (flat[2 * b] - flat[2 * a]) * (flat[2 * c + 1] - flat[2 * a + 1]) - (flat[2 * b + 1] - flat[2 * a + 1]) * (flat[2 * c] - flat[2 * a]) > 0;
+        if (ccw === up) mesh.addTri(base[a], base[b], base[c]); else mesh.addTri(base[a], base[c], base[b]);
+      }
+    }
+  }
+  // Vertical walls along every ring of a MultiPolygon. outward=true -> normals point away from the region.
+  function walls(mp, z0, z1, mesh, xf, outward, topMap) {
+    for (const poly of mp) {
+      const botRings = normRings(poly, xf), topRings = normRings(poly, xf, topMap);
+      for (let k = 0; k < botRings.length; k++) {
+        const r = botRings[k], rt = topRings[k];
+        const n = r.length, bot = [], top = [];
+        for (let i = 0; i < n; i++) { bot.push(mesh.addVertex(r[i][0], r[i][1], z0)); top.push(mesh.addVertex(rt[i][0], rt[i][1], z1)); }
+        for (let i = 0; i < n; i++) {
+          const a = i, b = (i + 1) % n;
+          if (outward) { mesh.addTri(bot[a], bot[b], top[b]); mesh.addTri(bot[a], top[b], top[a]); }
+          else { mesh.addTri(bot[a], top[b], bot[b]); mesh.addTri(bot[a], top[a], top[b]); }
+        }
+      }
+    }
+  }
+  // Simple extrusion between z0 and z1.
+  function extrude(mp, z0, z1, mesh, xf, topMap) {
+    cap(mp, z1, true, mesh, xf, topMap);
+    cap(mp, z0, false, mesh, xf);
+    walls(mp, z0, z1, mesh, xf, true, topMap);
+  }
+  // Slab 0..T with pockets (depth d, open at z=0) for the given regions: one closed shell.
+  function extrudePocketed(mp, pockets, d, T, mesh, xf, topMap) {
+    cap(mp, T, true, mesh, xf, topMap);
+    walls(mp, 0, T, mesh, xf, true, topMap);
+    if (!pockets.length) { cap(mp, 0, false, mesh, xf); return; }
+    const pocket = pockets.length === 1 ? pockets[0] : pc.union(...pockets); // one region: no coincident inner walls
+    cap(pc.difference(mp, pocket), 0, false, mesh, xf);
+    cap(pocket, d, false, mesh, xf);        // pocket ceiling faces down into the pocket
+    walls(pocket, 0, d, mesh, xf, false);   // pocket walls face into the pocket
+  }
+
+  // ---------- parts ----------
+  // Returns { parts: [{ name, color, mesh }], mode, notes }
+  function buildParts(spec, design, clip) {
+    const lv = plateLevels(spec);
+    const K = mp => (clip && mp.length) ? ops.intersection(mp, clip) : mp;
+    const d = Math.min(design.inkDepth || 0.6, lv.skinT - 0.3);
+    const W = spec.width, L = spec.length;
+    const regions = buildRegions(spec, design);
+    if (clip) { regions.plate = K(regions.plate); regions.inks = regions.inks.map(K); regions.groups = regions.groups.map(g => ({ ...g, region: K(g.region) })).filter(g => g.region.length); }
+    const parts = [], eps = 0.02;
+    const inks = regions.inks.filter(r => r.length);
+    const collars = collarOn(spec, design);
+    const collarWall = spec.collarWall || 0.8, collarH = Math.max(0.4, (spec.slabThickness || 1.0) - 0.1);
+
+    if (design.mode === "inlay") {
+      // Outer face on the bed. Rotate 180° about Y so the design reads correctly on the outside.
+      const xf = (x, y) => [W - x, L - y];
+      const m = new Mesh();
+      extrudePocketed(regions.plate, inks, d, lv.skinT, m, xf);
+      if (collars) {
+        // short collars round each camera hole key into the body's oversized cutouts
+        for (const c of spec.cutouts) {
+          const R = cutR(spec, c);
+          const ring = K(ops.difference(circle(c.x, c.y, R + collarWall, 48), circle(c.x, c.y, R, 48)));
+          if (ring.length) extrude(ring, lv.skinT - eps, lv.skinT + collarH, m, xf);
+        }
+      }
+      parts.push({ name: "Panel", color: design.plateColor, mesh: m });
+      inks.forEach(r => { const i = regions.inks.indexOf(r); const im = new Mesh(); extrude(r, 0, d, im, xf); parts.push({ name: `Ink ${i + 1}`, color: design.inks[i], mesh: im }); });
+      return { parts, mode: design.mode, inkDepth: d, total: lv.total, top: lv.total };
+    }
+    // Relief: inner face on the bed, inks on top. Each ink at its own height; 0 = pocketed flush.
+    const xf = (x, y) => [x, L - y];
+    const m = new Mesh();
+    const top = lv.total;
+    const flush = regions.groups.filter(g => g.top === 0).map(g => g.region);
+    const skin = new Mesh();
+    extrudePocketed(regions.plate, flush, d, lv.skinT, skin, xf);
+    m.append(transformMesh(skin, p => [p[0], p[1], top - p[2]], true));
+    parts.push({ name: "Panel", color: design.plateColor, mesh: m });
+    let maxTop = 0;
+    design.inks.forEach((col, i) => {
+      const gs = regions.groups.filter(g => g.ink === i);
+      if (!gs.length) return;
+      const im = new Mesh();
+      let allFlush = true;
+      for (const g of gs) {
+        if (g.top === 0) extrude(g.region, top - d, top, im, xf);
+        else { extrude(g.region, top, top + g.top, im, xf); allFlush = false; maxTop = Math.max(maxTop, g.top); }
+      }
+      parts.push({ name: `Ink ${i + 1}${allFlush ? " (flush)" : ""}`, color: col, mesh: im });
+    });
+    return { parts, mode: design.mode, inkDepth: d, total: lv.total, top: top + maxTop };
+  }
+
+  // ---------- body ----------
+  // One-piece case body in its own print coordinates: z=0 is the outer back face (on the bed), walls rise from it.
+  function frameLevels(spec) {
+    const slabT = spec.slabThickness || 1.0, c = spec.phoneClearance || 0, lipT = spec.lipThickness || 0.8;
+    const zPhone = slabT + c;                       // where the phone's back rests
+    const zLip = zPhone + spec.thickness;           // top of the side wall
+    return { slabT, zPhone, zLip, H: zLip + lipT };
+  }
+  // Button windows through the wall only; inset shortens both ends (used to round the corners).
+  function windowRects(spec, inset) {
+    const c = spec.phoneClearance || 0, wall = spec.frameWall, W = spec.width, L = spec.length, m = c + wall + 1;
+    const out = [];
+    for (const k of spec.sideCutouts || []) {
+      const a = Math.min(k.from, k.to) + inset, b = Math.max(k.from, k.to) - inset;
+      if (b - a < 0.2) continue;
+      let x0, y0, x1, y1;
+      if (k.side === "left") { x0 = -m; x1 = 1; y0 = a; y1 = b; }
+      else if (k.side === "right") { x0 = W - 1; x1 = W + m; y0 = a; y1 = b; }
+      else if (k.side === "top") { y0 = -m; y1 = 1; x0 = a; x1 = b; }
+      else { y0 = L - 1; y1 = L + m; x0 = a; x1 = b; }
+      out.push([[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]]);
+    }
+    return out;
+  }
+  // Wedges of the wall, in plan, coloured by the ink that reaches the panel edge next to them.
+  // Dense samples along the outer case outline, each mapped to the inner outline (same parametrisation).
+  function outlineSamples(spec, oOuter, oInner, step) {
+    const ring = open(phoneOutline(spec, oOuter, 16)[0]);
+    const pts = [];
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const n = len > 3 ? Math.max(1, Math.ceil(len / step)) : 1;   // subdivide straight edges only; corner chords stay on the arc
+      for (let k = 0; k < n; k++) pts.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+    }
+    const toInner = outlineMapper(spec, oOuter, oInner);
+    return { outer: pts, inner: pts.map(toInner) };
+  }
+  function pointInRing(p, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+      if (((yi > p[1]) !== (yj > p[1])) && (p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+  function pointInMP(p, mp) {
+    for (const poly of mp) {
+      if (!pointInRing(p, poly[0])) continue;
+      let hole = false;
+      for (let i = 1; i < poly.length; i++) if (pointInRing(p, poly[i])) { hole = true; break; }
+      if (!hole) return true;
+    }
+    return false;
+  }
+  // Wall footprint between oInner and the outer edge, split into runs coloured by the panel design at
+  // sampleOffset (the ink that reaches that point on the panel, or "plate" for bare panel).
+  function colouredWall(spec, design, oInner, sampleOffset) {
+    const c = spec.phoneClearance || 0, oOuter = c + spec.frameWall;
+    const { outer, inner } = outlineSamples(spec, oOuter, oInner, 0.5);
+    const probe = outer.map(outlineMapper(spec, oOuter, sampleOffset));
+    const cells = paintCells(design.strokes || [], (design.inks || []).length).map(C => ({ ink: C.ink, region: C.region, bbox: bbox(C.region) }));
+    const keyAt = p => {
+      for (let i = cells.length - 1; i >= 0; i--) { // later cells are on top
+        const C = cells[i];
+        if (p[0] < C.bbox[0] || p[0] > C.bbox[2] || p[1] < C.bbox[1] || p[1] > C.bbox[3]) continue;
+        if (pointInMP(p, C.region)) return "ink" + C.ink;
+      }
+      return "plate";
+    };
+    const keys = probe.map(keyAt), n = outer.length, runs = [];
+    let start = 0;
+    for (let i = 0; i < n; i++) if (keys[i] !== keys[(i + n - 1) % n]) { start = i; break; }
+    let i = start, guard = 0;
+    do {
+      let j = i, len = 1;
+      while (len < n && keys[(j + 1) % n] === keys[i]) { j++; len++; }
+      const idx = []; for (let k = i; k <= j + 1; k++) idx.push(k % n);   // include the next point so runs touch
+      const ring = idx.map(k => outer[k]).concat(idx.slice().reverse().map(k => inner[k]));
+      ring.push(ring[0]);
+      runs.push({ key: keys[i], region: [[ring]] });
+      i = (j + 1) % n;
+    } while (i !== start && ++guard < n);
+    return runs;
+  }
+  function stripeKeys(design) {
+    const list = (design.stripeColors && design.stripeColors.length) ? design.stripeColors : ["case", "ink0"];
+    const ok = list.filter(k => k === "case" || k === "plate" || /^ink\d+$/.test(k));
+    return ok.length ? ok : ["case"];
+  }
+  function keyColor(key, design) {
+    if (key === "case") return design.frameColor || "#3A3A3A";
+    if (key === "plate") return design.plateColor || "#F2F2EF";
+    const i = parseInt(key.slice(3), 10);
+    return (design.inks && design.inks[i]) || "#888888";
+  }
+  function keyName(key) {
+    if (key === "case") return "Case";
+    if (key === "plate") return "Case (panel colour)";
+    return "Case ink " + (parseInt(key.slice(3), 10) + 1);
+  }
+
+  // One-piece case body. Returns { parts:[{key,name,color,mesh}], H, ... }. Styles: plain | extrude | stripes.
+  function buildFrame(spec, design, clip) {
+    design = design || { mode: "inlay", inks: [], strokes: [] };
+    const K = mp => (clip && mp.length) ? ops.intersection(mp, clip) : mp;
+    const style = design.caseStyle || "plain";
+    const c = spec.phoneClearance || 0, wall = spec.frameWall, lipDepth = spec.lipDepth || 0;
+    const { slabT, zPhone, zLip, H } = frameLevels(spec);
+    const outer = phoneOutline(spec, c + wall, 16);
+    const collars = collarOn(spec, design);
+    const extra = collars ? (spec.collarWall || 0.8) + (spec.collarClearance || 0.15) : 0;
+    const holes = spec.cutouts.map(k => circle(k.x, k.y, cutR(spec, k) + extra, 48));
+    const minusHoles = mp => holes.length ? ops.difference(mp, ...holes) : mp;
+
+    // 2D colour layouts
+    let wallRuns = [{ key: "case", region: ops.difference(outer, phoneOutline(spec, c, 16)) }];
+    let lipRuns = [{ key: "case", region: ops.difference(outer, phoneOutline(spec, c - lipDepth, 16)) }];
+    let slabBand = null;
+    if (style === "extrude") {
+      const sample = c + wall / 2;
+      wallRuns = colouredWall(spec, design, c, sample);
+      lipRuns = colouredWall(spec, design, c - lipDepth, sample);
+      slabBand = wallRuns;
+    }
+    const slabInterior = minusHoles(slabBand ? phoneOutline(spec, c, 16) : outer);
+
+    // z intervals: [z0, z1, kind]  kind: slab | band | window | lip
+    const r = spec.windowRadius || 0, step = 0.2, n = Math.ceil(r / step);
+    const zs = [[0, slabT, "slab"], [slabT, zPhone, "band"]];
+    for (let k = 0; k < n; k++) zs.push([zPhone + k * step, zPhone + (k + 1) * step, "window"]);
+    zs.push([zPhone + n * step, zLip - n * step, "window"]);
+    for (let k = n - 1; k >= 0; k--) zs.push([zLip - (k + 1) * step, zLip - k * step, "window"]);
+    zs.push([zLip, H, "lip"]);
+    let intervals = zs;
+    if (style === "stripes") {
+      const sKeys = stripeKeys(design), sH = Math.max(0.2, design.stripeHeight || 1);
+      intervals = [];
+      for (const [z0, z1, kind] of zs) {
+        let z = z0;
+        while (z < z1 - 1e-6) {
+          const band = Math.floor(z / sH + 1e-6);
+          const zn = Math.min(z1, (band + 1) * sH);
+          intervals.push([z, zn, kind, sKeys[band % sKeys.length]]);
+          z = zn;
+        }
+      }
+    }
+
+    const meshes = new Map();
+    const meshFor = key => { if (!meshes.has(key)) meshes.set(key, new Mesh()); return meshes.get(key); };
+    const eps = 0.02, xf = (x, y) => [x, y];
+    const windowInset = zmid => { const dz = Math.min(zmid - zPhone, zLip - zmid); return dz >= r ? 0 : r - Math.sqrt(Math.max(0, r * r - (r - dz) * (r - dz))); };
+    for (const iv of intervals) {
+      const [z0, z1, kind] = iv, stripeKey = iv[3];
+      const z1e = Math.min(z1 + eps, H);
+      let runs;
+      if (kind === "slab") {
+        runs = [{ key: stripeKey || "case", region: slabInterior }];
+        if (slabBand) for (const b of slabBand) runs.push({ key: stripeKey || b.key, region: minusHoles(b.region) });
+      } else if (kind === "lip") {
+        runs = lipRuns.map(b => ({ key: stripeKey || b.key, region: b.region }));
+      } else {
+        runs = wallRuns.map(b => ({ key: stripeKey || b.key, region: b.region }));
+        if (kind === "window") {
+          const w = windowRects(spec, windowInset((z0 + z1) / 2));
+          if (w.length) runs = runs.map(b => ({ key: b.key, region: ops.difference(b.region, ...w) })).filter(b => b.region.length);
+        }
+      }
+      for (const b of runs) { const reg = K(b.region); if (reg.length) extrude(reg, z0, z1e, meshFor(b.key), xf); }
+    }
+    const parts = [];
+    for (const [key, mesh] of meshes) parts.push({ key, name: keyName(key), color: keyColor(key, design), mesh });
+    parts.sort((a, b) => (a.key === "case" ? -1 : b.key === "case" ? 1 : a.key.localeCompare(b.key)));
+    return { parts, mesh: parts.length === 1 ? parts[0].mesh : null, H, slabT, zPhone, zLip };
+  }
+
+  // Apply fn([x,y,z]) -> [x,y,z] to every vertex; flip triangle winding when the map is a reflection.
+  function transformMesh(mesh, fn, flip) {
+    const out = new Mesh();
+    for (let i = 0; i < mesh.v.length; i += 3) { const q = fn([mesh.v[i], mesh.v[i + 1], mesh.v[i + 2]]); out.v.push(q[0], q[1], q[2]); }
+    for (let i = 0; i < mesh.t.length; i += 3) { if (flip) out.t.push(mesh.t[i], mesh.t[i + 2], mesh.t[i + 1]); else out.t.push(mesh.t[i], mesh.t[i + 1], mesh.t[i + 2]); }
+    return out;
+  }
+  // Case moved into the panel's model space so the two can be shown assembled. Returns parts.
+  function frameInPlateSpace(spec, design) {
+    const mode = typeof design === "string" ? design : design.mode;
+    const f = buildFrame(spec, typeof design === "string" ? { mode } : design), W = spec.width, L = spec.length, lv = plateLevels(spec);
+    const fn = mode === "inlay" ? p => [W - p[0], L - p[1], lv.skinT + p[2]] : p => [p[0], L - p[1], -p[2]];
+    return f.parts.map(p => ({ name: p.name, color: p.color, mesh: transformMesh(p.mesh, fn, false) }));
+  }
+
+  // ---------- test coupon ----------
+  // A corner of the case and the matching corner of the panel, side by side, to check lip, clearance and collar fit.
+  function buildCoupon(spec, design, size) {
+    size = size || 32;
+    const m = (spec.phoneClearance || 0) + spec.frameWall + 0.5;
+    const box = [[[[-m, -m], [size, -m], [size, size], [-m, size], [-m, -m]]]];
+    const cs = buildFrame(spec, design, box).parts.map(p => ({ ...p, group: "case corner" }));
+    const pp = buildParts(spec, design, box).parts.map(p => ({ ...p, group: "panel corner" }));
+    // the panel's model space is mirrored relative to the case's: shift it to sit beside the case corner
+    let x0 = Infinity, y0 = Infinity;
+    for (const p of pp) for (let i = 0; i < p.mesh.v.length; i += 3) { x0 = Math.min(x0, p.mesh.v[i]); y0 = Math.min(y0, p.mesh.v[i + 1]); }
+    const off = [size + 12 - x0, -m - y0, 0];
+    pp.forEach(p => { p.offset = off; });
+    return { parts: cs.concat(pp), size };
+  }
+
+  // ---------- 3MF ----------
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
+  function f3(n) { return (Math.round(n * 1000) / 1000).toString(); }
+
+  function modelXml(parts, title) {
+    let res = "";
+    res += `  <basematerials id="1">\n`;
+    parts.forEach(p => { res += `    <base name="${esc(p.name)}" displaycolor="${esc(p.color)}FF"/>\n`; });
+    res += `  </basematerials>\n`;
+    const groups = [...new Set(parts.map(p => p.group || ""))];
+    parts.forEach((p, i) => {
+      const id = 10 + i;
+      res += `  <object id="${id}" name="${esc(p.name)}" type="model" pid="1" pindex="${i}">\n   <mesh>\n    <vertices>\n`;
+      const v = p.mesh.v;
+      for (let k = 0; k < v.length; k += 3) res += `     <vertex x="${f3(v[k])}" y="${f3(v[k + 1])}" z="${f3(v[k + 2])}"/>\n`;
+      res += `    </vertices>\n    <triangles>\n`;
+      const t = p.mesh.t;
+      for (let k = 0; k < t.length; k += 3) res += `     <triangle v1="${t[k]}" v2="${t[k + 1]}" v3="${t[k + 2]}"/>\n`;
+      res += `    </triangles>\n   </mesh>\n  </object>\n`;
+    });
+    let items = "";
+    groups.forEach((g, gi) => {
+      const groupId = 10 + parts.length + gi;
+      const name = g ? `${title} — ${g}` : title;
+      res += `  <object id="${groupId}" name="${esc(name)}" type="model">\n   <components>\n`;
+      parts.forEach((p, i) => { if ((p.group || "") === g) res += `    <component objectid="${10 + i}"/>\n`; });
+      res += `   </components>\n  </object>\n`;
+      const off = (parts.find(p => (p.group || "") === g) || {}).offset || [0, 0, 0];
+      items += `  <item objectid="${groupId}" transform="1 0 0 0 1 0 0 0 1 ${f3(off[0])} ${f3(off[1])} ${f3(off[2])}"/>\n`;
+    });
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+ <metadata name="Title">${esc(title)}</metadata>
+ <metadata name="Application">Case Draw</metadata>
+ <resources>
+${res} </resources>
+ <build>
+${items} </build>
+</model>
+`;
+  }
+
+  const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+ <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+ <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>
+</Types>
+`;
+  const RELS = `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+ <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
+</Relationships>
+`;
+
+  // Minimal ZIP writer (stored, no compression)
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+    return t;
+  })();
+  function crc32(bytes) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function zip(files) { // files: [{ name, data: Uint8Array }]
+    const enc = new TextEncoder();
+    const chunks = [], central = [];
+    let offset = 0;
+    const u16 = n => [n & 255, (n >>> 8) & 255];
+    const u32 = n => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+    for (const f of files) {
+      const name = enc.encode(f.name), data = f.data, crc = crc32(data);
+      const head = new Uint8Array([
+        ...u32(0x04034b50), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0x21), ...u16(0x5B21),
+        ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0)
+      ]);
+      chunks.push(head, name, data);
+      central.push(new Uint8Array([
+        ...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0x21), ...u16(0x5B21),
+        ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0), ...u16(0),
+        ...u16(0), ...u16(0), ...u32(0), ...u32(offset)
+      ]), name);
+      offset += head.length + name.length + data.length;
+    }
+    const cdStart = offset;
+    let cdLen = 0;
+    for (const c of central) { chunks.push(c); cdLen += c.length; }
+    chunks.push(new Uint8Array([
+      ...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length),
+      ...u32(cdLen), ...u32(cdStart), ...u16(0)
+    ]));
+    let total = 0; for (const c of chunks) total += c.length;
+    const out = new Uint8Array(total); let p = 0;
+    for (const c of chunks) { out.set(c, p); p += c.length; }
+    return out;
+  }
+
+  function to3MF(parts, title) {
+    const enc = new TextEncoder();
+    return zip([
+      { name: "[Content_Types].xml", data: enc.encode(CONTENT_TYPES) },
+      { name: "_rels/.rels", data: enc.encode(RELS) },
+      { name: "3D/3dmodel.model", data: enc.encode(modelXml(parts, title)) }
+    ]);
+  }
+
+  return { buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
+});
+
+</script>
+<script>
+(() => {
+'use strict';
+
+// ---------- defaults ----------
+const DEFAULT_SPEC = {
+  phone: "Nothing Phone (3)",
+  width: 75.6,
+  length: 160.6,
+  thickness: 9.0,
+  cornerRadius: 11.0,
+  phoneClearance: 0.25,
+  frameWall: 1.5,
+  lipDepth: 0.5,
+  lipThickness: 0.8,
+  windowRadius: 1.2,
+  slabThickness: 1.0,
+  panelThickness: 1.0,
+  collars: true,
+  collarWall: 0.8,
+  collarClearance: 0.15,
+  cutoutClearance: 0.6,
+  inkMargin: 0.6,
+  sideCutouts: [
+    { side: "right",  name: "Power",         from: 66, to: 80, placeholder: true },
+    { side: "left",   name: "Volume",        from: 60, to: 78, placeholder: true },
+    { side: "left",   name: "Essential key", from: 84, to: 92, placeholder: true },
+    { side: "bottom", name: "USB-C + speakers", from: 18, to: 58, placeholder: true }
+  ],
+  cutouts: [
+    { name: "Main camera",  x: 17.0, y: 17.0, d: 17.0, placeholder: true },
+    { name: "Ultrawide",    x: 17.0, y: 35.5, d: 13.0, placeholder: true },
+    { name: "Periscope",    x: 37.0, y: 27.0, d: 13.0, placeholder: true },
+    { name: "Flash",        x: 37.0, y: 42.0, d: 5.0,  placeholder: true },
+    { name: "Glyph Matrix", x: 58.5, y: 17.0, d: 21.0, placeholder: true }
+  ]
+};
+const DEFAULT_DESIGN = {
+  mode: "inlay",
+  plateColor: "#F2F2EF",
+  frameColor: "#3A3A3A",
+  caseStyle: "plain",     // plain | extrude | stripes
+  stripeHeight: 1.0,
+  stripeColors: ["case", "ink0", "ink1", "ink2"],
+  inks: ["#000000", "#E0322B", "#2C63C9"],
+  inkDepth: 0.6,          // inlay: how deep every ink is pocketed
+  inkHeights: [0.8, 0.8, 0.8], // relief: how far each ink stands proud; 0 = flush
+  maxInkHeight: 5,        // top of the height sliders in the 3D view
+  strokes: []            // { c: inkIndex, w: mm, pts: [[x,y],...] }
+};
+const STORE_KEY = "casedraw.v1";
+
+// ---------- state ----------
+let spec = clone(DEFAULT_SPEC);
+let design = clone(DEFAULT_DESIGN);
+let tool = "draw";
+let ink = 0;
+let width = 2.5;
+let undoStack = [], redoStack = [];
+let live = null;                 // stroke being drawn
+let selCut = -1, dragCut = null; // cutout editing
+let view = { scale: 4, ox: 0, oy: 0 };
+
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+
+// ---------- storage ----------
+function load(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(!raw) return;
+    const s = JSON.parse(raw);
+    if(s.spec){ spec = Object.assign(clone(DEFAULT_SPEC), s.spec); for(const k of ["plateThickness", "ledge", "dovetail", "skinThickness", "tongueThickness", "tipHeight", "bumpHeight", "bumpRise", "bumpLength", "snapClearance", "snapBumps"]) delete spec[k]; }
+    if(s.design) design = Object.assign(clone(DEFAULT_DESIGN), s.design);
+  }catch(e){ /* storage unavailable; run in memory */ }
+}
+let saveT = null;
+function save(){
+  clearTimeout(saveT);
+  saveT = setTimeout(() => {
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify({ version: 1, spec, design })); }catch(e){}
+  }, 250);
+}
+
+// ---------- canvas ----------
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+let W = 0, H = 0, dpr = 1;
+
+function resize(){
+  const r = canvas.getBoundingClientRect();
+  dpr = window.devicePixelRatio || 1;
+  W = r.width; H = r.height;
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  if(!zoomed()) fitView();
+  render();
+}
+let fitScale = 0;
+function zoomed(){ return fitScale && Math.abs(view.scale - fitScale) > 1e-6; }
+function fitView(){
+  const pad = 28, m = 2 * frameOuter();
+  view.scale = Math.min((W - pad * 2) / (spec.width + m), (H - pad * 2) / (spec.length + m));
+  view.ox = (W - spec.width * view.scale) / 2;
+  view.oy = (H - spec.length * view.scale) / 2;
+  fitScale = view.scale;
+}
+function toMM(px, py){ return [(px - view.ox) / view.scale, (py - view.oy) / view.scale]; }
+
+function outlinePath(o){ // phone outline offset outward by o mm
+  const r = Math.min(spec.cornerRadius, spec.width / 2, spec.length / 2) + o;
+  ctx.beginPath();
+  ctx.roundRect(-o, -o, spec.width + 2 * o, spec.length + 2 * o, Math.max(0, r));
+}
+function plateOff(){ return CaseGeo.plateOffsets(spec); }
+function frameOuter(){ return spec.phoneClearance + spec.frameWall; }
+function platePath(){ outlinePath(plateOff().wide); }
+function cutRadius(c){ return (c.d + (spec.cutoutClearance || 0)) / 2; }
+
+function render(){
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = getCSS("--bed");
+  ctx.fillRect(0, 0, W, H);
+
+  // 5 mm dot grid, in mm space
+  ctx.save();
+  ctx.translate(view.ox, view.oy);
+  ctx.scale(view.scale, view.scale);
+  const step = 5;
+  const [x0, y0] = toMM(0, 0), [x1, y1] = toMM(W, H);
+  ctx.fillStyle = getCSS("--bed-dot");
+  const dr = 0.7 / view.scale;
+  for(let x = Math.floor(x0 / step) * step; x <= x1; x += step)
+    for(let y = Math.floor(y0 / step) * step; y <= y1; y += step){
+      ctx.beginPath(); ctx.arc(x, y, dr, 0, Math.PI * 2); ctx.fill();
+    }
+
+  // frame ring, with its side cutouts as gaps
+  ctx.save();
+  outlinePath(frameOuter());
+  const fo = frameOuter(), fw = spec.width, fl = spec.length;
+  for(const k of spec.sideCutouts){
+    const a = Math.min(k.from, k.to), b = Math.max(k.from, k.to);
+    if(k.side === "left") ctx.rect(-fo - 1, a, fo + 1, b - a);
+    else if(k.side === "right") ctx.rect(fw, a, fo + 1, b - a);
+    else if(k.side === "top") ctx.rect(a, -fo - 1, b - a, fo + 1);
+    else ctx.rect(a, fl, b - a, fo + 1);
+  }
+  ctx.clip("evenodd");
+  outlinePath(frameOuter());
+  ctx.fillStyle = design.frameColor || "#3A3A3A"; ctx.globalAlpha = 0.35; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.restore();
+  // plate (its skin covers the frame wall, so it is as big as the whole case)
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,.18)";
+  ctx.shadowBlur = 14;
+  ctx.shadowOffsetY = 3;
+  platePath();
+  ctx.fillStyle = design.plateColor;
+  ctx.fill();
+  ctx.restore();
+
+  // holes
+  for(const c of spec.cutouts){
+    ctx.beginPath(); ctx.arc(c.x, c.y, cutRadius(c), 0, Math.PI * 2);
+    ctx.fillStyle = getCSS("--bed"); ctx.fill();
+  }
+
+  // strokes clipped to the plate's outer face, kept inkMargin clear of the edge and the holes
+  ctx.save();
+  const im = spec.inkMargin || 0;
+  outlinePath(plateOff().narrow - im);
+  for(const c of spec.cutouts){ ctx.moveTo(c.x + cutRadius(c) + im, c.y); ctx.arc(c.x, c.y, cutRadius(c) + im, 0, Math.PI * 2); }
+  ctx.clip("evenodd");
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  for(const s of design.strokes) drawStroke(s);
+  if(live) drawStroke(live);
+  ctx.restore();
+
+  // plate edge and phone outline
+  platePath();
+  ctx.lineWidth = 1 / view.scale;
+  ctx.strokeStyle = "rgba(0,0,0,.35)";
+  ctx.stroke();
+  outlinePath(0);
+  ctx.setLineDash([1.5, 1.5]); ctx.strokeStyle = "rgba(0,0,0,.3)"; ctx.stroke(); ctx.setLineDash([]);
+
+  // cutout rings and labels
+  spec.cutouts.forEach((c, i) => {
+    const r = cutRadius(c);
+    ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.lineWidth = (i === selCut && tool === "cutouts" ? 2 : 1) / view.scale;
+    ctx.strokeStyle = i === selCut && tool === "cutouts" ? "#000" : "rgba(0,0,0,.45)";
+    ctx.setLineDash(c.placeholder ? [2, 1.5] : []);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if(tool === "cutouts"){
+      ctx.beginPath();
+      ctx.moveTo(c.x - 2, c.y); ctx.lineTo(c.x + 2, c.y);
+      ctx.moveTo(c.x, c.y - 2); ctx.lineTo(c.x, c.y + 2);
+      ctx.lineWidth = 1 / view.scale; ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.stroke();
+    }
+  });
+
+  // orientation marks
+  const fs2 = Math.max(2.6, 12 / view.scale);
+  ctx.font = `700 ${fs2}px ${getCSS("--dot")}`;
+  ctx.fillStyle = "rgba(0,0,0,.45)";
+  ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+  ctx.fillText("TOP", -frameOuter(), -frameOuter() - 1.5);
+  ctx.textAlign = "right";
+  ctx.fillText(`${spec.width} x ${spec.length}`, spec.width + frameOuter(), -frameOuter() - 1.5);
+  ctx.restore();
+}
+
+function drawStroke(s){
+  const p = s.pts;
+  ctx.strokeStyle = design.inks[s.c] || "#000";
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.lineWidth = s.w;
+  if(p.length < 2){
+    ctx.beginPath(); ctx.arc(p[0][0], p[0][1], s.w / 2, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(p[0][0], p[0][1]);
+  for(let i = 1; i < p.length - 1; i++){
+    const mx = (p[i][0] + p[i + 1][0]) / 2, my = (p[i][1] + p[i + 1][1]) / 2;
+    ctx.quadraticCurveTo(p[i][0], p[i][1], mx, my);
+  }
+  const l = p[p.length - 1];
+  ctx.lineTo(l[0], l[1]);
+  ctx.stroke();
+}
+
+function getCSS(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+// ---------- pointer input ----------
+let activeId = null;
+const touches = new Map();   // pointerId -> [x, y] in canvas px, for pinch/pan
+let pinch = null;            // { d0, mid0, scale0, ox0, oy0 }
+canvas.addEventListener("pointerdown", e => {
+  touches.set(e.pointerId, [e.offsetX, e.offsetY]);
+  canvas.setPointerCapture(e.pointerId);
+  if(touches.size === 2){
+    // second finger: abandon any stroke in progress and start a pinch
+    live = null; dragCut = null; activeId = null;
+    const [a, b] = [...touches.values()];
+    pinch = { d0: Math.max(10, Math.hypot(a[0] - b[0], a[1] - b[1])), mid0: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], scale0: view.scale, ox0: view.ox, oy0: view.oy };
+    render(); return;
+  }
+  if(touches.size > 2 || pinch) return;
+  if(activeId !== null) return;          // one drawing finger at a time
+  activeId = e.pointerId;
+  const [x, y] = toMM(e.offsetX, e.offsetY);
+  if(tool === "draw"){
+    live = { c: ink, w: width, pts: [[round2(x), round2(y)]] };
+  }else if(tool === "erase"){
+    eraseAt(x, y);
+  }else if(tool === "cutouts"){
+    const i = hitCutout(x, y);
+    selCut = i;
+    dragCut = i >= 0 ? { dx: spec.cutouts[i].x - x, dy: spec.cutouts[i].y - y } : null;
+    updateChip();
+  }
+  render();
+});
+canvas.addEventListener("pointermove", e => {
+  if(touches.has(e.pointerId)) touches.set(e.pointerId, [e.offsetX, e.offsetY]);
+  if(pinch && touches.size >= 2){
+    const [a, b] = [...touches.values()];
+    const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const k = clamp(pinch.scale0 * d / pinch.d0, minScale() * 0.8, minScale() * 12) / pinch.scale0;
+    view.scale = pinch.scale0 * k;
+    view.ox = mid[0] - (pinch.mid0[0] - pinch.ox0) * k;
+    view.oy = mid[1] - (pinch.mid0[1] - pinch.oy0) * k;
+    render(); return;
+  }
+  if(e.pointerId !== activeId) return;
+  const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for(const ev of events){
+    const [x, y] = toMM(ev.offsetX, ev.offsetY);
+    if(tool === "draw" && live){
+      const last = live.pts[live.pts.length - 1];
+      if(Math.hypot(x - last[0], y - last[1]) >= 0.35) live.pts.push([round2(x), round2(y)]);
+    }else if(tool === "erase"){
+      eraseAt(x, y);
+    }else if(tool === "cutouts" && dragCut && selCut >= 0){
+      const c = spec.cutouts[selCut];
+      c.x = round1(clamp(x + dragCut.dx, 0, spec.width));
+      c.y = round1(clamp(y + dragCut.dy, 0, spec.length));
+      updateChip();
+    }
+  }
+  render();
+});
+function endPointer(e){
+  touches.delete(e.pointerId);
+  if(pinch){ if(touches.size < 2) pinch = null; return; }
+  if(e.pointerId !== activeId) return;
+  activeId = null;
+  if(tool === "draw" && live){
+    commit(() => design.strokes.push(live));
+    live = null;
+  }
+  if(tool === "cutouts" && dragCut){ dragCut = null; syncSpecText(); save(); }
+  render();
+}
+canvas.addEventListener("pointerup", endPointer);
+canvas.addEventListener("pointercancel", endPointer);
+window.addEventListener("resize", resize);
+
+// mouse wheel / trackpad zoom around the cursor
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  const k = clamp(view.scale * Math.exp(-e.deltaY * 0.0015), minScale() * 0.8, minScale() * 12) / view.scale;
+  view.ox = e.offsetX - (e.offsetX - view.ox) * k;
+  view.oy = e.offsetY - (e.offsetY - view.oy) * k;
+  view.scale *= k; render();
+}, { passive: false });
+function minScale(){ const pad = 28, m = 2 * frameOuter(); return Math.min((W - pad * 2) / (spec.width + m), (H - pad * 2) / (spec.length + m)); }
+function round1(v){ return Math.round(v * 10) / 10; }
+function round2(v){ return Math.round(v * 100) / 100; }
+function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+// ---------- history ----------
+function commit(fn){
+  undoStack.push(design.strokes.slice());
+  if(undoStack.length > 100) undoStack.shift();
+  redoStack = [];
+  fn();
+  updateHistoryButtons(); save();
+}
+function undo(){
+  if(!undoStack.length) return;
+  redoStack.push(design.strokes.slice());
+  design.strokes = undoStack.pop();
+  updateHistoryButtons(); save(); render();
+}
+function redo(){
+  if(!redoStack.length) return;
+  undoStack.push(design.strokes.slice());
+  design.strokes = redoStack.pop();
+  updateHistoryButtons(); save(); render();
+}
+function updateHistoryButtons(){
+  btnUndo.disabled = !undoStack.length;
+  btnRedo.disabled = !redoStack.length;
+}
+
+// ---------- erase (whole stroke) ----------
+function distToSeg(px, py, ax, ay, bx, by){
+  const dx = bx - ax, dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+  t = clamp(t, 0, 1);
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+function strokeHit(s, x, y){
+  const tol = s.w / 2 + 1.2;
+  const p = s.pts;
+  if(p.length === 1) return Math.hypot(x - p[0][0], y - p[0][1]) <= tol;
+  for(let i = 0; i < p.length - 1; i++)
+    if(distToSeg(x, y, p[i][0], p[i][1], p[i + 1][0], p[i + 1][1]) <= tol) return true;
+  return false;
+}
+let eraseBatchOpen = false;
+function eraseAt(x, y){
+  const keep = design.strokes.filter(s => !strokeHit(s, x, y));
+  if(keep.length === design.strokes.length) return;
+  if(!eraseBatchOpen){ undoStack.push(design.strokes.slice()); redoStack = []; eraseBatchOpen = true; }
+  design.strokes = keep;
+  updateHistoryButtons(); save();
+}
+canvas.addEventListener("pointerup", () => { eraseBatchOpen = false; });
+canvas.addEventListener("pointercancel", () => { eraseBatchOpen = false; });
+
+// ---------- cutout editing ----------
+function hitCutout(x, y){
+  let best = -1, bd = Infinity;
+  spec.cutouts.forEach((c, i) => {
+    const d = Math.hypot(x - c.x, y - c.y);
+    if(d <= cutRadius(c) + 3 && d < bd){ bd = d; best = i; }
+  });
+  return best;
+}
+const chip = document.getElementById("chip");
+const chipDia = document.getElementById("chipDia");
+function updateChip(){
+  if(tool !== "cutouts" || selCut < 0){ chip.classList.remove("show"); return; }
+  const c = spec.cutouts[selCut];
+  document.getElementById("chipName").textContent = c.name;
+  document.getElementById("chipX").textContent = c.x.toFixed(1);
+  document.getElementById("chipY").textContent = c.y.toFixed(1);
+  document.getElementById("chipD").textContent = c.d.toFixed(1);
+  chipDia.value = c.d;
+  chip.classList.add("show");
+}
+chipDia.addEventListener("input", () => {
+  if(selCut < 0) return;
+  spec.cutouts[selCut].d = parseFloat(chipDia.value);
+  updateChip(); render();
+});
+chipDia.addEventListener("change", () => { syncSpecText(); save(); });
+
+// ---------- toolbar ----------
+const btnUndo = document.getElementById("btnUndo");
+const btnRedo = document.getElementById("btnRedo");
+btnUndo.onclick = undo; btnRedo.onclick = redo;
+btnFit.onclick = () => { fitView(); render(); };
+const toolBtns = { draw: toolDraw, erase: toolErase, cutouts: toolCut };
+const hints = {
+  draw: "Draw with your finger. Strokes are clipped to the plate.",
+  erase: "Tap or drag over a stroke to remove it.",
+  cutouts: "Drag a cutout to move it. Use the slider for diameter."
+};
+function setTool(t){
+  tool = t; selCut = -1; dragCut = null;
+  for(const k in toolBtns) toolBtns[k].classList.toggle("on", k === t);
+  canvas.style.cursor = t === "cutouts" ? "move" : "crosshair";
+  updateChip(); render();
+}
+toolDraw.onclick = () => setTool("draw");
+toolErase.onclick = () => setTool("erase");
+toolCut.onclick = () => setTool("cutouts");
+
+const widthIn = document.getElementById("width"), widthOut = document.getElementById("widthOut");
+widthIn.addEventListener("input", () => { width = parseFloat(widthIn.value); widthOut.textContent = width.toFixed(1) + " mm"; });
+
+const inksEl = document.getElementById("inks");
+function buildInks(){
+  inksEl.innerHTML = "";
+  design.inks.forEach((col, i) => {
+    const b = document.createElement("button");
+    b.className = "ink" + (i === ink ? " on" : "");
+    b.style.background = col;
+    b.setAttribute("aria-label", "Ink " + (i + 1));
+    const inp = document.createElement("input");
+    inp.type = "color"; inp.value = col; inp.tabIndex = -1;
+    inp.addEventListener("input", () => { design.inks[i] = inp.value; b.style.background = inp.value; syncColorInputs(); save(); render(); });
+    b.appendChild(inp);
+    b.onclick = () => {
+      if(ink === i){ inp.click(); return; }
+      ink = i; if(tool !== "draw") setTool("draw"); buildInks();
+    };
+    inksEl.appendChild(b);
+  });
+  const pl = document.createElement("button");
+  pl.className = "ink plate"; pl.style.background = design.plateColor; pl.setAttribute("aria-label", "Plate colour");
+  const pin = document.createElement("input"); pin.type = "color"; pin.value = design.plateColor; pin.tabIndex = -1;
+  pin.addEventListener("input", () => { design.plateColor = pin.value; pl.style.background = pin.value; syncColorInputs(); save(); render(); });
+  pl.appendChild(pin); pl.onclick = () => pin.click();
+  inksEl.appendChild(pl);
+}
+
+// ---------- settings sheet ----------
+const sheet = document.getElementById("sheet"), scrim = document.getElementById("scrim");
+function openSheet(){ syncSpecText(); syncColorInputs(); syncMode(); syncInkDepth(); syncStyle(); sheet.classList.add("open"); scrim.classList.add("open"); }
+function closeSheet(){ sheet.classList.remove("open"); scrim.classList.remove("open"); }
+btnSettings.onclick = openSheet; btnClose.onclick = closeSheet; scrim.onclick = closeSheet;
+
+const modeHelp = {
+  inlay: "Panel prints drawing-face-down. Inks fill pockets in the panel, so the surface comes out flat and glossy from the bed. Camera collars on the inside face key it into the case. Ink depth is capped 0.3 mm below the panel thickness.",
+  relief: "Panel prints inside-face-down, inks on top. Each ink has one height above the panel, set in the 3D view, independent of the other inks. Where colours overlap the later stroke shows, at its own ink's height. An ink at 0 is pocketed flush. No collars in this mode, so line it up by the camera holes when gluing."
+};
+function syncMode(){
+  modeInlay.classList.toggle("on", design.mode === "inlay");
+  modeRelief.classList.toggle("on", design.mode === "relief");
+  document.getElementById("modeHelp").textContent = modeHelp[design.mode];
+}
+modeInlay.onclick = () => { design.mode = "inlay"; syncMode(); save(); };
+modeRelief.onclick = () => { design.mode = "relief"; syncMode(); save(); };
+
+const colorInputs = [plateColor, ink0, ink1, ink2];
+function syncColorInputs(){
+  plateColor.value = design.plateColor;
+  frameColor.value = design.frameColor || "#3A3A3A";
+  [ink0, ink1, ink2].forEach((el, i) => el.value = design.inks[i]);
+}
+plateColor.addEventListener("input", () => { design.plateColor = plateColor.value; buildInks(); save(); render(); });
+frameColor.addEventListener("input", () => { design.frameColor = frameColor.value; save(); render(); });
+[ink0, ink1, ink2].forEach((el, i) => el.addEventListener("input", () => { design.inks[i] = el.value; buildInks(); save(); render(); }));
+
+const specJson = document.getElementById("specJson"), specErr = document.getElementById("specErr");
+function syncSpecText(){ specJson.value = JSON.stringify(spec, null, 2); }
+function validateSpec(s){
+  s = Object.assign(clone(DEFAULT_SPEC), s);
+  const nums = ["width", "length", "thickness", "cornerRadius", "phoneClearance", "frameWall", "lipDepth", "lipThickness", "windowRadius", "slabThickness", "panelThickness", "collarWall", "collarClearance", "cutoutClearance", "inkMargin"];
+  for(const k of ["plateThickness", "ledge", "dovetail", "skinThickness", "tongueThickness", "tipHeight", "bumpHeight", "bumpRise", "bumpLength", "snapClearance", "snapBumps"]) delete s[k];
+  for(const k of nums) if(typeof s[k] !== "number" || !isFinite(s[k])) throw new Error(`"${k}" must be a number`);
+  if(!Array.isArray(s.sideCutouts)) throw new Error('"sideCutouts" must be a list');
+  s.sideCutouts.forEach((c, i) => {
+    if(!["left", "right", "top", "bottom"].includes(c.side)) throw new Error(`side cutout ${i + 1}: "side" must be left, right, top or bottom`);
+    for(const k of ["from", "to"]) if(typeof c[k] !== "number") throw new Error(`side cutout ${i + 1}: "${k}" must be a number`);
+  });
+  if(!Array.isArray(s.cutouts)) throw new Error('"cutouts" must be a list');
+  s.cutouts.forEach((c, i) => {
+    for(const k of ["x", "y", "d"]) if(typeof c[k] !== "number") throw new Error(`cutout ${i + 1}: "${k}" must be a number`);
+    if(!c.name) c.name = "Cutout " + (i + 1);
+  });
+  return s;
+}
+btnApplySpec.onclick = () => {
+  try{
+    spec = validateSpec(JSON.parse(specJson.value));
+    specErr.textContent = "";
+    document.getElementById("subtitle").textContent = `${spec.phone || "Phone"}, back view`;
+    fitView(); save(); render();
+  }catch(e){ specErr.textContent = e.message; }
+};
+btnResetSpec.onclick = () => { spec = clone(DEFAULT_SPEC); syncSpecText(); specErr.textContent = ""; fitView(); save(); render(); };
+
+// ---------- files ----------
+const fileMsg = document.getElementById("fileMsg");
+const inFrame = (() => { try{ return window.self !== window.top; }catch(e){ return true; } })();
+// Returns "shared" | "download" | "copy" so the caller can say what actually happened.
+// Hosted on claude.ai: the page saves through the viewer's download prompt. 3MF isn't on its allowlist, so it goes inside a zip.
+async function hostedSave(name, text){
+  if(!(window.claude && typeof window.claude.use === "function")) return null;
+  const dl = await window.claude.use("downloads");
+  if(!dl) return null;
+  let data = text, filename = name;
+  if(name.endsWith(".3mf")){ data = CaseGeo.zipFiles([{ name, data: text }]); filename = name.replace(/\.3mf$/, ".zip"); }
+  try{ await dl.save({ filename, data: data instanceof Uint8Array ? data.slice().buffer : data }); return name.endsWith(".3mf") ? "hostedzip" : "saved"; }
+  catch(e){ return e && e.code === "declined" ? "cancelled" : "hostedfail"; }
+}
+async function download(name, text, type){
+  const binary = text instanceof Uint8Array;
+  const hosted = await hostedSave(name, text);
+  if(hosted) return hosted;
+  // 1. native share sheet (best on phones: Files, AirDrop, Drive)
+  try{
+    const file = new File([text], name, { type });
+    if(navigator.canShare && navigator.canShare({ files: [file] })){
+      await navigator.share({ files: [file], title: name });
+      return "shared";
+    }
+  }catch(e){ if(e && e.name === "AbortError") return "cancelled"; }
+  // 2. sandboxed preview: navigating to a blob would unload the page, so only offer the text
+  if(inFrame){ if(binary) return "nobinary"; showCopy(name, text); return "copy"; }
+  // 3. plain download, with the text shown as well in case the browser swallows it
+  try{
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type }));
+    a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }catch(e){}
+  if(!binary) showCopy(name, text);
+  return "download";
+}
+const saveMsg = {
+  shared: "Sent to the share sheet.",
+  download: "Download started. If no file appeared, copy it below.",
+  copy: "This preview can't save files. Copy it below, or run the app from your own site.",
+  nobinary: "This preview can't save files. Run the app from your own site to export the 3MF.",
+  saved: "Saved.",
+  hostedzip: "Saved as a zip. Tap it in Files to unpack the .3mf inside.",
+  hostedfail: "The download didn't go through. Try again in a moment.",
+  cancelled: ""
+};
+function showCopy(name, text){
+  let box = document.getElementById("copyBox");
+  if(!box){
+    box = document.createElement("div"); box.id = "copyBox";
+    box.innerHTML = `<p style="margin:8px 0 6px"><span id="copyName"></span> — copy and paste into a file if you need it.</p>
+      <textarea id="copyText" readonly style="min-height:140px"></textarea>
+      <div class="row" style="margin-top:8px"><button id="copyBtn">Copy</button><button id="copyHide">Hide</button></div>`;
+    fileMsg.after(box);
+    box.querySelector("#copyHide").onclick = () => box.remove();
+    box.querySelector("#copyBtn").onclick = async () => {
+      const t = box.querySelector("#copyText");
+      try{ await navigator.clipboard.writeText(t.value); fileMsg.textContent = "Copied."; }
+      catch(e){ t.focus(); t.select(); fileMsg.textContent = "Select all and copy."; }
+    };
+  }
+  box.querySelector("#copyName").textContent = name;
+  box.querySelector("#copyText").value = text;
+}
+function stamp(){ return new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-"); }
+btnExportJson.onclick = () => {
+  fileMsg.textContent = "";
+  download(`case-${stamp()}.json`, JSON.stringify({ version: 1, spec, design }, null, 2), "application/json")
+    .then(r => { fileMsg.textContent = saveMsg[r] || ""; });
+};
+btnImportJson.onclick = () => fileIn.click();
+fileIn.addEventListener("change", async () => {
+  const f = fileIn.files[0]; if(!f) return;
+  try{
+    const o = JSON.parse(await f.text());
+    if(o.spec) spec = validateSpec(o.spec);
+    if(o.design) design = Object.assign(clone(DEFAULT_DESIGN), o.design);
+    undoStack = []; redoStack = []; ink = 0;
+    buildInks(); syncSpecText(); syncColorInputs(); syncMode(); updateHistoryButtons(); fitView(); save(); render();
+    fileMsg.textContent = `Opened ${f.name} (${design.strokes.length} strokes).`;
+  }catch(e){ fileMsg.textContent = "Couldn't open that file: " + e.message; }
+  fileIn.value = "";
+});
+
+function svgPathForStroke(s){
+  const p = s.pts;
+  if(p.length < 2) return `M ${p[0][0]} ${p[0][1]} l 0.01 0`;
+  let d = `M ${p[0][0]} ${p[0][1]}`;
+  for(let i = 1; i < p.length - 1; i++){
+    const mx = (p[i][0] + p[i + 1][0]) / 2, my = (p[i][1] + p[i + 1][1]) / 2;
+    d += ` Q ${p[i][0]} ${p[i][1]} ${round2(mx)} ${round2(my)}`;
+  }
+  const l = p[p.length - 1];
+  return d + ` L ${l[0]} ${l[1]}`;
+}
+btnExportSvg.onclick = () => {
+  const w = spec.width, l = spec.length, r = Math.min(spec.cornerRadius, w / 2, l / 2);
+  let holes = spec.cutouts.map(c => {
+    const R = cutRadius(c);
+    return `M ${c.x - R} ${c.y} a ${R} ${R} 0 1 0 ${2 * R} 0 a ${R} ${R} 0 1 0 ${-2 * R} 0`;
+  }).join(" ");
+  const plate = `M ${r} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${l - r} A ${r} ${r} 0 0 1 ${w - r} ${l} H ${r} A ${r} ${r} 0 0 1 0 ${l - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
+  const inks = design.inks.map((col, i) => {
+    const paths = design.strokes.filter(s => s.c === i).map(s =>
+      `<path d="${svgPathForStroke(s)}" stroke-width="${s.w}"/>`).join("\n    ");
+    return `  <g id="ink-${i + 1}" fill="none" stroke="${col}" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#plate-clip)">\n    ${paths}\n  </g>`;
+  }).join("\n");
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${l}mm" viewBox="0 0 ${w} ${l}">
+  <!-- ${spec.phone}, back view, millimetres. mode: ${design.mode} -->
+  <defs><clipPath id="plate-clip" clip-rule="evenodd"><path d="${plate} ${holes}"/></clipPath></defs>
+  <path id="plate" d="${plate} ${holes}" fill="${design.plateColor}" fill-rule="evenodd"/>
+${inks}
+</svg>`;
+  fileMsg.textContent = "";
+  download(`case-${stamp()}.svg`, svg, "image/svg+xml")
+    .then(r => { fileMsg.textContent = saveMsg[r] || ""; });
+};
+
+btnClear.onclick = () => {
+  if(!design.strokes.length) return;
+  if(!confirm("Remove every stroke? You can undo this.")) return;
+  commit(() => { design.strokes = []; });
+  render(); closeSheet();
+};
+
+const inkDepthIn = document.getElementById("inkDepth"), inkDepthOut = document.getElementById("inkDepthOut");
+function syncInkDepth(){ inkDepthIn.value = design.inkDepth; inkDepthOut.textContent = design.inkDepth.toFixed(1) + " mm"; maxInkHeight.value = design.maxInkHeight || 5; }
+maxInkHeight.addEventListener("change", () => { const v = parseFloat(maxInkHeight.value); if(v >= 1 && v <= 20){ design.maxInkHeight = v; save(); } });
+inkDepthIn.addEventListener("input", () => { design.inkDepth = parseFloat(inkDepthIn.value); syncInkDepth(); save(); });
+
+btnExport3mf.onclick = () => {
+  fileMsg.textContent = "Building meshes…";
+  btnExport3mf.disabled = true;
+  setTimeout(async () => {
+    try{
+      const built = CaseGeo.buildParts(spec, design);
+      const bytes = CaseGeo.to3MF(built.parts, `${spec.phone} case back`);
+      const tris = built.parts.reduce((n, p) => n + p.mesh.triCount(), 0);
+      const r = await download(`case-panel-${design.mode}-${stamp()}.3mf`, bytes, "model/3mf");
+      const info = `${built.parts.length} parts, ${tris.toLocaleString()} triangles, ${(bytes.length / 1024).toFixed(0)} KB. `;
+      fileMsg.textContent = r === "cancelled" ? "" : (r === "nobinary" ? saveMsg.nobinary : info + (saveMsg[r] || ""));
+    }catch(e){ fileMsg.textContent = "Couldn't build the 3MF: " + e.message; console.error(e); }
+    btnExport3mf.disabled = false;
+  }, 30);
+};
+
+// ---------- case style ----------
+const styHelp = {
+  plain: "The whole case in the case colour.",
+  extrude: "Whatever colour the panel has at its edge continues straight down the side of the case, so the drawing wraps round. Bare panel continues in the panel colour.",
+  stripes: "Bands of colour running round the case, parallel to the back, in the order ticked below."
+};
+const styBtns = { plain: styPlain, extrude: styExtrude, stripes: styStripes };
+function syncStyle(){
+  const st = design.caseStyle || "plain";
+  for(const k in styBtns) styBtns[k].classList.toggle("on", k === st);
+  document.getElementById("styHelp").textContent = styHelp[st];
+  stripeOpts.style.display = st === "stripes" ? "" : "none";
+  stripeHeight.value = design.stripeHeight || 1;
+  for(const k of ["case", "plate", "ink0", "ink1", "ink2"]) document.getElementById("sc_" + k).checked = (design.stripeColors || []).includes(k);
+}
+for(const k in styBtns) styBtns[k].onclick = () => { design.caseStyle = k; syncStyle(); save(); };
+stripeHeight.addEventListener("change", () => { const v = parseFloat(stripeHeight.value); if(v >= 0.2){ design.stripeHeight = v; save(); } });
+for(const k of ["case", "plate", "ink0", "ink1", "ink2"]) document.getElementById("sc_" + k).addEventListener("change", () => {
+  design.stripeColors = ["case", "plate", "ink0", "ink1", "ink2"].filter(x => document.getElementById("sc_" + x).checked);
+  save();
+});
+
+// ---------- 3D preview ----------
+const viewer = document.getElementById("viewer"), stage = document.getElementById("stage"), viewerNote = document.getElementById("viewerNote");
+let three = null; // { renderer, scene, camera, group, model }
+let flipped = false, threeLoading = null, showFrame = false, frameMesh = null, rebuildT = null;
+
+function loadThree(){
+  if(window.THREE) return Promise.resolve();
+  if(threeLoading) return threeLoading;
+  threeLoading = new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+    s.onload = res; s.onerror = () => rej(new Error("three.js didn't load"));
+    document.head.appendChild(s);
+  });
+  return threeLoading;
+}
+function initThree(){
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  stage.insertBefore(renderer.domElement, viewerNote);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(getCSS("--bed"));
+  const camera = new THREE.PerspectiveCamera(35, 1, 1, 2000);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 0.9));
+  const key = new THREE.DirectionalLight(0xffffff, 0.7); key.position.set(60, 120, 160); scene.add(key);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.25); fill.position.set(-80, -40, -120); scene.add(fill);
+  const group = new THREE.Group(); scene.add(group);
+  three = { renderer, scene, camera, group, model: null, rot: { x: 0.35, y: -0.45 }, dist: 0 };
+  // orbit: one pointer rotates, two pinch-zoom, wheel zooms
+  const el = renderer.domElement, ptrs = new Map();
+  let lastPinch = 0;
+  el.addEventListener("pointerdown", e => { ptrs.set(e.pointerId, [e.clientX, e.clientY]); el.setPointerCapture(e.pointerId); });
+  el.addEventListener("pointermove", e => {
+    if(!ptrs.has(e.pointerId)) return;
+    const prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+    if(ptrs.size === 1){
+      three.rot.y += (e.clientX - prev[0]) * 0.008;
+      three.rot.x = clamp(three.rot.x + (e.clientY - prev[1]) * 0.008, -1.5, 1.5);
+    }else if(ptrs.size === 2){
+      const [a, b] = [...ptrs.values()];
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if(lastPinch) three.dist = clamp(three.dist * (lastPinch / d), 60, 900);
+      lastPinch = d;
+    }
+    drawThree();
+  });
+  const up = e => { ptrs.delete(e.pointerId); if(ptrs.size < 2) lastPinch = 0; };
+  el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+  el.addEventListener("wheel", e => { e.preventDefault(); three.dist = clamp(three.dist * (1 + e.deltaY * 0.001), 60, 900); drawThree(); }, { passive: false });
+  new ResizeObserver(sizeThree).observe(stage);
+}
+function sizeThree(){
+  if(!three) return;
+  const r = stage.getBoundingClientRect();
+  three.renderer.setSize(r.width, r.height, false);
+  three.renderer.domElement.style.width = r.width + "px"; three.renderer.domElement.style.height = r.height + "px";
+  three.camera.aspect = r.width / r.height; three.camera.updateProjectionMatrix();
+  drawThree();
+}
+function drawThree(){
+  if(!three) return;
+  const { camera, group, rot, dist } = three;
+  group.rotation.set(rot.x, rot.y + (flipped ? Math.PI : 0), 0);
+  camera.position.set(0, 0, dist); camera.lookAt(0, 0, 0);
+  three.renderer.render(three.scene, camera);
+}
+function meshToThree(m, color){
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(m.v), 3));
+  g.setIndex(m.t.length > 65535 ? new THREE.Uint32BufferAttribute(m.t, 1) : new THREE.Uint16BufferAttribute(m.t, 1));
+  g.computeVertexNormals();
+  return new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05, flatShading: true }));
+}
+function buildPreview(){
+  const built = CaseGeo.buildParts(spec, design);
+  if(three.model){ three.group.remove(three.model); three.model.traverse(o => { if(o.geometry) o.geometry.dispose(); if(o.material) o.material.dispose(); }); }
+  const model = new THREE.Group();
+  for(const p of built.parts) model.add(meshToThree(p.mesh, p.color));
+  if(showFrame){
+    for(const p of CaseGeo.frameInPlateSpace(spec, design)){
+      const fm = meshToThree(p.mesh, p.color);
+      fm.material.transparent = true; fm.material.opacity = 0.9;
+      model.add(fm);
+    }
+  }
+  // model space is z-up mm with the plate at z>=0; centre it and face the drawn side to the camera
+  const zTop = built.top;
+  model.position.set(-spec.width / 2, -spec.length / 2, -zTop / 2);
+  const holder = new THREE.Group(); holder.add(model);
+  if(design.mode === "inlay") holder.rotation.y = Math.PI; // drawn face is -z in the file
+  three.group.add(holder); three.model = holder;
+  if(!three.dist) three.dist = spec.length * 1.9;
+  const tris = built.parts.reduce((n, p) => n + p.mesh.triCount(), 0);
+  viewerNote.textContent = `${design.mode === "inlay" ? "Flush inlay" : "Relief: each ink at its own height above the plate"}, ${built.parts.length} parts, ${tris.toLocaleString()} triangles${showFrame ? ", case shown assembled" : ""}. Drag to orbit, pinch to zoom.`;
+  drawThree();
+}
+btn3d.onclick = async () => {
+  viewer.classList.add("open");
+  viewerNote.textContent = "Building…";
+  document.getElementById("viewerSub").textContent = `${spec.phone}, ${design.strokes.length} strokes`;
+  syncVDepth();
+  try{
+    await loadThree();
+    if(!three) initThree();
+    sizeThree();
+    setTimeout(() => { try{ buildPreview(); }catch(e){ viewerNote.textContent = "Couldn't build the model: " + e.message; console.error(e); } }, 30);
+  }catch(e){ viewerNote.textContent = e.message + ". Check your connection and try again."; }
+};
+btnFlip.onclick = () => { flipped = !flipped; drawThree(); };
+const vsliders = document.getElementById("vsliders");
+function fmtH(v){ return v === 0 ? "flush" : v.toFixed(1) + " mm"; }
+function syncVDepth(){
+  vsliders.innerHTML = "";
+  vModeInlay.classList.toggle("on", design.mode === "inlay");
+  vModeRelief.classList.toggle("on", design.mode !== "inlay");
+  if(!design.inkHeights || design.inkHeights.length !== design.inks.length) design.inkHeights = design.inks.map(() => 0.8);
+  const row = (label, color, sq, value, min, max, onInput) => {
+    const l = document.createElement("div"); l.className = "vrow";
+    const dot = document.createElement("span"); dot.className = "dot" + (sq ? " sq" : ""); dot.style.background = color;
+    const inp = document.createElement("input"); inp.type = "range"; inp.min = min; inp.max = max; inp.step = 0.1; inp.value = value; inp.setAttribute("aria-label", label);
+    const out = document.createElement("output"); out.textContent = fmtH(value);
+    out.title = "Tap to type a height"; out.style.cursor = "pointer"; out.tabIndex = 0; out.setAttribute("role", "button");
+    inp.addEventListener("input", () => { const v = parseFloat(inp.value); out.textContent = fmtH(v); onInput(v); save(); scheduleRebuild(); });
+    // tap the number to type an exact height; a value past the slider's end extends the range
+    const edit = () => {
+      const num = document.createElement("input"); num.type = "number"; num.step = "0.1"; num.min = min; num.value = parseFloat(inp.value).toFixed(1);
+      num.style.cssText = "width:64px;font:700 14px var(--dot);padding:4px;border:1px solid var(--line);border-radius:6px";
+      out.replaceWith(num);
+      let done = false, armed = false;
+      setTimeout(() => { num.focus(); num.select(); armed = true; }, 0);
+      const finish = apply => {
+        if(done) return; done = true;
+        if(apply){
+          let v = parseFloat(num.value);
+          if(isFinite(v)){
+            v = Math.max(min, Math.round(v * 10) / 10);
+            if(v > parseFloat(inp.max)){ design.maxInkHeight = v; inp.max = v; }
+            inp.value = v; out.textContent = fmtH(v); onInput(v); save(); scheduleRebuild();
+          }
+        }
+        num.replaceWith(out);
+      };
+      num.addEventListener("keydown", e => { if(e.key === "Enter") finish(true); else if(e.key === "Escape") finish(false); });
+      num.addEventListener("blur", () => { if(armed) finish(true); });
+    };
+    out.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); edit(); });
+    out.addEventListener("keydown", e => { if(e.key === "Enter" || e.key === " ") edit(); });
+    l.append(dot, inp, out); vsliders.appendChild(l);
+  };
+  if(design.mode === "inlay"){
+    row("Ink depth", design.plateColor, true, design.inkDepth, 0.2, 2, v => { design.inkDepth = v; });
+  }else{
+    design.inks.forEach((col, i) => row(`Ink ${i + 1} height`, col, false, Math.min(design.inkHeights[i], design.maxInkHeight || 5), 0, design.maxInkHeight || 5, v => { design.inkHeights[i] = v; }));
+  }
+}
+function scheduleRebuild(){
+  clearTimeout(rebuildT);
+  viewerNote.textContent = "Rebuilding…";
+  rebuildT = setTimeout(() => { try{ buildPreview(); }catch(e){ viewerNote.textContent = "Couldn't build the model: " + e.message; } }, 200);
+}
+vModeInlay.onclick = () => { design.mode = "inlay"; save(); syncVDepth(); scheduleRebuild(); };
+vModeRelief.onclick = () => { design.mode = "relief"; save(); syncVDepth(); scheduleRebuild(); };
+btnFrame.onclick = () => { showFrame = !showFrame; btnFrame.classList.toggle("on", showFrame); scheduleRebuild(); };
+btnCloseViewer.onclick = () => viewer.classList.remove("open");
+
+btnExportFrame.onclick = () => {
+  fileMsg.textContent = "Building case…";
+  setTimeout(async () => {
+    try{
+      const f = CaseGeo.buildFrame(spec, design);
+      const bytes = CaseGeo.to3MF(f.parts, `${spec.phone} case`);
+      const r = await download(`case-body-${stamp()}.3mf`, bytes, "model/3mf");
+      fileMsg.textContent = r === "cancelled" ? "" : (r === "nobinary" ? saveMsg.nobinary : `Case ${f.H.toFixed(2)} mm tall, ${f.parts.length} part${f.parts.length > 1 ? "s" : ""}, ${(bytes.length / 1024).toFixed(0)} KB. ` + (saveMsg[r] || ""));
+    }catch(e){ fileMsg.textContent = "Couldn't build the frame: " + e.message; console.error(e); }
+  }, 30);
+};
+
+btnExportCoupon.onclick = () => {
+  fileMsg.textContent = "Building coupon…";
+  setTimeout(async () => {
+    try{
+      const c = CaseGeo.buildCoupon(spec, design, 32);
+      const bytes = CaseGeo.to3MF(c.parts, `${spec.phone} test coupon`);
+      const r = await download(`case-coupon-${stamp()}.3mf`, bytes, "model/3mf");
+      fileMsg.textContent = r === "cancelled" ? "" : (r === "nobinary" ? saveMsg.nobinary : `Coupon: two objects, ${c.parts.length} parts, ${(bytes.length / 1024).toFixed(0)} KB. ` + (saveMsg[r] || ""));
+    }catch(e){ fileMsg.textContent = "Couldn't build the coupon: " + e.message; console.error(e); }
+  }, 30);
+};
+
+// ---------- keyboard ----------
+window.addEventListener("keydown", e => {
+  if(e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
+  const mod = e.metaKey || e.ctrlKey;
+  if(mod && e.key.toLowerCase() === "z"){ e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  else if(e.key === "d") setTool("draw");
+  else if(e.key === "e") setTool("erase");
+  else if(e.key === "Escape"){ closeSheet(); viewer.classList.remove("open"); }
+});
+
+// ---------- boot ----------
+load();
+buildInks();
+document.getElementById("subtitle").textContent = `${spec.phone || "Phone"}, back view`;
+widthIn.value = width; widthOut.textContent = width.toFixed(1) + " mm";
+new ResizeObserver(resize).observe(canvas);
+resize();
+})();
+</script>
+</body>
+</html>

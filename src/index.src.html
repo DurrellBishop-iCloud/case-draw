@@ -1,0 +1,1181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<title>Case Draw</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bed:#E3E4E6;
+    --bed-dot:#C9CBCF;
+    --panel:#FFFFFF;
+    --line:#D3D5D9;
+    --text:#000000;
+    --muted:#70737A;
+    --danger:#B3261E;
+    --dot:'Doto', ui-monospace, "SF Mono", Menlo, monospace;
+    --sans:system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --sat:env(safe-area-inset-top, 0px);
+    --sab:env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font-family:var(--sans); color:var(--text); background:var(--bed);
+    display:flex; flex-direction:column; overflow:hidden;
+    -webkit-user-select:none; user-select:none; overscroll-behavior:none;
+  }
+  header{
+    padding:calc(8px + var(--sat)) 14px 8px; background:var(--panel);
+    border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:12px;
+  }
+  header h1{font:700 22px/1 var(--dot); margin:0; letter-spacing:.02em}
+  header .sub{font-size:13px; color:var(--muted); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  header button{align-self:center}
+
+  main{flex:1; position:relative; min-height:0}
+  canvas{display:block; width:100%; height:100%; touch-action:none; cursor:crosshair}
+
+  .chip{
+    position:absolute; left:50%; top:10px; transform:translateX(-50%);
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:8px 12px; font-size:13px; display:none; align-items:center; gap:10px;
+    max-width:calc(100% - 20px); white-space:nowrap;
+  }
+  .chip.show{display:flex}
+  .chip b{font:700 15px var(--dot)}
+  .chip input[type=range]{width:90px}
+  .hint{
+    position:absolute; left:50%; bottom:10px; transform:translateX(-50%);
+    background:rgba(255,255,255,.9); border:1px solid var(--line); border-radius:8px;
+    padding:6px 10px; font-size:12px; color:var(--muted); pointer-events:none; white-space:nowrap;
+  }
+
+  footer{
+    background:var(--panel); border-top:1px solid var(--line);
+    padding:8px 10px calc(8px + var(--sab)); display:flex; flex-direction:column; gap:8px;
+  }
+  .row{display:flex; align-items:center; gap:8px}
+  .seg{display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden}
+  .seg button{border:0; border-radius:0; border-right:1px solid var(--line)}
+  .seg button:last-child{border-right:0}
+  .seg button.on, button.on{background:var(--text); color:#fff}
+  button{
+    font:inherit; font-size:14px; background:var(--panel); color:var(--text);
+    border:1px solid var(--line); border-radius:8px; padding:8px 12px; min-height:38px; cursor:pointer;
+  }
+  button:disabled{opacity:.35; cursor:default}
+  button:focus-visible, input:focus-visible, textarea:focus-visible{outline:2px solid var(--text); outline-offset:2px}
+  .spacer{flex:1}
+  .inks{display:flex; gap:8px; align-items:center}
+  .ink{
+    width:34px; height:34px; border-radius:50%; border:2px solid var(--panel);
+    box-shadow:0 0 0 1px var(--line); position:relative; cursor:pointer; padding:0;
+  }
+  .ink.on{box-shadow:0 0 0 2px var(--text)}
+  .ink input{position:absolute; inset:0; opacity:0; width:100%; height:100%; pointer-events:none}
+  .ink.plate{border-radius:6px; width:26px; height:26px; margin-left:6px}
+  .width{display:flex; align-items:center; gap:8px; flex:1; min-width:0}
+  .width input{flex:1; min-width:0}
+  .width output{font:700 16px var(--dot); width:56px; text-align:right}
+  input[type=range]{accent-color:#000}
+
+  /* settings sheet */
+  .scrim{position:fixed; inset:0; background:rgba(0,0,0,.35); display:none}
+  .scrim.open{display:block}
+  .sheet{
+    position:fixed; left:0; right:0; bottom:0; max-height:88%; background:var(--panel);
+    border-radius:16px 16px 0 0; transform:translateY(100%); transition:transform .22s ease;
+    display:flex; flex-direction:column; padding:0 0 var(--sab);
+  }
+  .sheet.open{transform:none}
+  @media (prefers-reduced-motion: reduce){.sheet{transition:none}}
+  .sheet header{border:0; padding:14px 16px 6px}
+  .sheet header h2{font:700 20px var(--dot); margin:0; flex:1}
+  .sheet .body{overflow:auto; padding:4px 16px 16px; -webkit-user-select:text; user-select:text}
+  .sheet section{padding:12px 0; border-top:1px solid var(--line)}
+  .sheet section:first-child{border-top:0}
+  .sheet h3{font-size:14px; margin:0 0 8px; font-weight:600}
+  .sheet p{font-size:13px; color:var(--muted); margin:0 0 8px; line-height:1.45}
+  .sheet .row{flex-wrap:wrap}
+  .sheet label.field{display:flex; align-items:center; gap:8px; font-size:14px}
+  .sheet input[type=color]{width:34px; height:34px; border:1px solid var(--line); border-radius:8px; padding:2px; background:var(--panel)}
+  textarea{
+    width:100%; min-height:220px; font:12px/1.4 ui-monospace, Menlo, monospace;
+    border:1px solid var(--line); border-radius:8px; padding:10px; resize:vertical;
+  }
+  .err{color:var(--danger); font-size:13px; min-height:1.2em; margin-top:6px}
+  .ok{color:var(--muted); font-size:13px; min-height:1.2em; margin-top:6px}
+  .danger{color:var(--danger); border-color:var(--danger)}
+  /* 3D viewer */
+  .viewer{position:fixed; inset:0; background:var(--bed); display:none; flex-direction:column; z-index:5}
+  .viewer.open{display:flex}
+  .viewer header{padding-top:calc(8px + var(--sat))}
+  .viewer .vbar{display:flex; gap:10px; align-items:center; padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--line); font-size:13px}
+  .viewer .vsliders{flex:1; display:flex; flex-direction:column; gap:4px; min-width:0}
+  .viewer .vsliders .vrow{display:flex; align-items:center; gap:8px; font-size:13px}
+  .viewer .vsliders output{padding:4px 6px; border-radius:6px; border:1px dashed var(--line)}
+  .viewer .vsliders .dot{width:14px; height:14px; border-radius:50%; flex:none; box-shadow:0 0 0 1px var(--line)}
+  .viewer .vsliders .dot.sq{border-radius:3px}
+  .viewer .vsliders input{flex:1; min-width:0}
+  .viewer .vsliders output{font:700 14px var(--dot); width:58px; text-align:right}
+  .viewer .stage{flex:1; position:relative; min-height:0}
+  .viewer .stage canvas{touch-action:none; cursor:grab}
+  .viewer .note{position:absolute; left:50%; bottom:calc(12px + var(--sab)); transform:translateX(-50%);
+    background:rgba(255,255,255,.9); border:1px solid var(--line); border-radius:8px; padding:6px 10px;
+    font-size:12px; color:var(--muted); white-space:nowrap; max-width:calc(100% - 20px); overflow:hidden; text-overflow:ellipsis}
+  .tag{display:inline-block; font:700 11px var(--dot); padding:2px 6px; border:1px solid var(--line); border-radius:4px; color:var(--muted); vertical-align:middle}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.0.0</span>
+  <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
+  <button id="btn3d" aria-label="3D preview">3D</button>
+  <button id="btnSettings" aria-label="Settings">Settings</button>
+</header>
+
+<main>
+  <canvas id="c"></canvas>
+  <div class="chip" id="chip">
+    <span id="chipName">Cutout</span>
+    <span>x <b id="chipX">0</b></span>
+    <span>y <b id="chipY">0</b></span>
+    <span>⌀ <b id="chipD">0</b></span>
+    <input type="range" id="chipDia" min="3" max="40" step="0.5" aria-label="Cutout diameter">
+  </div>
+</main>
+
+<footer>
+  <div class="row">
+    <div class="seg" role="group" aria-label="Tool">
+      <button id="toolDraw" class="on">Draw</button>
+      <button id="toolErase">Erase</button>
+      <button id="toolCut">Cutouts</button>
+    </div>
+    <div class="spacer"></div>
+    <button id="btnFit" aria-label="Fit to screen">Fit</button>
+    <button id="btnUndo" disabled aria-label="Undo">Undo</button>
+    <button id="btnRedo" disabled aria-label="Redo">Redo</button>
+  </div>
+  <div class="row">
+    <div class="inks" id="inks"></div>
+    <div class="width">
+      <input type="range" id="width" min="0.8" max="8" step="0.1" value="2.5" aria-label="Stroke width">
+      <output id="widthOut">2.5 mm</output>
+    </div>
+  </div>
+</footer>
+
+<div class="viewer" id="viewer" role="dialog" aria-label="3D preview">
+  <header>
+    <h1>3D</h1>
+    <div class="sub" id="viewerSub"></div>
+    <button id="btnFlip">Flip</button>
+    <button id="btnCloseViewer">Close</button>
+  </header>
+  <div class="vbar">
+    <div class="vsliders" id="vsliders"></div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="seg" role="group" aria-label="Mode">
+        <button id="vModeInlay">Inlay</button>
+        <button id="vModeRelief">Relief</button>
+      </div>
+      <button id="btnFrame">Case</button>
+    </div>
+  </div>
+  <div class="stage" id="stage"><div class="note" id="viewerNote">Building…</div></div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-label="Settings">
+  <header>
+    <h2>Settings</h2>
+    <button id="btnClose">Done</button>
+  </header>
+  <div class="body">
+
+    <section>
+      <h3>Drawing sits</h3>
+      <div class="seg" role="group" aria-label="Mode">
+        <button id="modeInlay">Flush inlay</button>
+        <button id="modeRelief">Raised relief</button>
+      </div>
+      <p id="modeHelp"></p>
+      <label class="field">Slider range
+        <input type="number" id="maxInkHeight" min="1" max="20" step="0.5" style="width:70px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm
+      </label>
+      <label class="field">Flush ink depth
+        <input type="range" id="inkDepth" min="0.2" max="1.2" step="0.2" value="0.6" aria-label="Ink depth">
+        <output id="inkDepthOut" style="font:700 15px var(--dot)">0.6 mm</output>
+      </label>
+    </section>
+
+    <section>
+      <h3>Case sides</h3>
+      <div class="seg" role="group" aria-label="Case style">
+        <button id="styPlain">Plain</button>
+        <button id="styExtrude">Extend the panel</button>
+        <button id="styStripes">Stripes</button>
+      </div>
+      <p id="styHelp"></p>
+      <div id="stripeOpts" class="row" style="display:none">
+        <label class="field">Stripe height
+          <input type="number" id="stripeHeight" min="0.2" max="10" step="0.1" style="width:64px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm
+        </label>
+        <span style="font-size:13px">Cycle through:</span>
+        <label class="field"><input type="checkbox" id="sc_case"> Case</label>
+        <label class="field"><input type="checkbox" id="sc_plate"> Panel</label>
+        <label class="field"><input type="checkbox" id="sc_ink0"> Ink 1</label>
+        <label class="field"><input type="checkbox" id="sc_ink1"> Ink 2</label>
+        <label class="field"><input type="checkbox" id="sc_ink2"> Ink 3</label>
+      </div>
+    </section>
+
+    <section>
+      <h3>Colours</h3>
+      <p>The plate plus three inks matches the four tools on the U1. Tap a selected ink in the toolbar to change its colour.</p>
+      <div class="row">
+        <label class="field">Plate <input type="color" id="plateColor"></label>
+        <label class="field">Case <input type="color" id="frameColor"></label>
+        <label class="field">Ink 1 <input type="color" id="ink0"></label>
+        <label class="field">Ink 2 <input type="color" id="ink1"></label>
+        <label class="field">Ink 3 <input type="color" id="ink2"></label>
+      </div>
+    </section>
+
+    <section>
+      <h3>Phone and case dimensions <span class="tag">mm</span></h3>
+      <p>Back view: x from the left edge, y from the top edge, d is the lens diameter (clearance is added on top). Side cutouts run along an edge, measured from the top-left corner. Anything marked <code>placeholder</code> is a guess, so measure and correct it, or drag camera cutouts with the Cutouts tool.</p>
+      <p><code>inkMargin</code> keeps strokes clear of the plate edge and the cutouts, so raised ink never sits flush with an edge where it could catch.</p>
+      <p>Case: one piece, printed back-down. A back slab (<code>slabThickness</code>) with the wall (<code>frameWall</code>) rising from it and a lip over the screen (<code>lipDepth</code>, <code>lipThickness</code>). Button openings are windows with <code>windowRadius</code> corners.</p>
+      <p>Panel: a flat plate the size of the case back (<code>panelThickness</code>), glued to the slab. In inlay mode it carries short collars round the camera holes (<code>collars</code>, <code>collarWall</code>, <code>collarClearance</code>) that key into oversized holes in the slab, so it can only go on straight.</p>
+      <textarea id="specJson" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="btnApplySpec">Apply</button>
+        <button id="btnResetSpec">Reset to defaults</button>
+      </div>
+      <div class="err" id="specErr"></div>
+    </section>
+
+    <section>
+      <h3>Files</h3>
+      <div class="row">
+        <button id="btnExportJson">Save design (.json)</button>
+        <button id="btnImportJson">Open design</button>
+        <button id="btnExportSvg">Export SVG</button>
+        <button id="btnExport3mf">Export panel 3MF</button>
+        <button id="btnExportFrame">Export case 3MF</button>
+        <button id="btnExportCoupon">Export test coupon</button>
+      </div>
+      <input type="file" id="fileIn" accept="application/json,.json" hidden>
+      <div class="ok" id="fileMsg"></div>
+      <p style="margin-top:8px">The test coupon is the top-left 32 mm corner of the case and of the panel, side by side: press the phone's corner in to check the lip and clearance, and drop the panel corner on to check the camera collar. Print it before the whole case.</p>
+      <p>The case 3MF is oriented back-down, ready to slice. The panel 3MF opens in Snapmaker Orca or Bambu Studio as one object with a Panel part and one part per ink. Right-click each part to assign its filament. Where inks overlap, the stroke drawn last wins, as on screen.</p>
+    </section>
+
+    <section>
+      <div class="row">
+        <button id="btnClear" class="danger">Clear drawing</button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ---------- defaults ----------
+const DEFAULT_SPEC = {
+  phone: "Nothing Phone (3)",
+  width: 75.6,
+  length: 160.6,
+  thickness: 9.0,
+  cornerRadius: 11.0,
+  phoneClearance: 0.25,
+  frameWall: 1.5,
+  lipDepth: 0.5,
+  lipThickness: 0.8,
+  windowRadius: 1.2,
+  slabThickness: 1.0,
+  panelThickness: 1.0,
+  collars: true,
+  collarWall: 0.8,
+  collarClearance: 0.15,
+  cutoutClearance: 0.6,
+  inkMargin: 0.6,
+  sideCutouts: [
+    { side: "right",  name: "Power",         from: 66, to: 80, placeholder: true },
+    { side: "left",   name: "Volume",        from: 60, to: 78, placeholder: true },
+    { side: "left",   name: "Essential key", from: 84, to: 92, placeholder: true },
+    { side: "bottom", name: "USB-C + speakers", from: 18, to: 58, placeholder: true }
+  ],
+  cutouts: [
+    { name: "Main camera",  x: 17.0, y: 17.0, d: 17.0, placeholder: true },
+    { name: "Ultrawide",    x: 17.0, y: 35.5, d: 13.0, placeholder: true },
+    { name: "Periscope",    x: 37.0, y: 27.0, d: 13.0, placeholder: true },
+    { name: "Flash",        x: 37.0, y: 42.0, d: 5.0,  placeholder: true },
+    { name: "Glyph Matrix", x: 58.5, y: 17.0, d: 21.0, placeholder: true }
+  ]
+};
+const DEFAULT_DESIGN = {
+  mode: "inlay",
+  plateColor: "#F2F2EF",
+  frameColor: "#3A3A3A",
+  caseStyle: "plain",     // plain | extrude | stripes
+  stripeHeight: 1.0,
+  stripeColors: ["case", "ink0", "ink1", "ink2"],
+  inks: ["#000000", "#E0322B", "#2C63C9"],
+  inkDepth: 0.6,          // inlay: how deep every ink is pocketed
+  inkHeights: [0.8, 0.8, 0.8], // relief: how far each ink stands proud; 0 = flush
+  maxInkHeight: 5,        // top of the height sliders in the 3D view
+  strokes: []            // { c: inkIndex, w: mm, pts: [[x,y],...] }
+};
+const STORE_KEY = "casedraw.v1";
+
+// ---------- state ----------
+let spec = clone(DEFAULT_SPEC);
+let design = clone(DEFAULT_DESIGN);
+let tool = "draw";
+let ink = 0;
+let width = 2.5;
+let undoStack = [], redoStack = [];
+let live = null;                 // stroke being drawn
+let selCut = -1, dragCut = null; // cutout editing
+let view = { scale: 4, ox: 0, oy: 0 };
+
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+
+// ---------- storage ----------
+function load(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(!raw) return;
+    const s = JSON.parse(raw);
+    if(s.spec){ spec = Object.assign(clone(DEFAULT_SPEC), s.spec); for(const k of ["plateThickness", "ledge", "dovetail", "skinThickness", "tongueThickness", "tipHeight", "bumpHeight", "bumpRise", "bumpLength", "snapClearance", "snapBumps"]) delete spec[k]; }
+    if(s.design) design = Object.assign(clone(DEFAULT_DESIGN), s.design);
+  }catch(e){ /* storage unavailable; run in memory */ }
+}
+let saveT = null;
+function save(){
+  clearTimeout(saveT);
+  saveT = setTimeout(() => {
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify({ version: 1, spec, design })); }catch(e){}
+  }, 250);
+}
+
+// ---------- canvas ----------
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+let W = 0, H = 0, dpr = 1;
+
+function resize(){
+  const r = canvas.getBoundingClientRect();
+  dpr = window.devicePixelRatio || 1;
+  W = r.width; H = r.height;
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  if(!zoomed()) fitView();
+  render();
+}
+let fitScale = 0;
+function zoomed(){ return fitScale && Math.abs(view.scale - fitScale) > 1e-6; }
+function fitView(){
+  const pad = 28, m = 2 * frameOuter();
+  view.scale = Math.min((W - pad * 2) / (spec.width + m), (H - pad * 2) / (spec.length + m));
+  view.ox = (W - spec.width * view.scale) / 2;
+  view.oy = (H - spec.length * view.scale) / 2;
+  fitScale = view.scale;
+}
+function toMM(px, py){ return [(px - view.ox) / view.scale, (py - view.oy) / view.scale]; }
+
+function outlinePath(o){ // phone outline offset outward by o mm
+  const r = Math.min(spec.cornerRadius, spec.width / 2, spec.length / 2) + o;
+  ctx.beginPath();
+  ctx.roundRect(-o, -o, spec.width + 2 * o, spec.length + 2 * o, Math.max(0, r));
+}
+function plateOff(){ return CaseGeo.plateOffsets(spec); }
+function frameOuter(){ return spec.phoneClearance + spec.frameWall; }
+function platePath(){ outlinePath(plateOff().wide); }
+function cutRadius(c){ return (c.d + (spec.cutoutClearance || 0)) / 2; }
+
+function render(){
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = getCSS("--bed");
+  ctx.fillRect(0, 0, W, H);
+
+  // 5 mm dot grid, in mm space
+  ctx.save();
+  ctx.translate(view.ox, view.oy);
+  ctx.scale(view.scale, view.scale);
+  const step = 5;
+  const [x0, y0] = toMM(0, 0), [x1, y1] = toMM(W, H);
+  ctx.fillStyle = getCSS("--bed-dot");
+  const dr = 0.7 / view.scale;
+  for(let x = Math.floor(x0 / step) * step; x <= x1; x += step)
+    for(let y = Math.floor(y0 / step) * step; y <= y1; y += step){
+      ctx.beginPath(); ctx.arc(x, y, dr, 0, Math.PI * 2); ctx.fill();
+    }
+
+  // frame ring, with its side cutouts as gaps
+  ctx.save();
+  outlinePath(frameOuter());
+  const fo = frameOuter(), fw = spec.width, fl = spec.length;
+  for(const k of spec.sideCutouts){
+    const a = Math.min(k.from, k.to), b = Math.max(k.from, k.to);
+    if(k.side === "left") ctx.rect(-fo - 1, a, fo + 1, b - a);
+    else if(k.side === "right") ctx.rect(fw, a, fo + 1, b - a);
+    else if(k.side === "top") ctx.rect(a, -fo - 1, b - a, fo + 1);
+    else ctx.rect(a, fl, b - a, fo + 1);
+  }
+  ctx.clip("evenodd");
+  outlinePath(frameOuter());
+  ctx.fillStyle = design.frameColor || "#3A3A3A"; ctx.globalAlpha = 0.35; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.restore();
+  // plate (its skin covers the frame wall, so it is as big as the whole case)
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,.18)";
+  ctx.shadowBlur = 14;
+  ctx.shadowOffsetY = 3;
+  platePath();
+  ctx.fillStyle = design.plateColor;
+  ctx.fill();
+  ctx.restore();
+
+  // holes
+  for(const c of spec.cutouts){
+    ctx.beginPath(); ctx.arc(c.x, c.y, cutRadius(c), 0, Math.PI * 2);
+    ctx.fillStyle = getCSS("--bed"); ctx.fill();
+  }
+
+  // strokes clipped to the plate's outer face, kept inkMargin clear of the edge and the holes
+  ctx.save();
+  const im = spec.inkMargin || 0;
+  outlinePath(plateOff().narrow - im);
+  for(const c of spec.cutouts){ ctx.moveTo(c.x + cutRadius(c) + im, c.y); ctx.arc(c.x, c.y, cutRadius(c) + im, 0, Math.PI * 2); }
+  ctx.clip("evenodd");
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  for(const s of design.strokes) drawStroke(s);
+  if(live) drawStroke(live);
+  ctx.restore();
+
+  // plate edge and phone outline
+  platePath();
+  ctx.lineWidth = 1 / view.scale;
+  ctx.strokeStyle = "rgba(0,0,0,.35)";
+  ctx.stroke();
+  outlinePath(0);
+  ctx.setLineDash([1.5, 1.5]); ctx.strokeStyle = "rgba(0,0,0,.3)"; ctx.stroke(); ctx.setLineDash([]);
+
+  // cutout rings and labels
+  spec.cutouts.forEach((c, i) => {
+    const r = cutRadius(c);
+    ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.lineWidth = (i === selCut && tool === "cutouts" ? 2 : 1) / view.scale;
+    ctx.strokeStyle = i === selCut && tool === "cutouts" ? "#000" : "rgba(0,0,0,.45)";
+    ctx.setLineDash(c.placeholder ? [2, 1.5] : []);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if(tool === "cutouts"){
+      ctx.beginPath();
+      ctx.moveTo(c.x - 2, c.y); ctx.lineTo(c.x + 2, c.y);
+      ctx.moveTo(c.x, c.y - 2); ctx.lineTo(c.x, c.y + 2);
+      ctx.lineWidth = 1 / view.scale; ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.stroke();
+    }
+  });
+
+  // orientation marks
+  const fs2 = Math.max(2.6, 12 / view.scale);
+  ctx.font = `700 ${fs2}px ${getCSS("--dot")}`;
+  ctx.fillStyle = "rgba(0,0,0,.45)";
+  ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+  ctx.fillText("TOP", -frameOuter(), -frameOuter() - 1.5);
+  ctx.textAlign = "right";
+  ctx.fillText(`${spec.width} x ${spec.length}`, spec.width + frameOuter(), -frameOuter() - 1.5);
+  ctx.restore();
+}
+
+function drawStroke(s){
+  const p = s.pts;
+  ctx.strokeStyle = design.inks[s.c] || "#000";
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.lineWidth = s.w;
+  if(p.length < 2){
+    ctx.beginPath(); ctx.arc(p[0][0], p[0][1], s.w / 2, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(p[0][0], p[0][1]);
+  for(let i = 1; i < p.length - 1; i++){
+    const mx = (p[i][0] + p[i + 1][0]) / 2, my = (p[i][1] + p[i + 1][1]) / 2;
+    ctx.quadraticCurveTo(p[i][0], p[i][1], mx, my);
+  }
+  const l = p[p.length - 1];
+  ctx.lineTo(l[0], l[1]);
+  ctx.stroke();
+}
+
+function getCSS(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+// ---------- pointer input ----------
+let activeId = null;
+const touches = new Map();   // pointerId -> [x, y] in canvas px, for pinch/pan
+let pinch = null;            // { d0, mid0, scale0, ox0, oy0 }
+canvas.addEventListener("pointerdown", e => {
+  touches.set(e.pointerId, [e.offsetX, e.offsetY]);
+  canvas.setPointerCapture(e.pointerId);
+  if(touches.size === 2){
+    // second finger: abandon any stroke in progress and start a pinch
+    live = null; dragCut = null; activeId = null;
+    const [a, b] = [...touches.values()];
+    pinch = { d0: Math.max(10, Math.hypot(a[0] - b[0], a[1] - b[1])), mid0: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], scale0: view.scale, ox0: view.ox, oy0: view.oy };
+    render(); return;
+  }
+  if(touches.size > 2 || pinch) return;
+  if(activeId !== null) return;          // one drawing finger at a time
+  activeId = e.pointerId;
+  const [x, y] = toMM(e.offsetX, e.offsetY);
+  if(tool === "draw"){
+    live = { c: ink, w: width, pts: [[round2(x), round2(y)]] };
+  }else if(tool === "erase"){
+    eraseAt(x, y);
+  }else if(tool === "cutouts"){
+    const i = hitCutout(x, y);
+    selCut = i;
+    dragCut = i >= 0 ? { dx: spec.cutouts[i].x - x, dy: spec.cutouts[i].y - y } : null;
+    updateChip();
+  }
+  render();
+});
+canvas.addEventListener("pointermove", e => {
+  if(touches.has(e.pointerId)) touches.set(e.pointerId, [e.offsetX, e.offsetY]);
+  if(pinch && touches.size >= 2){
+    const [a, b] = [...touches.values()];
+    const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const k = clamp(pinch.scale0 * d / pinch.d0, minScale() * 0.8, minScale() * 12) / pinch.scale0;
+    view.scale = pinch.scale0 * k;
+    view.ox = mid[0] - (pinch.mid0[0] - pinch.ox0) * k;
+    view.oy = mid[1] - (pinch.mid0[1] - pinch.oy0) * k;
+    render(); return;
+  }
+  if(e.pointerId !== activeId) return;
+  const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for(const ev of events){
+    const [x, y] = toMM(ev.offsetX, ev.offsetY);
+    if(tool === "draw" && live){
+      const last = live.pts[live.pts.length - 1];
+      if(Math.hypot(x - last[0], y - last[1]) >= 0.35) live.pts.push([round2(x), round2(y)]);
+    }else if(tool === "erase"){
+      eraseAt(x, y);
+    }else if(tool === "cutouts" && dragCut && selCut >= 0){
+      const c = spec.cutouts[selCut];
+      c.x = round1(clamp(x + dragCut.dx, 0, spec.width));
+      c.y = round1(clamp(y + dragCut.dy, 0, spec.length));
+      updateChip();
+    }
+  }
+  render();
+});
+function endPointer(e){
+  touches.delete(e.pointerId);
+  if(pinch){ if(touches.size < 2) pinch = null; return; }
+  if(e.pointerId !== activeId) return;
+  activeId = null;
+  if(tool === "draw" && live){
+    commit(() => design.strokes.push(live));
+    live = null;
+  }
+  if(tool === "cutouts" && dragCut){ dragCut = null; syncSpecText(); save(); }
+  render();
+}
+canvas.addEventListener("pointerup", endPointer);
+canvas.addEventListener("pointercancel", endPointer);
+window.addEventListener("resize", resize);
+
+// mouse wheel / trackpad zoom around the cursor
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  const k = clamp(view.scale * Math.exp(-e.deltaY * 0.0015), minScale() * 0.8, minScale() * 12) / view.scale;
+  view.ox = e.offsetX - (e.offsetX - view.ox) * k;
+  view.oy = e.offsetY - (e.offsetY - view.oy) * k;
+  view.scale *= k; render();
+}, { passive: false });
+function minScale(){ const pad = 28, m = 2 * frameOuter(); return Math.min((W - pad * 2) / (spec.width + m), (H - pad * 2) / (spec.length + m)); }
+function round1(v){ return Math.round(v * 10) / 10; }
+function round2(v){ return Math.round(v * 100) / 100; }
+function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+// ---------- history ----------
+function commit(fn){
+  undoStack.push(design.strokes.slice());
+  if(undoStack.length > 100) undoStack.shift();
+  redoStack = [];
+  fn();
+  updateHistoryButtons(); save();
+}
+function undo(){
+  if(!undoStack.length) return;
+  redoStack.push(design.strokes.slice());
+  design.strokes = undoStack.pop();
+  updateHistoryButtons(); save(); render();
+}
+function redo(){
+  if(!redoStack.length) return;
+  undoStack.push(design.strokes.slice());
+  design.strokes = redoStack.pop();
+  updateHistoryButtons(); save(); render();
+}
+function updateHistoryButtons(){
+  btnUndo.disabled = !undoStack.length;
+  btnRedo.disabled = !redoStack.length;
+}
+
+// ---------- erase (whole stroke) ----------
+function distToSeg(px, py, ax, ay, bx, by){
+  const dx = bx - ax, dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+  t = clamp(t, 0, 1);
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+function strokeHit(s, x, y){
+  const tol = s.w / 2 + 1.2;
+  const p = s.pts;
+  if(p.length === 1) return Math.hypot(x - p[0][0], y - p[0][1]) <= tol;
+  for(let i = 0; i < p.length - 1; i++)
+    if(distToSeg(x, y, p[i][0], p[i][1], p[i + 1][0], p[i + 1][1]) <= tol) return true;
+  return false;
+}
+let eraseBatchOpen = false;
+function eraseAt(x, y){
+  const keep = design.strokes.filter(s => !strokeHit(s, x, y));
+  if(keep.length === design.strokes.length) return;
+  if(!eraseBatchOpen){ undoStack.push(design.strokes.slice()); redoStack = []; eraseBatchOpen = true; }
+  design.strokes = keep;
+  updateHistoryButtons(); save();
+}
+canvas.addEventListener("pointerup", () => { eraseBatchOpen = false; });
+canvas.addEventListener("pointercancel", () => { eraseBatchOpen = false; });
+
+// ---------- cutout editing ----------
+function hitCutout(x, y){
+  let best = -1, bd = Infinity;
+  spec.cutouts.forEach((c, i) => {
+    const d = Math.hypot(x - c.x, y - c.y);
+    if(d <= cutRadius(c) + 3 && d < bd){ bd = d; best = i; }
+  });
+  return best;
+}
+const chip = document.getElementById("chip");
+const chipDia = document.getElementById("chipDia");
+function updateChip(){
+  if(tool !== "cutouts" || selCut < 0){ chip.classList.remove("show"); return; }
+  const c = spec.cutouts[selCut];
+  document.getElementById("chipName").textContent = c.name;
+  document.getElementById("chipX").textContent = c.x.toFixed(1);
+  document.getElementById("chipY").textContent = c.y.toFixed(1);
+  document.getElementById("chipD").textContent = c.d.toFixed(1);
+  chipDia.value = c.d;
+  chip.classList.add("show");
+}
+chipDia.addEventListener("input", () => {
+  if(selCut < 0) return;
+  spec.cutouts[selCut].d = parseFloat(chipDia.value);
+  updateChip(); render();
+});
+chipDia.addEventListener("change", () => { syncSpecText(); save(); });
+
+// ---------- toolbar ----------
+const btnUndo = document.getElementById("btnUndo");
+const btnRedo = document.getElementById("btnRedo");
+btnUndo.onclick = undo; btnRedo.onclick = redo;
+btnFit.onclick = () => { fitView(); render(); };
+const toolBtns = { draw: toolDraw, erase: toolErase, cutouts: toolCut };
+const hints = {
+  draw: "Draw with your finger. Strokes are clipped to the plate.",
+  erase: "Tap or drag over a stroke to remove it.",
+  cutouts: "Drag a cutout to move it. Use the slider for diameter."
+};
+function setTool(t){
+  tool = t; selCut = -1; dragCut = null;
+  for(const k in toolBtns) toolBtns[k].classList.toggle("on", k === t);
+  canvas.style.cursor = t === "cutouts" ? "move" : "crosshair";
+  updateChip(); render();
+}
+toolDraw.onclick = () => setTool("draw");
+toolErase.onclick = () => setTool("erase");
+toolCut.onclick = () => setTool("cutouts");
+
+const widthIn = document.getElementById("width"), widthOut = document.getElementById("widthOut");
+widthIn.addEventListener("input", () => { width = parseFloat(widthIn.value); widthOut.textContent = width.toFixed(1) + " mm"; });
+
+const inksEl = document.getElementById("inks");
+function buildInks(){
+  inksEl.innerHTML = "";
+  design.inks.forEach((col, i) => {
+    const b = document.createElement("button");
+    b.className = "ink" + (i === ink ? " on" : "");
+    b.style.background = col;
+    b.setAttribute("aria-label", "Ink " + (i + 1));
+    const inp = document.createElement("input");
+    inp.type = "color"; inp.value = col; inp.tabIndex = -1;
+    inp.addEventListener("input", () => { design.inks[i] = inp.value; b.style.background = inp.value; syncColorInputs(); save(); render(); });
+    b.appendChild(inp);
+    b.onclick = () => {
+      if(ink === i){ inp.click(); return; }
+      ink = i; if(tool !== "draw") setTool("draw"); buildInks();
+    };
+    inksEl.appendChild(b);
+  });
+  const pl = document.createElement("button");
+  pl.className = "ink plate"; pl.style.background = design.plateColor; pl.setAttribute("aria-label", "Plate colour");
+  const pin = document.createElement("input"); pin.type = "color"; pin.value = design.plateColor; pin.tabIndex = -1;
+  pin.addEventListener("input", () => { design.plateColor = pin.value; pl.style.background = pin.value; syncColorInputs(); save(); render(); });
+  pl.appendChild(pin); pl.onclick = () => pin.click();
+  inksEl.appendChild(pl);
+}
+
+// ---------- settings sheet ----------
+const sheet = document.getElementById("sheet"), scrim = document.getElementById("scrim");
+function openSheet(){ syncSpecText(); syncColorInputs(); syncMode(); syncInkDepth(); syncStyle(); sheet.classList.add("open"); scrim.classList.add("open"); }
+function closeSheet(){ sheet.classList.remove("open"); scrim.classList.remove("open"); }
+btnSettings.onclick = openSheet; btnClose.onclick = closeSheet; scrim.onclick = closeSheet;
+
+const modeHelp = {
+  inlay: "Panel prints drawing-face-down. Inks fill pockets in the panel, so the surface comes out flat and glossy from the bed. Camera collars on the inside face key it into the case. Ink depth is capped 0.3 mm below the panel thickness.",
+  relief: "Panel prints inside-face-down, inks on top. Each ink has one height above the panel, set in the 3D view, independent of the other inks. Where colours overlap the later stroke shows, at its own ink's height. An ink at 0 is pocketed flush. No collars in this mode, so line it up by the camera holes when gluing."
+};
+function syncMode(){
+  modeInlay.classList.toggle("on", design.mode === "inlay");
+  modeRelief.classList.toggle("on", design.mode === "relief");
+  document.getElementById("modeHelp").textContent = modeHelp[design.mode];
+}
+modeInlay.onclick = () => { design.mode = "inlay"; syncMode(); save(); };
+modeRelief.onclick = () => { design.mode = "relief"; syncMode(); save(); };
+
+const colorInputs = [plateColor, ink0, ink1, ink2];
+function syncColorInputs(){
+  plateColor.value = design.plateColor;
+  frameColor.value = design.frameColor || "#3A3A3A";
+  [ink0, ink1, ink2].forEach((el, i) => el.value = design.inks[i]);
+}
+plateColor.addEventListener("input", () => { design.plateColor = plateColor.value; buildInks(); save(); render(); });
+frameColor.addEventListener("input", () => { design.frameColor = frameColor.value; save(); render(); });
+[ink0, ink1, ink2].forEach((el, i) => el.addEventListener("input", () => { design.inks[i] = el.value; buildInks(); save(); render(); }));
+
+const specJson = document.getElementById("specJson"), specErr = document.getElementById("specErr");
+function syncSpecText(){ specJson.value = JSON.stringify(spec, null, 2); }
+function validateSpec(s){
+  s = Object.assign(clone(DEFAULT_SPEC), s);
+  const nums = ["width", "length", "thickness", "cornerRadius", "phoneClearance", "frameWall", "lipDepth", "lipThickness", "windowRadius", "slabThickness", "panelThickness", "collarWall", "collarClearance", "cutoutClearance", "inkMargin"];
+  for(const k of ["plateThickness", "ledge", "dovetail", "skinThickness", "tongueThickness", "tipHeight", "bumpHeight", "bumpRise", "bumpLength", "snapClearance", "snapBumps"]) delete s[k];
+  for(const k of nums) if(typeof s[k] !== "number" || !isFinite(s[k])) throw new Error(`"${k}" must be a number`);
+  if(!Array.isArray(s.sideCutouts)) throw new Error('"sideCutouts" must be a list');
+  s.sideCutouts.forEach((c, i) => {
+    if(!["left", "right", "top", "bottom"].includes(c.side)) throw new Error(`side cutout ${i + 1}: "side" must be left, right, top or bottom`);
+    for(const k of ["from", "to"]) if(typeof c[k] !== "number") throw new Error(`side cutout ${i + 1}: "${k}" must be a number`);
+  });
+  if(!Array.isArray(s.cutouts)) throw new Error('"cutouts" must be a list');
+  s.cutouts.forEach((c, i) => {
+    for(const k of ["x", "y", "d"]) if(typeof c[k] !== "number") throw new Error(`cutout ${i + 1}: "${k}" must be a number`);
+    if(!c.name) c.name = "Cutout " + (i + 1);
+  });
+  return s;
+}
+btnApplySpec.onclick = () => {
+  try{
+    spec = validateSpec(JSON.parse(specJson.value));
+    specErr.textContent = "";
+    document.getElementById("subtitle").textContent = `${spec.phone || "Phone"}, back view`;
+    fitView(); save(); render();
+  }catch(e){ specErr.textContent = e.message; }
+};
+btnResetSpec.onclick = () => { spec = clone(DEFAULT_SPEC); syncSpecText(); specErr.textContent = ""; fitView(); save(); render(); };
+
+// ---------- files ----------
+const fileMsg = document.getElementById("fileMsg");
+const inFrame = (() => { try{ return window.self !== window.top; }catch(e){ return true; } })();
+// Returns "shared" | "download" | "copy" so the caller can say what actually happened.
+// Hosted on claude.ai: the page saves through the viewer's download prompt. 3MF isn't on its allowlist, so it goes inside a zip.
+async function hostedSave(name, text){
+  if(!(window.claude && typeof window.claude.use === "function")) return null;
+  const dl = await window.claude.use("downloads");
+  if(!dl) return null;
+  let data = text, filename = name;
+  if(name.endsWith(".3mf")){ data = CaseGeo.zipFiles([{ name, data: text }]); filename = name.replace(/\.3mf$/, ".zip"); }
+  try{ await dl.save({ filename, data: data instanceof Uint8Array ? data.slice().buffer : data }); return name.endsWith(".3mf") ? "hostedzip" : "saved"; }
+  catch(e){ return e && e.code === "declined" ? "cancelled" : "hostedfail"; }
+}
+async function download(name, text, type){
+  const binary = text instanceof Uint8Array;
+  const hosted = await hostedSave(name, text);
+  if(hosted) return hosted;
+  // 1. native share sheet (best on phones: Files, AirDrop, Drive)
+  try{
+    const file = new File([text], name, { type });
+    if(navigator.canShare && navigator.canShare({ files: [file] })){
+      await navigator.share({ files: [file], title: name });
+      return "shared";
+    }
+  }catch(e){ if(e && e.name === "AbortError") return "cancelled"; }
+  // 2. sandboxed preview: navigating to a blob would unload the page, so only offer the text
+  if(inFrame){ if(binary) return "nobinary"; showCopy(name, text); return "copy"; }
+  // 3. plain download, with the text shown as well in case the browser swallows it
+  try{
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type }));
+    a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }catch(e){}
+  if(!binary) showCopy(name, text);
+  return "download";
+}
+const saveMsg = {
+  shared: "Sent to the share sheet.",
+  download: "Download started. If no file appeared, copy it below.",
+  copy: "This preview can't save files. Copy it below, or run the app from your own site.",
+  nobinary: "This preview can't save files. Run the app from your own site to export the 3MF.",
+  saved: "Saved.",
+  hostedzip: "Saved as a zip. Tap it in Files to unpack the .3mf inside.",
+  hostedfail: "The download didn't go through. Try again in a moment.",
+  cancelled: ""
+};
+function showCopy(name, text){
+  let box = document.getElementById("copyBox");
+  if(!box){
+    box = document.createElement("div"); box.id = "copyBox";
+    box.innerHTML = `<p style="margin:8px 0 6px"><span id="copyName"></span> — copy and paste into a file if you need it.</p>
+      <textarea id="copyText" readonly style="min-height:140px"></textarea>
+      <div class="row" style="margin-top:8px"><button id="copyBtn">Copy</button><button id="copyHide">Hide</button></div>`;
+    fileMsg.after(box);
+    box.querySelector("#copyHide").onclick = () => box.remove();
+    box.querySelector("#copyBtn").onclick = async () => {
+      const t = box.querySelector("#copyText");
+      try{ await navigator.clipboard.writeText(t.value); fileMsg.textContent = "Copied."; }
+      catch(e){ t.focus(); t.select(); fileMsg.textContent = "Select all and copy."; }
+    };
+  }
+  box.querySelector("#copyName").textContent = name;
+  box.querySelector("#copyText").value = text;
+}
+function stamp(){ return new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-"); }
+btnExportJson.onclick = () => {
+  fileMsg.textContent = "";
+  download(`case-${stamp()}.json`, JSON.stringify({ version: 1, spec, design }, null, 2), "application/json")
+    .then(r => { fileMsg.textContent = saveMsg[r] || ""; });
+};
+btnImportJson.onclick = () => fileIn.click();
+fileIn.addEventListener("change", async () => {
+  const f = fileIn.files[0]; if(!f) return;
+  try{
+    const o = JSON.parse(await f.text());
+    if(o.spec) spec = validateSpec(o.spec);
+    if(o.design) design = Object.assign(clone(DEFAULT_DESIGN), o.design);
+    undoStack = []; redoStack = []; ink = 0;
+    buildInks(); syncSpecText(); syncColorInputs(); syncMode(); updateHistoryButtons(); fitView(); save(); render();
+    fileMsg.textContent = `Opened ${f.name} (${design.strokes.length} strokes).`;
+  }catch(e){ fileMsg.textContent = "Couldn't open that file: " + e.message; }
+  fileIn.value = "";
+});
+
+function svgPathForStroke(s){
+  const p = s.pts;
+  if(p.length < 2) return `M ${p[0][0]} ${p[0][1]} l 0.01 0`;
+  let d = `M ${p[0][0]} ${p[0][1]}`;
+  for(let i = 1; i < p.length - 1; i++){
+    const mx = (p[i][0] + p[i + 1][0]) / 2, my = (p[i][1] + p[i + 1][1]) / 2;
+    d += ` Q ${p[i][0]} ${p[i][1]} ${round2(mx)} ${round2(my)}`;
+  }
+  const l = p[p.length - 1];
+  return d + ` L ${l[0]} ${l[1]}`;
+}
+btnExportSvg.onclick = () => {
+  const w = spec.width, l = spec.length, r = Math.min(spec.cornerRadius, w / 2, l / 2);
+  let holes = spec.cutouts.map(c => {
+    const R = cutRadius(c);
+    return `M ${c.x - R} ${c.y} a ${R} ${R} 0 1 0 ${2 * R} 0 a ${R} ${R} 0 1 0 ${-2 * R} 0`;
+  }).join(" ");
+  const plate = `M ${r} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${l - r} A ${r} ${r} 0 0 1 ${w - r} ${l} H ${r} A ${r} ${r} 0 0 1 0 ${l - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
+  const inks = design.inks.map((col, i) => {
+    const paths = design.strokes.filter(s => s.c === i).map(s =>
+      `<path d="${svgPathForStroke(s)}" stroke-width="${s.w}"/>`).join("\n    ");
+    return `  <g id="ink-${i + 1}" fill="none" stroke="${col}" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#plate-clip)">\n    ${paths}\n  </g>`;
+  }).join("\n");
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${l}mm" viewBox="0 0 ${w} ${l}">
+  <!-- ${spec.phone}, back view, millimetres. mode: ${design.mode} -->
+  <defs><clipPath id="plate-clip" clip-rule="evenodd"><path d="${plate} ${holes}"/></clipPath></defs>
+  <path id="plate" d="${plate} ${holes}" fill="${design.plateColor}" fill-rule="evenodd"/>
+${inks}
+</svg>`;
+  fileMsg.textContent = "";
+  download(`case-${stamp()}.svg`, svg, "image/svg+xml")
+    .then(r => { fileMsg.textContent = saveMsg[r] || ""; });
+};
+
+btnClear.onclick = () => {
+  if(!design.strokes.length) return;
+  if(!confirm("Remove every stroke? You can undo this.")) return;
+  commit(() => { design.strokes = []; });
+  render(); closeSheet();
+};
+
+const inkDepthIn = document.getElementById("inkDepth"), inkDepthOut = document.getElementById("inkDepthOut");
+function syncInkDepth(){ inkDepthIn.value = design.inkDepth; inkDepthOut.textContent = design.inkDepth.toFixed(1) + " mm"; maxInkHeight.value = design.maxInkHeight || 5; }
+maxInkHeight.addEventListener("change", () => { const v = parseFloat(maxInkHeight.value); if(v >= 1 && v <= 20){ design.maxInkHeight = v; save(); } });
+inkDepthIn.addEventListener("input", () => { design.inkDepth = parseFloat(inkDepthIn.value); syncInkDepth(); save(); });
+
+btnExport3mf.onclick = () => {
+  fileMsg.textContent = "Building meshes…";
+  btnExport3mf.disabled = true;
+  setTimeout(async () => {
+    try{
+      const built = CaseGeo.buildParts(spec, design);
+      const bytes = CaseGeo.to3MF(built.parts, `${spec.phone} case back`);
+      const tris = built.parts.reduce((n, p) => n + p.mesh.triCount(), 0);
+      const r = await download(`case-panel-${design.mode}-${stamp()}.3mf`, bytes, "model/3mf");
+      const info = `${built.parts.length} parts, ${tris.toLocaleString()} triangles, ${(bytes.length / 1024).toFixed(0)} KB. `;
+      fileMsg.textContent = r === "cancelled" ? "" : (r === "nobinary" ? saveMsg.nobinary : info + (saveMsg[r] || ""));
+    }catch(e){ fileMsg.textContent = "Couldn't build the 3MF: " + e.message; console.error(e); }
+    btnExport3mf.disabled = false;
+  }, 30);
+};
+
+// ---------- case style ----------
+const styHelp = {
+  plain: "The whole case in the case colour.",
+  extrude: "Whatever colour the panel has at its edge continues straight down the side of the case, so the drawing wraps round. Bare panel continues in the panel colour.",
+  stripes: "Bands of colour running round the case, parallel to the back, in the order ticked below."
+};
+const styBtns = { plain: styPlain, extrude: styExtrude, stripes: styStripes };
+function syncStyle(){
+  const st = design.caseStyle || "plain";
+  for(const k in styBtns) styBtns[k].classList.toggle("on", k === st);
+  document.getElementById("styHelp").textContent = styHelp[st];
+  stripeOpts.style.display = st === "stripes" ? "" : "none";
+  stripeHeight.value = design.stripeHeight || 1;
+  for(const k of ["case", "plate", "ink0", "ink1", "ink2"]) document.getElementById("sc_" + k).checked = (design.stripeColors || []).includes(k);
+}
+for(const k in styBtns) styBtns[k].onclick = () => { design.caseStyle = k; syncStyle(); save(); };
+stripeHeight.addEventListener("change", () => { const v = parseFloat(stripeHeight.value); if(v >= 0.2){ design.stripeHeight = v; save(); } });
+for(const k of ["case", "plate", "ink0", "ink1", "ink2"]) document.getElementById("sc_" + k).addEventListener("change", () => {
+  design.stripeColors = ["case", "plate", "ink0", "ink1", "ink2"].filter(x => document.getElementById("sc_" + x).checked);
+  save();
+});
+
+// ---------- 3D preview ----------
+const viewer = document.getElementById("viewer"), stage = document.getElementById("stage"), viewerNote = document.getElementById("viewerNote");
+let three = null; // { renderer, scene, camera, group, model }
+let flipped = false, threeLoading = null, showFrame = false, frameMesh = null, rebuildT = null;
+
+function loadThree(){
+  if(window.THREE) return Promise.resolve();
+  if(threeLoading) return threeLoading;
+  threeLoading = new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+    s.onload = res; s.onerror = () => rej(new Error("three.js didn't load"));
+    document.head.appendChild(s);
+  });
+  return threeLoading;
+}
+function initThree(){
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  stage.insertBefore(renderer.domElement, viewerNote);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(getCSS("--bed"));
+  const camera = new THREE.PerspectiveCamera(35, 1, 1, 2000);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 0.9));
+  const key = new THREE.DirectionalLight(0xffffff, 0.7); key.position.set(60, 120, 160); scene.add(key);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.25); fill.position.set(-80, -40, -120); scene.add(fill);
+  const group = new THREE.Group(); scene.add(group);
+  three = { renderer, scene, camera, group, model: null, rot: { x: 0.35, y: -0.45 }, dist: 0 };
+  // orbit: one pointer rotates, two pinch-zoom, wheel zooms
+  const el = renderer.domElement, ptrs = new Map();
+  let lastPinch = 0;
+  el.addEventListener("pointerdown", e => { ptrs.set(e.pointerId, [e.clientX, e.clientY]); el.setPointerCapture(e.pointerId); });
+  el.addEventListener("pointermove", e => {
+    if(!ptrs.has(e.pointerId)) return;
+    const prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+    if(ptrs.size === 1){
+      three.rot.y += (e.clientX - prev[0]) * 0.008;
+      three.rot.x = clamp(three.rot.x + (e.clientY - prev[1]) * 0.008, -1.5, 1.5);
+    }else if(ptrs.size === 2){
+      const [a, b] = [...ptrs.values()];
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if(lastPinch) three.dist = clamp(three.dist * (lastPinch / d), 60, 900);
+      lastPinch = d;
+    }
+    drawThree();
+  });
+  const up = e => { ptrs.delete(e.pointerId); if(ptrs.size < 2) lastPinch = 0; };
+  el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+  el.addEventListener("wheel", e => { e.preventDefault(); three.dist = clamp(three.dist * (1 + e.deltaY * 0.001), 60, 900); drawThree(); }, { passive: false });
+  new ResizeObserver(sizeThree).observe(stage);
+}
+function sizeThree(){
+  if(!three) return;
+  const r = stage.getBoundingClientRect();
+  three.renderer.setSize(r.width, r.height, false);
+  three.renderer.domElement.style.width = r.width + "px"; three.renderer.domElement.style.height = r.height + "px";
+  three.camera.aspect = r.width / r.height; three.camera.updateProjectionMatrix();
+  drawThree();
+}
+function drawThree(){
+  if(!three) return;
+  const { camera, group, rot, dist } = three;
+  group.rotation.set(rot.x, rot.y + (flipped ? Math.PI : 0), 0);
+  camera.position.set(0, 0, dist); camera.lookAt(0, 0, 0);
+  three.renderer.render(three.scene, camera);
+}
+function meshToThree(m, color){
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(m.v), 3));
+  g.setIndex(m.t.length > 65535 ? new THREE.Uint32BufferAttribute(m.t, 1) : new THREE.Uint16BufferAttribute(m.t, 1));
+  g.computeVertexNormals();
+  return new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05, flatShading: true }));
+}
+function buildPreview(){
+  const built = CaseGeo.buildParts(spec, design);
+  if(three.model){ three.group.remove(three.model); three.model.traverse(o => { if(o.geometry) o.geometry.dispose(); if(o.material) o.material.dispose(); }); }
+  const model = new THREE.Group();
+  for(const p of built.parts) model.add(meshToThree(p.mesh, p.color));
+  if(showFrame){
+    for(const p of CaseGeo.frameInPlateSpace(spec, design)){
+      const fm = meshToThree(p.mesh, p.color);
+      fm.material.transparent = true; fm.material.opacity = 0.9;
+      model.add(fm);
+    }
+  }
+  // model space is z-up mm with the plate at z>=0; centre it and face the drawn side to the camera
+  const zTop = built.top;
+  model.position.set(-spec.width / 2, -spec.length / 2, -zTop / 2);
+  const holder = new THREE.Group(); holder.add(model);
+  if(design.mode === "inlay") holder.rotation.y = Math.PI; // drawn face is -z in the file
+  three.group.add(holder); three.model = holder;
+  if(!three.dist) three.dist = spec.length * 1.9;
+  const tris = built.parts.reduce((n, p) => n + p.mesh.triCount(), 0);
+  viewerNote.textContent = `${design.mode === "inlay" ? "Flush inlay" : "Relief: each ink at its own height above the plate"}, ${built.parts.length} parts, ${tris.toLocaleString()} triangles${showFrame ? ", case shown assembled" : ""}. Drag to orbit, pinch to zoom.`;
+  drawThree();
+}
+btn3d.onclick = async () => {
+  viewer.classList.add("open");
+  viewerNote.textContent = "Building…";
+  document.getElementById("viewerSub").textContent = `${spec.phone}, ${design.strokes.length} strokes`;
+  syncVDepth();
+  try{
+    await loadThree();
+    if(!three) initThree();
+    sizeThree();
+    setTimeout(() => { try{ buildPreview(); }catch(e){ viewerNote.textContent = "Couldn't build the model: " + e.message; console.error(e); } }, 30);
+  }catch(e){ viewerNote.textContent = e.message + ". Check your connection and try again."; }
+};
+btnFlip.onclick = () => { flipped = !flipped; drawThree(); };
+const vsliders = document.getElementById("vsliders");
+function fmtH(v){ return v === 0 ? "flush" : v.toFixed(1) + " mm"; }
+function syncVDepth(){
+  vsliders.innerHTML = "";
+  vModeInlay.classList.toggle("on", design.mode === "inlay");
+  vModeRelief.classList.toggle("on", design.mode !== "inlay");
+  if(!design.inkHeights || design.inkHeights.length !== design.inks.length) design.inkHeights = design.inks.map(() => 0.8);
+  const row = (label, color, sq, value, min, max, onInput) => {
+    const l = document.createElement("div"); l.className = "vrow";
+    const dot = document.createElement("span"); dot.className = "dot" + (sq ? " sq" : ""); dot.style.background = color;
+    const inp = document.createElement("input"); inp.type = "range"; inp.min = min; inp.max = max; inp.step = 0.1; inp.value = value; inp.setAttribute("aria-label", label);
+    const out = document.createElement("output"); out.textContent = fmtH(value);
+    out.title = "Tap to type a height"; out.style.cursor = "pointer"; out.tabIndex = 0; out.setAttribute("role", "button");
+    inp.addEventListener("input", () => { const v = parseFloat(inp.value); out.textContent = fmtH(v); onInput(v); save(); scheduleRebuild(); });
+    // tap the number to type an exact height; a value past the slider's end extends the range
+    const edit = () => {
+      const num = document.createElement("input"); num.type = "number"; num.step = "0.1"; num.min = min; num.value = parseFloat(inp.value).toFixed(1);
+      num.style.cssText = "width:64px;font:700 14px var(--dot);padding:4px;border:1px solid var(--line);border-radius:6px";
+      out.replaceWith(num);
+      let done = false, armed = false;
+      setTimeout(() => { num.focus(); num.select(); armed = true; }, 0);
+      const finish = apply => {
+        if(done) return; done = true;
+        if(apply){
+          let v = parseFloat(num.value);
+          if(isFinite(v)){
+            v = Math.max(min, Math.round(v * 10) / 10);
+            if(v > parseFloat(inp.max)){ design.maxInkHeight = v; inp.max = v; }
+            inp.value = v; out.textContent = fmtH(v); onInput(v); save(); scheduleRebuild();
+          }
+        }
+        num.replaceWith(out);
+      };
+      num.addEventListener("keydown", e => { if(e.key === "Enter") finish(true); else if(e.key === "Escape") finish(false); });
+      num.addEventListener("blur", () => { if(armed) finish(true); });
+    };
+    out.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); edit(); });
+    out.addEventListener("keydown", e => { if(e.key === "Enter" || e.key === " ") edit(); });
+    l.append(dot, inp, out); vsliders.appendChild(l);
+  };
+  if(design.mode === "inlay"){
+    row("Ink depth", design.plateColor, true, design.inkDepth, 0.2, 2, v => { design.inkDepth = v; });
+  }else{
+    design.inks.forEach((col, i) => row(`Ink ${i + 1} height`, col, false, Math.min(design.inkHeights[i], design.maxInkHeight || 5), 0, design.maxInkHeight || 5, v => { design.inkHeights[i] = v; }));
+  }
+}
+function scheduleRebuild(){
+  clearTimeout(rebuildT);
+  viewerNote.textContent = "Rebuilding…";
+  rebuildT = setTimeout(() => { try{ buildPreview(); }catch(e){ viewerNote.textContent = "Couldn't build the model: " + e.message; } }, 200);
+}
+vModeInlay.onclick = () => { design.mode = "inlay"; save(); syncVDepth(); scheduleRebuild(); };
+vModeRelief.onclick = () => { design.mode = "relief"; save(); syncVDepth(); scheduleRebuild(); };
+btnFrame.onclick = () => { showFrame = !showFrame; btnFrame.classList.toggle("on", showFrame); scheduleRebuild(); };
+btnCloseViewer.onclick = () => viewer.classList.remove("open");
+
+btnExportFrame.onclick = () => {
+  fileMsg.textContent = "Building case…";
+  setTimeout(async () => {
+    try{
+      const f = CaseGeo.buildFrame(spec, design);
+      const bytes = CaseGeo.to3MF(f.parts, `${spec.phone} case`);
+      const r = await download(`case-body-${stamp()}.3mf`, bytes, "model/3mf");
+      fileMsg.textContent = r === "cancelled" ? "" : (r === "nobinary" ? saveMsg.nobinary : `Case ${f.H.toFixed(2)} mm tall, ${f.parts.length} part${f.parts.length > 1 ? "s" : ""}, ${(bytes.length / 1024).toFixed(0)} KB. ` + (saveMsg[r] || ""));
+    }catch(e){ fileMsg.textContent = "Couldn't build the frame: " + e.message; console.error(e); }
+  }, 30);
+};
+
+btnExportCoupon.onclick = () => {
+  fileMsg.textContent = "Building coupon…";
+  setTimeout(async () => {
+    try{
+      const c = CaseGeo.buildCoupon(spec, design, 32);
+      const bytes = CaseGeo.to3MF(c.parts, `${spec.phone} test coupon`);
+      const r = await download(`case-coupon-${stamp()}.3mf`, bytes, "model/3mf");
+      fileMsg.textContent = r === "cancelled" ? "" : (r === "nobinary" ? saveMsg.nobinary : `Coupon: two objects, ${c.parts.length} parts, ${(bytes.length / 1024).toFixed(0)} KB. ` + (saveMsg[r] || ""));
+    }catch(e){ fileMsg.textContent = "Couldn't build the coupon: " + e.message; console.error(e); }
+  }, 30);
+};
+
+// ---------- keyboard ----------
+window.addEventListener("keydown", e => {
+  if(e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
+  const mod = e.metaKey || e.ctrlKey;
+  if(mod && e.key.toLowerCase() === "z"){ e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  else if(e.key === "d") setTool("draw");
+  else if(e.key === "e") setTool("erase");
+  else if(e.key === "Escape"){ closeSheet(); viewer.classList.remove("open"); }
+});
+
+// ---------- boot ----------
+load();
+buildInks();
+document.getElementById("subtitle").textContent = `${spec.phone || "Phone"}, back view`;
+widthIn.value = width; widthOut.textContent = width.toFixed(1) + " mm";
+new ResizeObserver(resize).observe(canvas);
+resize();
+})();
+</script>
+</body>
+</html>
