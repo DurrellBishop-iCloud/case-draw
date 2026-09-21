@@ -172,6 +172,7 @@
     return { skinT, total: skinT };
   }
   function cutR(spec, c) { return (c.d + (spec.cutoutClearance || 0)) / 2; }
+  function throughOn(design) { return design.caseStyle === "extrude"; }
   function collarOn(spec, design) { return spec.collars !== false && design.mode === "inlay" && spec.cutouts.length > 0; }
   function buildRegions(spec, design) {
     const off = plateOffsets(spec);
@@ -180,9 +181,10 @@
     const plateRegion = region(off.narrow, holes);
     const plateWide = region(off.wide, holes);
     // inks keep clear of the plate edge and the cutouts by inkMargin
-    const m = spec.inkMargin || 0;
+    // "Through" style: inks run to the outer edge so the drawing carries on down the case sides.
+    const m = spec.inkMargin || 0, edgeM = throughOn(design) ? 0 : m;
     const inkArea = m > 0
-      ? region(off.narrow - m, spec.cutouts.map(c => circle(c.x, c.y, (c.d + (spec.cutoutClearance || 0)) / 2 + m, 48)))
+      ? region(off.narrow - edgeM, spec.cutouts.map(c => circle(c.x, c.y, (c.d + (spec.cutoutClearance || 0)) / 2 + m, 48)))
       : plateRegion;
 
     // Height field: the plate is partitioned into cells (region, ink) by the strokes in draw order, later
@@ -301,6 +303,30 @@
     const collars = collarOn(spec, design);
     const collarWall = spec.collarWall || 0.8, collarH = Math.max(0.4, (spec.slabThickness || 1.0) - 0.1);
 
+    if (throughOn(design)) {
+      // Inks run the full panel thickness: the panel edge shows the drawing, no plate-colour stripe.
+      const inlay = design.mode === "inlay";
+      const xf = inlay ? (x, y) => [W - x, L - y] : (x, y) => [x, L - y];
+      const T = lv.skinT, used = inks.length ? ops.union(...inks) : [];
+      const bare = used.length ? ops.difference(regions.plate, used) : regions.plate;
+      const m = new Mesh();
+      if (bare.length) extrude(bare, 0, T, m, xf);
+      if (collars) for (const c of spec.cutouts) {
+        const R = cutR(spec, c);
+        const ring = K(ops.difference(circle(c.x, c.y, R + collarWall, 48), circle(c.x, c.y, R, 48)));
+        if (ring.length) extrude(ring, T - eps, T + collarH, m, xf);
+      }
+      parts.push({ name: "Panel", color: design.plateColor, mesh: m });
+      let maxTop = 0;
+      design.inks.forEach((col, i) => {
+        const gs = inlay ? (regions.inks[i].length ? [{ top: 0, region: regions.inks[i] }] : []) : regions.groups.filter(g => g.ink === i);
+        if (!gs.length) return;
+        const im = new Mesh();
+        for (const g of gs) { extrude(g.region, 0, T + g.top, im, xf); maxTop = Math.max(maxTop, g.top); }
+        parts.push({ name: `Ink ${i + 1}`, color: col, mesh: im });
+      });
+      return { parts, mode: design.mode, inkDepth: T, total: T, top: T + maxTop };
+    }
     if (design.mode === "inlay") {
       // Outer face on the bed. Rotate 180° about Y so the design reads correctly on the outside.
       const xf = (x, y) => [W - x, L - y];
@@ -534,6 +560,18 @@
     return f.parts.map(p => ({ name: p.name, color: p.color, mesh: transformMesh(p.mesh, fn, false) }));
   }
 
+  // ---------- print set ----------
+  // Case and panel as two objects in one 3MF, the panel placed beside the case.
+  function buildPrintSet(spec, design) {
+    const cs = buildFrame(spec, design).parts.map(p => ({ ...p, group: "case" }));
+    const pp = buildParts(spec, design).parts.map(p => ({ ...p, group: "panel" }));
+    const ext = (ps, k) => { let lo = Infinity, hi = -Infinity; for (const p of ps) for (let i = k; i < p.mesh.v.length; i += 3) { lo = Math.min(lo, p.mesh.v[i]); hi = Math.max(hi, p.mesh.v[i]); } return [lo, hi]; };
+    const cx = ext(cs, 0), cy = ext(cs, 1), px = ext(pp, 0), py = ext(pp, 1);
+    const off = [cx[1] + 10 - px[0], cy[0] - py[0], 0];
+    pp.forEach(p => { p.offset = off; });
+    return { parts: cs.concat(pp) };
+  }
+
   // ---------- test coupon ----------
   // A corner of the case and the matching corner of the panel, side by side, to check lip, clearance and collar fit.
   function buildCoupon(spec, design, size) {
@@ -657,5 +695,5 @@ ${items} </build>
     ]);
   }
 
-  return { buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
+  return { buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
 });

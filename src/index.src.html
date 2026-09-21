@@ -32,7 +32,7 @@
     padding:calc(8px + var(--sat)) 14px 8px; background:var(--panel);
     border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:12px;
   }
-  header h1{font:700 22px/1 var(--dot); margin:0; letter-spacing:.02em}
+  header h1{font:700 22px/1 var(--dot); margin:0; letter-spacing:.02em; white-space:nowrap}
   header .sub{font-size:13px; color:var(--muted); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   header button{align-self:center}
 
@@ -133,8 +133,9 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.0.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.1.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
+  <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
   <button id="btnSettings" aria-label="Settings">Settings</button>
 </header>
@@ -176,6 +177,7 @@
     <h1>3D</h1>
     <div class="sub" id="viewerSub"></div>
     <button id="btnFlip">Flip</button>
+    <button id="btnSavePrint">Save</button>
     <button id="btnCloseViewer">Close</button>
   </header>
   <div class="vbar">
@@ -186,6 +188,14 @@
         <button id="vModeRelief">Relief</button>
       </div>
       <button id="btnFrame">Case</button>
+    </div>
+  </div>
+  <div class="vbar">
+    <span>Sides</span>
+    <div class="seg" role="group" aria-label="Case sides">
+      <button id="vStyPlain">Plain</button>
+      <button id="vStyStripes">Stripes</button>
+      <button id="vStyExtrude">Drawing through</button>
     </div>
   </div>
   <div class="stage" id="stage"><div class="note" id="viewerNote">Building…</div></div>
@@ -219,7 +229,7 @@
       <h3>Case sides</h3>
       <div class="seg" role="group" aria-label="Case style">
         <button id="styPlain">Plain</button>
-        <button id="styExtrude">Extend the panel</button>
+        <button id="styExtrude">Drawing through</button>
         <button id="styStripes">Stripes</button>
       </div>
       <p id="styHelp"></p>
@@ -263,8 +273,9 @@
     </section>
 
     <section>
-      <h3>Files</h3>
+      <h3 id="filesHead">Files</h3>
       <div class="row">
+        <button id="btnExportPrint"><b>Save for print (.3mf)</b></button>
         <button id="btnExportJson">Save design (.json)</button>
         <button id="btnImportJson">Open design</button>
         <button id="btnExportSvg">Export SVG</button>
@@ -950,13 +961,19 @@ btnExport3mf.onclick = () => {
 // ---------- case style ----------
 const styHelp = {
   plain: "The whole case in the case colour.",
-  extrude: "Whatever colour the panel has at its edge continues straight down the side of the case, so the drawing wraps round. Bare panel continues in the panel colour.",
-  stripes: "Bands of colour running round the case, parallel to the back, in the order ticked below."
+  extrude: "The drawing goes right through the panel to its edge and carries on straight down the case sides, so it wraps round with no stripe. Bare panel continues in the panel colour.",
+  stripes: "Bands of colour running round the case, parallel to the back, in the order ticked below. Set the stripe height and colours in Settings."
 };
 const styBtns = { plain: styPlain, extrude: styExtrude, stripes: styStripes };
+const vStyBtns = { plain: vStyPlain, extrude: vStyExtrude, stripes: vStyStripes };
+for(const k in vStyBtns) vStyBtns[k].onclick = () => {
+  design.caseStyle = k; syncStyle(); save();
+  showFrame = true; btnFrame.classList.add("on"); scheduleRebuild();
+};
 function syncStyle(){
   const st = design.caseStyle || "plain";
   for(const k in styBtns) styBtns[k].classList.toggle("on", k === st);
+  for(const k in vStyBtns) vStyBtns[k].classList.toggle("on", k === st);
   document.getElementById("styHelp").textContent = styHelp[st];
   stripeOpts.style.display = st === "stripes" ? "" : "none";
   stripeHeight.value = design.stripeHeight || 1;
@@ -1069,7 +1086,7 @@ btn3d.onclick = async () => {
   viewer.classList.add("open");
   viewerNote.textContent = "Building…";
   document.getElementById("viewerSub").textContent = `${spec.phone}, ${design.strokes.length} strokes`;
-  syncVDepth();
+  syncVDepth(); syncStyle();
   try{
     await loadThree();
     if(!three) initThree();
@@ -1145,6 +1162,22 @@ btnExportFrame.onclick = () => {
     }catch(e){ fileMsg.textContent = "Couldn't build the frame: " + e.message; console.error(e); }
   }, 30);
 };
+
+// Case + panel in one file, ready for the slicer
+function exportPrint(msgEl){
+  msgEl.textContent = "Building case and panel…";
+  setTimeout(async () => {
+    try{
+      const set = CaseGeo.buildPrintSet(spec, design);
+      const bytes = CaseGeo.to3MF(set.parts, `${spec.phone} case`);
+      const r = await download(`case-print-${stamp()}.3mf`, bytes, "model/3mf");
+      msgEl.textContent = r === "cancelled" ? "" : (r === "nobinary" ? saveMsg.nobinary : `Case and panel, ${set.parts.length} parts, ${(bytes.length / 1024).toFixed(0)} KB. ` + (saveMsg[r] || ""));
+    }catch(e){ msgEl.textContent = "Couldn't build the print file: " + e.message; console.error(e); }
+  }, 30);
+}
+btnExportPrint.onclick = () => exportPrint(fileMsg);
+btnSavePrint.onclick = () => exportPrint(viewerNote);
+btnSave.onclick = () => { btnSettings.click(); setTimeout(() => filesHead.scrollIntoView({ block: "start", behavior: "smooth" }), 250); };
 
 btnExportCoupon.onclick = () => {
   fileMsg.textContent = "Building coupon…";
