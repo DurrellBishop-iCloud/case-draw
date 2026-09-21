@@ -17,9 +17,13 @@ main multi-colour target) and a Bambu with AMS. Filament: PLA to start.
   - *Relief*: prints face-up; each ink has its own independent height above the panel (0 = pocketed flush).
     Heights are absolute, NOT additive/stacked — the user explicitly rejected stacking.
 - Earlier designs (two-part frame with dovetail; frame with snap bumps and tongued plate) were rejected as too weak.
-- **Case sides** can be plain, "extend the panel" (the panel's edge colours continue straight down the sides), or
-  horizontal stripes. Multi-colour parts are separate parts of one 3MF object; the user assigns filaments in Orca.
-- Camera and button positions in the spec are PLACEHOLDERS; the user will measure the real phone with calipers.
+- **Case sides** can be plain, "drawing through" (`caseStyle: "extrude"`: inks go the full panel thickness to its
+  outer edge and the case wall under each point takes the colour drawn directly above it, so no plate-colour stripe),
+  or horizontal stripes. The choice is in the 3D view's Sides row as well as Settings. Multi-colour parts are separate parts of one 3MF object; the user assigns filaments in Orca.
+- Measured by the user (Sept 2026, `specVersion: 2`): phone 76.8 x 163.8, corner R11.7 (user unsure), camera
+  island one rounded rectangle 68 x 50.5 R11.8, 4 mm from the top and 4.4 mm from each side. Cutouts are circles
+  `{x,y,d}` or rounded rects `{x,y,w,h,r}` (centre). Button windows are still estimates from a photo (all three on
+  the left of the back view); thickness 9.0 is unmeasured. Saved specs older than v2 get the new outline on load.
 - A **test coupon** export (top-left 32 mm corner of case + panel) exists to dial in fit before a full print.
 
 ## Code layout
@@ -34,7 +38,11 @@ main multi-colour target) and a Bambu with AMS. Filament: PLA to start.
 ## Testing without a browser
 `npm i earcut polygon-clipping` then in Node: `const G = require('./src/geo.js')`, call `G.buildParts(spec, design)`,
 `G.buildFrame(spec, design)`, `G.buildCoupon(...)`, write `G.to3MF(parts, title)` to a file. Meshes were validated
-with Python `trimesh` (winding consistent, positive volumes, closed slices). Keep that standard.
+with Python `trimesh` (winding consistent, positive volumes, closed slices). Keep that standard: every part must
+have every directed edge matched by its reverse. Robustness rules learnt the hard way: snap every region that
+meets another (plate and inks both go through `ops`); build a pocketed face from the pocket's own rings
+(`minusFrom`), not a second boolean op; use the colour-blind `allInk` region for pockets/through-cuts (per-ink
+unions leave hairline seams); `cap` repairs earcut T-junctions on diagonals and takes winding from total area.
 
 ## Conventions
 - All dimensions mm. Design coords: back view, origin top-left of the phone, y down. 3MF is z-up, oriented for

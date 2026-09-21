@@ -52,18 +52,6 @@
     ring.push(ring[0]);
     return [ring];
   }
-  // Map points lying on the outline of radius R+from to the outline of radius R+to; leave other points alone.
-  function outlineMapper(spec, from, to) {
-    const W = spec.width, L = spec.length;
-    const R = Math.max(0.01, Math.min(spec.cornerRadius, W / 2, L / 2));
-    const rFrom = R + from, rTo = R + to;
-    return p => {
-      const qx = Math.max(R, Math.min(W - R, p[0])), qy = Math.max(R, Math.min(L - R, p[1]));
-      const nx = p[0] - qx, ny = p[1] - qy, n = Math.hypot(nx, ny);
-      if (Math.abs(n - rFrom) > 1e-3) return p;
-      return [qx + nx * rTo / n, qy + ny * rTo / n];
-    };
-  }
   function segmentQuad(a, b, hw) {
     const dx = b[0] - a[0], dy = b[1] - a[1];
     const len = Math.hypot(dx, dy);
@@ -115,6 +103,15 @@
     intersection: (a, b) => snap(pc.intersection(a, b)),
     difference: (a, ...b) => snap(pc.difference(a, ...b))
   };
+  // Drop slivers (rings under minA mm²) that boolean ops leave where edges nearly coincide; they can't print
+  // and the triangulator can't cap them, which leaves the mesh open.
+  function clean(mp, minA) {
+    minA = minA || 0.02;
+    const area = r => { let a = 0; for (let i = 0; i < r.length - 1; i++) a += r[i][0] * r[i + 1][1] - r[i + 1][0] * r[i][1]; return Math.abs(a / 2); };
+    // net area too: snapping can leave a polygon whose hole is the whole of it
+    return mp.filter(poly => area(poly[0]) - poly.slice(1).reduce((t, h) => t + area(h), 0) >= minA)
+      .map(poly => [poly[0], ...poly.slice(1).filter(h => area(h) >= minA)]);
+  }
   function bboxHit(a, b) { return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3]; }
 
   // One stroke -> a single clean MultiPolygon (union of capsules).
@@ -159,6 +156,15 @@
     cellCache = { ref: strokes, len: strokes.length, inks: inkCount, cells };
     return cells;
   }
+  // Everything drawn, whatever the colour, as one region straight from the strokes: no seams where colours meet.
+  let allCache = {};
+  function allInkRegion(strokes, inkCount) {
+    if (allCache.ref === strokes && allCache.len === strokes.length && allCache.inks === inkCount) return allCache.region;
+    const rs = strokes.filter(st => st.c >= 0 && st.c < inkCount).map(strokeRegion);
+    const region = rs.length ? ops.union(...rs) : [];
+    allCache = { ref: strokes, len: strokes.length, inks: inkCount, region };
+    return region;
+  }
 
   // ---------- regions ----------
   // Returns { plate: MultiPolygon (with cutout holes), inks: [MultiPolygon per ink] } in design coords (mm, y down).
@@ -171,20 +177,30 @@
     const skinT = spec.panelThickness || spec.skinThickness || 1.0;
     return { skinT, total: skinT };
   }
-  function cutR(spec, c) { return (c.d + (spec.cutoutClearance || 0)) / 2; }
+  // A back cutout grown by `grow` beyond its clearance: a circle { x, y, d } or a rounded rectangle
+  // { x, y, w, h, r } (x, y = centre), e.g. the Phone (3)'s camera island.
+  function cutShape(spec, c, grow) {
+    const k = (spec.cutoutClearance || 0) / 2 + (grow || 0);
+    if (c.w) {
+      const w = c.w + 2 * k, h = c.h + 2 * k;
+      return [roundedRect(w, h, (c.r || 0) + k, 12)[0].map(p => [p[0] + c.x - w / 2, p[1] + c.y - h / 2])].map(r => [r]);
+    }
+    return circle(c.x, c.y, c.d / 2 + k, 48);
+  }
+  const cutRing = (spec, c, wall) => ops.difference(cutShape(spec, c, wall), cutShape(spec, c, 0));
   function throughOn(design) { return design.caseStyle === "extrude"; }
   function collarOn(spec, design) { return spec.collars !== false && design.mode === "inlay" && spec.cutouts.length > 0; }
   function buildRegions(spec, design) {
     const off = plateOffsets(spec);
-    const holes = spec.cutouts.map(c => circle(c.x, c.y, (c.d + (spec.cutoutClearance || 0)) / 2, 48));
-    const region = (o, hs) => { const p = phoneOutline(spec, o, 12); return hs.length ? pc.difference(p, ...hs) : pc.union(p); };
+    const holes = spec.cutouts.map(c => cutShape(spec, c, 0));
+    const region = (o, hs) => { const p = phoneOutline(spec, o, 16); return hs.length ? ops.difference(p, ...hs) : ops.union(p); };
     const plateRegion = region(off.narrow, holes);
     const plateWide = region(off.wide, holes);
     // inks keep clear of the plate edge and the cutouts by inkMargin
     // "Through" style: inks run to the outer edge so the drawing carries on down the case sides.
     const m = spec.inkMargin || 0, edgeM = throughOn(design) ? 0 : m;
     const inkArea = m > 0
-      ? region(off.narrow - edgeM, spec.cutouts.map(c => circle(c.x, c.y, (c.d + (spec.cutoutClearance || 0)) / 2 + m, 48)))
+      ? region(off.narrow - edgeM, spec.cutouts.map(c => cutShape(spec, c, m)))
       : plateRegion;
 
     // Height field: the plate is partitioned into cells (region, ink) by the strokes in draw order, later
@@ -208,7 +224,9 @@
     }
     groups.sort((a, b) => a.ink - b.ink || a.top - b.top);
     const inks = design.inks.map((_, i) => { const l = groups.filter(g => g.ink === i).map(g => g.region); return l.length ? (l.length === 1 ? l[0] : pc.union(...l)) : []; });
-    return { plate: plateRegion, plateWide, inks, groups, off };
+    const all = allInkRegion(design.strokes, design.inks.length);
+    const allInk = all.length ? ops.intersection(all, inkArea) : [];
+    return { plate: plateRegion, plateWide, inks, groups, allInk, off };
   }
 
   // ---------- meshing ----------
@@ -229,15 +247,67 @@
     return r;
   }
 
+  // Drop repeated points and zero-width spikes (a point that doubles back within 2 µm): they have no area to cap,
+  // so their walls would be left open. Straight-through points are kept, since another ring may touch there.
+  function tidyRing(r) {
+    let pts = r.slice(), changed = true;
+    while (changed && pts.length >= 3) {
+      changed = false;
+      for (let i = 0; i < pts.length && pts.length >= 3; i++) {
+        const a = pts[(i + pts.length - 1) % pts.length], b = pts[i], c = pts[(i + 1) % pts.length];
+        const ex = c[0] - a[0], ey = c[1] - a[1], len = Math.hypot(ex, ey);
+        const dist = len < 1e-6 ? Math.hypot(b[0] - a[0], b[1] - a[1]) : Math.abs(ex * (b[1] - a[1]) - ey * (b[0] - a[0])) / len;
+        const back = (b[0] - a[0]) * (c[0] - b[0]) + (b[1] - a[1]) * (c[1] - b[1]) <= 0;
+        if (dist < 2e-3 && (back || Math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-6)) { pts.splice(i, 1); i--; changed = true; }
+      }
+    }
+    return pts;
+  }
   // Rings of one polygon in model space: outer CCW, holes CW.
   function normRings(poly, xf, map) {
     return poly.map((ring, i) => {
-      let r = open(ring).map(p => { if (map) p = map(p); return xf(p[0], p[1]); });
-      if (r.length < 3) return null;
+      let r = tidyRing(open(ring)).map(p => { if (map) p = map(p); return xf(p[0], p[1]); });
+      if (r.length < 3 || Math.abs(ringArea([...r, r[0]])) < 1e-3) return null;
       const area = ringArea([...r, r[0]]);
       if ((i === 0 && area < 0) || (i > 0 && area > 0)) r.reverse();
       return r;
     }).filter(Boolean);
+  }
+  // For a triangulation of the points in flat, returns f(a, b, c): null, or the triangle's corners with any other
+  // points that lie on its edges inserted in order (earcut can bridge collinear points and leave T-junctions).
+  function tJunctions(flat, tris, starts) {
+    const n = flat.length / 2, G = 2, grid = new Map(), tol = 1e-4;
+    // outline edges (consecutive points of a ring) are shared with the walls and stay whole; only diagonals split
+    const next = new Int32Array(n);
+    for (let r = 0; r < starts.length; r++) { const s0 = starts[r], s1 = r + 1 < starts.length ? starts[r + 1] : n; for (let i = s0; i < s1; i++) next[i] = i + 1 < s1 ? i + 1 : s0; }
+    const cell = (x, y) => Math.floor(x / G) + "," + Math.floor(y / G);
+    for (let i = 0; i < n; i++) { const k = cell(flat[2 * i], flat[2 * i + 1]); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i); }
+    const onEdge = (a, b) => {
+      if (next[a] === b || next[b] === a) return [];
+      const ax = flat[2 * a], ay = flat[2 * a + 1], bx = flat[2 * b], by = flat[2 * b + 1];
+      const L2 = (bx - ax) ** 2 + (by - ay) ** 2; if (L2 < 1e-12) return [];
+      const found = [];
+      const x0 = Math.floor(Math.min(ax, bx) / G), x1 = Math.floor(Math.max(ax, bx) / G), y0 = Math.floor(Math.min(ay, by) / G), y1 = Math.floor(Math.max(ay, by) / G);
+      if ((x1 - x0 + 1) * (y1 - y0 + 1) > 4000) return [];
+      for (let gx = x0; gx <= x1; gx++) for (let gy = y0; gy <= y1; gy++) {
+        const list = grid.get(gx + "," + gy); if (!list) continue;
+        for (const i of list) {
+          if (i === a || i === b) continue;
+          const px = flat[2 * i], py = flat[2 * i + 1];
+          const t = ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / L2;
+          if (t <= 1e-6 || t >= 1 - 1e-6) continue;
+          if (Math.abs((bx - ax) * (py - ay) - (by - ay) * (px - ax)) / Math.sqrt(L2) > tol) continue;
+          if ((px === ax && py === ay) || (px === bx && py === by)) continue;
+          found.push([t, i]);
+        }
+      }
+      return found.sort((p, q) => p[0] - q[0]).map(p => p[1]);
+    };
+    return (a, b, c) => {
+      const e1 = onEdge(a, b), e2 = onEdge(b, c), e3 = onEdge(c, a);
+      if (!e1.length && !e2.length && !e3.length) return null;
+      return [a, ...e1, b, ...e2, c, ...e3];
+    };
   }
   // Flat cap for a MultiPolygon at height z. up=true -> normal +z.
   function cap(mp, z, up, mesh, xf, map) {
@@ -249,10 +319,23 @@
       const tris = earcut(flat, holeIdx.length ? holeIdx : undefined);
       const base = [];
       for (let i = 0; i < flat.length / 2; i++) base.push(mesh.addVertex(flat[2 * i], flat[2 * i + 1], z));
+      const tj = tJunctions(flat, tris, [0, ...holeIdx]);
+      // earcut gives every triangle the same winding: read it once from the total signed area, since a sliver's
+      // own cross product is noise, then face every triangle (and every split piece) the same way
+      let tot = 0;
+      for (let i = 0; i < tris.length; i += 3) { const a = tris[i], b = tris[i + 1], c = tris[i + 2]; tot += (flat[2 * b] - flat[2 * a]) * (flat[2 * c + 1] - flat[2 * a + 1]) - (flat[2 * b + 1] - flat[2 * a + 1]) * (flat[2 * c] - flat[2 * a]); }
+      const keep = (tot > 0) === up;
+      const emit = (a, b, c) => { if (keep) mesh.addTri(a, b, c); else mesh.addTri(a, c, b); };
       for (let i = 0; i < tris.length; i += 3) {
         const a = tris[i], b = tris[i + 1], c = tris[i + 2];
-        const ccw = (flat[2 * b] - flat[2 * a]) * (flat[2 * c + 1] - flat[2 * a + 1]) - (flat[2 * b + 1] - flat[2 * a + 1]) * (flat[2 * c] - flat[2 * a]) > 0;
-        if (ccw === up) mesh.addTri(base[a], base[b], base[c]); else mesh.addTri(base[a], base[c], base[b]);
+        const split = tj(a, b, c);
+        if (!split) { emit(base[a], base[b], base[c]); continue; }
+        // a boundary point sits on an edge of this triangle: fan it so every edge is shared exactly
+        const ring = split.map(k => base[k]);
+        const area2 = (flat[2 * b] - flat[2 * a]) * (flat[2 * c + 1] - flat[2 * a + 1]) - (flat[2 * b + 1] - flat[2 * a + 1]) * (flat[2 * c] - flat[2 * a]);
+        if (Math.abs(area2) < 1e-6) { for (let k = 1; k < ring.length - 1; k++) emit(ring[0], ring[k], ring[k + 1]); continue; }
+        const m = mesh.addVertex((flat[2 * a] + flat[2 * b] + flat[2 * c]) / 3, (flat[2 * a + 1] + flat[2 * b + 1] + flat[2 * c + 1]) / 3, z);
+        for (let k = 0; k < ring.length; k++) emit(m, ring[k], ring[(k + 1) % ring.length]);
       }
     }
   }
@@ -272,6 +355,33 @@
       }
     }
   }
+  function pointInRing(p, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+      if (((yi > p[1]) !== (yj > p[1])) && (p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+  const inPoly = (p, poly) => pointInRing(p, poly[0]) && !poly.slice(1).some(h => pointInRing(p, h));
+  // True when every vertex of `inner` lies strictly inside `outer` (so its rings can be used as holes of it).
+  function ringsInside(outer, inner) {
+    return inner.every(poly => poly.every(ring => ring.every(p => outer.some(o => inPoly(p, o)))));
+  }
+  // outer minus inner, assembled from the two regions' own rings rather than a fresh boolean op, so the
+  // face shares exactly the vertices of the pocket walls built from `inner`. Requires ringsInside(outer, inner).
+  function minusFrom(outer, inner) {
+    const outers = outer.map(poly => poly[0]).concat(...inner.map(poly => poly.slice(1)));
+    const holes = [].concat(...outer.map(poly => poly.slice(1))).concat(inner.map(poly => poly[0]));
+    const area = r => Math.abs(ringArea(r));
+    const polys = outers.map(r => [r]);
+    for (const h of holes) {
+      let best = -1;   // smallest outer ring containing the hole
+      polys.forEach((P, i) => { if (pointInRing(h[0], P[0]) && (best < 0 || area(P[0]) < area(polys[best][0]))) best = i; });
+      if (best >= 0) polys[best].push(h);
+    }
+    return polys;
+  }
   // Simple extrusion between z0 and z1.
   function extrude(mp, z0, z1, mesh, xf, topMap) {
     cap(mp, z1, true, mesh, xf, topMap);
@@ -283,8 +393,8 @@
     cap(mp, T, true, mesh, xf, topMap);
     walls(mp, 0, T, mesh, xf, true, topMap);
     if (!pockets.length) { cap(mp, 0, false, mesh, xf); return; }
-    const pocket = pockets.length === 1 ? pockets[0] : pc.union(...pockets); // one region: no coincident inner walls
-    cap(pc.difference(mp, pocket), 0, false, mesh, xf);
+    const pocket = ops.union(...pockets); // one region: no coincident inner walls
+    cap(ringsInside(mp, pocket) ? minusFrom(mp, pocket) : pc.difference(mp, pocket), 0, false, mesh, xf);
     cap(pocket, d, false, mesh, xf);        // pocket ceiling faces down into the pocket
     walls(pocket, 0, d, mesh, xf, false);   // pocket walls face into the pocket
   }
@@ -307,13 +417,12 @@
       // Inks run the full panel thickness: the panel edge shows the drawing, no plate-colour stripe.
       const inlay = design.mode === "inlay";
       const xf = inlay ? (x, y) => [W - x, L - y] : (x, y) => [x, L - y];
-      const T = lv.skinT, used = inks.length ? ops.union(...inks) : [];
-      const bare = used.length ? ops.difference(regions.plate, used) : regions.plate;
+      const T = lv.skinT, used = K(regions.allInk);   // colour-blind: no seams where two inks meet
+      const bare = used.length ? clean(ops.difference(regions.plate, used)) : regions.plate;
       const m = new Mesh();
       if (bare.length) extrude(bare, 0, T, m, xf);
       if (collars) for (const c of spec.cutouts) {
-        const R = cutR(spec, c);
-        const ring = K(ops.difference(circle(c.x, c.y, R + collarWall, 48), circle(c.x, c.y, R, 48)));
+        const ring = K(cutRing(spec, c, collarWall));
         if (ring.length) extrude(ring, T - eps, T + collarH, m, xf);
       }
       parts.push({ name: "Panel", color: design.plateColor, mesh: m });
@@ -331,12 +440,11 @@
       // Outer face on the bed. Rotate 180° about Y so the design reads correctly on the outside.
       const xf = (x, y) => [W - x, L - y];
       const m = new Mesh();
-      extrudePocketed(regions.plate, inks, d, lv.skinT, m, xf);
+      extrudePocketed(regions.plate, regions.allInk.length ? [K(regions.allInk)] : [], d, lv.skinT, m, xf);
       if (collars) {
         // short collars round each camera hole key into the body's oversized cutouts
         for (const c of spec.cutouts) {
-          const R = cutR(spec, c);
-          const ring = K(ops.difference(circle(c.x, c.y, R + collarWall, 48), circle(c.x, c.y, R, 48)));
+          const ring = K(cutRing(spec, c, collarWall));
           if (ring.length) extrude(ring, lv.skinT - eps, lv.skinT + collarH, m, xf);
         }
       }
@@ -392,66 +500,11 @@
     }
     return out;
   }
-  // Wedges of the wall, in plan, coloured by the ink that reaches the panel edge next to them.
-  // Dense samples along the outer case outline, each mapped to the inner outline (same parametrisation).
-  function outlineSamples(spec, oOuter, oInner, step) {
-    const ring = open(phoneOutline(spec, oOuter, 16)[0]);
-    const pts = [];
-    for (let i = 0; i < ring.length; i++) {
-      const a = ring[i], b = ring[(i + 1) % ring.length];
-      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      const n = len > 3 ? Math.max(1, Math.ceil(len / step)) : 1;   // subdivide straight edges only; corner chords stay on the arc
-      for (let k = 0; k < n; k++) pts.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
-    }
-    const toInner = outlineMapper(spec, oOuter, oInner);
-    return { outer: pts, inner: pts.map(toInner) };
-  }
-  function pointInRing(p, ring) {
-    let inside = false;
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
-      if (((yi > p[1]) !== (yj > p[1])) && (p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi)) inside = !inside;
-    }
-    return inside;
-  }
-  function pointInMP(p, mp) {
-    for (const poly of mp) {
-      if (!pointInRing(p, poly[0])) continue;
-      let hole = false;
-      for (let i = 1; i < poly.length; i++) if (pointInRing(p, poly[i])) { hole = true; break; }
-      if (!hole) return true;
-    }
-    return false;
-  }
-  // Wall footprint between oInner and the outer edge, split into runs coloured by the panel design at
-  // sampleOffset (the ink that reaches that point on the panel, or "plate" for bare panel).
-  function colouredWall(spec, design, oInner, sampleOffset) {
-    const c = spec.phoneClearance || 0, oOuter = c + spec.frameWall;
-    const { outer, inner } = outlineSamples(spec, oOuter, oInner, 0.5);
-    const probe = outer.map(outlineMapper(spec, oOuter, sampleOffset));
-    const cells = paintCells(design.strokes || [], (design.inks || []).length).map(C => ({ ink: C.ink, region: C.region, bbox: bbox(C.region) }));
-    const keyAt = p => {
-      for (let i = cells.length - 1; i >= 0; i--) { // later cells are on top
-        const C = cells[i];
-        if (p[0] < C.bbox[0] || p[0] > C.bbox[2] || p[1] < C.bbox[1] || p[1] > C.bbox[3]) continue;
-        if (pointInMP(p, C.region)) return "ink" + C.ink;
-      }
-      return "plate";
-    };
-    const keys = probe.map(keyAt), n = outer.length, runs = [];
-    let start = 0;
-    for (let i = 0; i < n; i++) if (keys[i] !== keys[(i + n - 1) % n]) { start = i; break; }
-    let i = start, guard = 0;
-    do {
-      let j = i, len = 1;
-      while (len < n && keys[(j + 1) % n] === keys[i]) { j++; len++; }
-      const idx = []; for (let k = i; k <= j + 1; k++) idx.push(k % n);   // include the next point so runs touch
-      const ring = idx.map(k => outer[k]).concat(idx.slice().reverse().map(k => inner[k]));
-      ring.push(ring[0]);
-      runs.push({ key: keys[i], region: [[ring]] });
-      i = (j + 1) % n;
-    } while (i !== start && ++guard < n);
-    return runs;
+  // Drawn area per ink in plan (not clipped to the panel), later strokes covering earlier ones.
+  function inkPlanRegions(design) {
+    const n = (design.inks || []).length, lists = Array.from({ length: n }, () => []);
+    for (const C of paintCells(design.strokes || [], n)) lists[C.ink].push(C.region);
+    return lists.map(l => !l.length ? [] : l.length === 1 ? l[0] : ops.union(...l));
   }
   function stripeKeys(design) {
     const list = (design.stripeColors && design.stripeColors.length) ? design.stripeColors : ["case", "ink0"];
@@ -480,7 +533,7 @@
     const outer = phoneOutline(spec, c + wall, 16);
     const collars = collarOn(spec, design);
     const extra = collars ? (spec.collarWall || 0.8) + (spec.collarClearance || 0.15) : 0;
-    const holes = spec.cutouts.map(k => circle(k.x, k.y, cutR(spec, k) + extra, 48));
+    const holes = spec.cutouts.map(k => cutShape(spec, k, extra));
     const minusHoles = mp => holes.length ? ops.difference(mp, ...holes) : mp;
 
     // 2D colour layouts
@@ -488,9 +541,18 @@
     let lipRuns = [{ key: "case", region: ops.difference(outer, phoneOutline(spec, c - lipDepth, 16)) }];
     let slabBand = null;
     if (style === "extrude") {
-      const sample = c + wall / 2;
-      wallRuns = colouredWall(spec, design, c, sample);
-      lipRuns = colouredWall(spec, design, c - lipDepth, sample);
+      // The case continues the panel straight down: colour each part of the wall by what is drawn directly above it.
+      const inkPlan = inkPlanRegions(design);
+      const colourBy = band => {
+        const runs = [];
+        inkPlan.forEach((r, i) => { if (r.length) { const x = clean(ops.intersection(band, r)); if (x.length) runs.push({ key: "ink" + i, region: x }); } });
+        const used = inkPlan.filter(r => r.length);
+        const bare = used.length ? clean(ops.difference(band, ...used)) : band;
+        if (bare.length) runs.unshift({ key: "plate", region: bare });
+        return runs;
+      };
+      wallRuns = colourBy(wallRuns[0].region);
+      lipRuns = colourBy(lipRuns[0].region);
       slabBand = wallRuns;
     }
     const slabInterior = minusHoles(slabBand ? phoneOutline(spec, c, 16) : outer);
@@ -520,10 +582,10 @@
     const meshes = new Map();
     const meshFor = key => { if (!meshes.has(key)) meshes.set(key, new Mesh()); return meshes.get(key); };
     const eps = 0.02, xf = (x, y) => [x, y];
+    const pieces = [];
     const windowInset = zmid => { const dz = Math.min(zmid - zPhone, zLip - zmid); return dz >= r ? 0 : r - Math.sqrt(Math.max(0, r * r - (r - dz) * (r - dz))); };
     for (const iv of intervals) {
       const [z0, z1, kind] = iv, stripeKey = iv[3];
-      const z1e = Math.min(z1 + eps, H);
       let runs;
       if (kind === "slab") {
         runs = [{ key: stripeKey || "case", region: slabInterior }];
@@ -534,10 +596,27 @@
         runs = wallRuns.map(b => ({ key: stripeKey || b.key, region: b.region }));
         if (kind === "window") {
           const w = windowRects(spec, windowInset((z0 + z1) / 2));
-          if (w.length) runs = runs.map(b => ({ key: b.key, region: ops.difference(b.region, ...w) })).filter(b => b.region.length);
+          if (w.length) {
+            const wb = w.map(bbox);   // only cut the runs a window actually reaches, so the rest stay identical and merge
+            runs = runs.map(b => { const bb = bbox(b.region); const hit = w.filter((_, i) => bboxHit(bb, wb[i])); return hit.length ? { key: b.key, region: ops.difference(b.region, ...hit) } : b; }).filter(b => b.region.length);
+          }
         }
       }
-      for (const b of runs) { const reg = K(b.region); if (reg.length) extrude(reg, z0, z1e, meshFor(b.key), xf); }
+      for (const b of runs) pieces.push({ key: b.key, region: b.region, z0, z1 });
+    }
+    // Merge a run's layers wherever its footprint doesn't change (everywhere except round the button windows),
+    // so walls are one solid rather than a stack of 0.2 mm slices with coincident faces.
+    const stacks = new Map();
+    for (const pc of pieces) {
+      const id = pc.key + "|" + JSON.stringify(pc.region);
+      const st = stacks.get(id);
+      const last = st && st[st.length - 1];
+      if (last && Math.abs(last.z1 - pc.z0) < 1e-6) last.z1 = pc.z1;
+      else if (st) st.push({ ...pc }); else stacks.set(id, [{ ...pc }]);
+    }
+    for (const st of stacks.values()) for (const pc of st) {
+      const reg = K(pc.region);
+      if (reg.length) extrude(reg, pc.z0, Math.min(pc.z1 + eps, H), meshFor(pc.key), xf);
     }
     const parts = [];
     for (const [key, mesh] of meshes) parts.push({ key, name: keyName(key), color: keyColor(key, design), mesh });

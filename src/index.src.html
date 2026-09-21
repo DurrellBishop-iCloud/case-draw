@@ -82,6 +82,17 @@
   .width input{flex:1; min-width:0}
   .width output{font:700 16px var(--dot); width:56px; text-align:right}
   input[type=range]{accent-color:#000}
+  /* phones: everything in the header and toolbar has to fit on one line at 360px */
+  @media (max-width: 480px){
+    header{gap:6px; padding-left:10px; padding-right:10px}
+    header h1{font-size:17px}
+    header .sub{display:none}
+    header > .tag{margin-right:auto}
+    button{padding:6px 9px; font-size:13px}
+    footer .row{gap:6px}
+    .width output{width:44px; font-size:14px}
+    .viewer .vbar{flex-wrap:wrap}
+  }
 
   /* settings sheet */
   .scrim{position:fixed; inset:0; background:rgba(0,0,0,.35); display:none}
@@ -133,7 +144,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.1.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.2.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -260,7 +271,7 @@
 
     <section>
       <h3>Phone and case dimensions <span class="tag">mm</span></h3>
-      <p>Back view: x from the left edge, y from the top edge, d is the lens diameter (clearance is added on top). Side cutouts run along an edge, measured from the top-left corner. Anything marked <code>placeholder</code> is a guess, so measure and correct it, or drag camera cutouts with the Cutouts tool.</p>
+      <p>Back view: x from the left edge, y from the top edge. A cutout is a circle (<code>x, y, d</code>) or a rounded rectangle (<code>x, y</code> = centre, <code>w, h, r</code>), like the camera island. <code>cutoutClearance</code> is added all round. Side cutouts run along an edge, measured from the top-left corner. Anything marked <code>placeholder</code> is a guess, so measure and correct it, or drag camera cutouts with the Cutouts tool.</p>
       <p><code>inkMargin</code> keeps strokes clear of the plate edge and the cutouts, so raised ink never sits flush with an edge where it could catch.</p>
       <p>Case: one piece, printed back-down. A back slab (<code>slabThickness</code>) with the wall (<code>frameWall</code>) rising from it and a lip over the screen (<code>lipDepth</code>, <code>lipThickness</code>). Button openings are windows with <code>windowRadius</code> corners.</p>
       <p>Panel: a flat plate the size of the case back (<code>panelThickness</code>), glued to the slab. In inlay mode it carries short collars round the camera holes (<code>collars</code>, <code>collarWall</code>, <code>collarClearance</code>) that key into oversized holes in the slab, so it can only go on straight.</p>
@@ -305,10 +316,11 @@
 // ---------- defaults ----------
 const DEFAULT_SPEC = {
   phone: "Nothing Phone (3)",
-  width: 75.6,
-  length: 160.6,
+  specVersion: 2,        // 2: measured Phone (3) outline and camera island
+  width: 76.8,
+  length: 163.8,
   thickness: 9.0,
-  cornerRadius: 11.0,
+  cornerRadius: 11.7,
   phoneClearance: 0.25,
   frameWall: 1.5,
   lipDepth: 0.5,
@@ -322,17 +334,14 @@ const DEFAULT_SPEC = {
   cutoutClearance: 0.6,
   inkMargin: 0.6,
   sideCutouts: [
-    { side: "right",  name: "Power",         from: 66, to: 80, placeholder: true },
-    { side: "left",   name: "Volume",        from: 60, to: 78, placeholder: true },
-    { side: "left",   name: "Essential key", from: 84, to: 92, placeholder: true },
+    { side: "left",   name: "Button 1",      from: 40, to: 49, placeholder: true },
+    { side: "left",   name: "Button 2",      from: 51, to: 64, placeholder: true },
+    { side: "left",   name: "Button 3",      from: 68, to: 81, placeholder: true },
     { side: "bottom", name: "USB-C + speakers", from: 18, to: 58, placeholder: true }
   ],
   cutouts: [
-    { name: "Main camera",  x: 17.0, y: 17.0, d: 17.0, placeholder: true },
-    { name: "Ultrawide",    x: 17.0, y: 35.5, d: 13.0, placeholder: true },
-    { name: "Periscope",    x: 37.0, y: 27.0, d: 13.0, placeholder: true },
-    { name: "Flash",        x: 37.0, y: 42.0, d: 5.0,  placeholder: true },
-    { name: "Glyph Matrix", x: 58.5, y: 17.0, d: 21.0, placeholder: true }
+    // measured: 68 x 50.5, R11.8, 4 from the top, 4.4 from each side (x, y = centre)
+    { name: "Camera island", x: 38.4, y: 29.25, w: 68.0, h: 50.5, r: 11.8 }
   ]
 };
 const DEFAULT_DESIGN = {
@@ -369,6 +378,7 @@ function load(){
     const raw = localStorage.getItem(STORE_KEY);
     if(!raw) return;
     const s = JSON.parse(raw);
+    if(s.spec && !(s.spec.specVersion >= 2)) for(const k of ["specVersion", "width", "length", "cornerRadius", "cutouts", "sideCutouts"]) s.spec[k] = clone(DEFAULT_SPEC[k]);
     if(s.spec){ spec = Object.assign(clone(DEFAULT_SPEC), s.spec); for(const k of ["plateThickness", "ledge", "dovetail", "skinThickness", "tongueThickness", "tipHeight", "bumpHeight", "bumpRise", "bumpLength", "snapClearance", "snapBumps"]) delete spec[k]; }
     if(s.design) design = Object.assign(clone(DEFAULT_DESIGN), s.design);
   }catch(e){ /* storage unavailable; run in memory */ }
@@ -414,7 +424,22 @@ function outlinePath(o){ // phone outline offset outward by o mm
 function plateOff(){ return CaseGeo.plateOffsets(spec); }
 function frameOuter(){ return spec.phoneClearance + spec.frameWall; }
 function platePath(){ outlinePath(plateOff().wide); }
+// Cutouts are circles { x, y, d } or rounded rectangles { x, y, w, h, r } (x, y = centre); grow is added past the clearance.
 function cutRadius(c){ return (c.d + (spec.cutoutClearance || 0)) / 2; }
+function cutBox(c, grow){
+  const k = (spec.cutoutClearance || 0) / 2 + (grow || 0);
+  return { x: c.x - c.w / 2 - k, y: c.y - c.h / 2 - k, w: c.w + 2 * k, h: c.h + 2 * k, r: Math.max(0, Math.min((c.r || 0) + k, (c.w + 2 * k) / 2, (c.h + 2 * k) / 2)) };
+}
+function cutSubpath(c, grow){
+  if(c.w){ const b = cutBox(c, grow); ctx.roundRect(b.x, b.y, b.w, b.h, b.r); }
+  else{ const r = cutRadius(c) + (grow || 0); ctx.moveTo(c.x + r, c.y); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); }
+}
+function inCut(c, x, y, grow){
+  if(!c.w) return Math.hypot(x - c.x, y - c.y) <= cutRadius(c) + grow;
+  const b = cutBox(c, grow);
+  const qx = Math.max(b.x + b.r, Math.min(b.x + b.w - b.r, x)), qy = Math.max(b.y + b.r, Math.min(b.y + b.h - b.r, y));
+  return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h && Math.hypot(x - qx, y - qy) <= b.r;
+}
 
 function render(){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -461,7 +486,7 @@ function render(){
 
   // holes
   for(const c of spec.cutouts){
-    ctx.beginPath(); ctx.arc(c.x, c.y, cutRadius(c), 0, Math.PI * 2);
+    ctx.beginPath(); cutSubpath(c, 0);
     ctx.fillStyle = getCSS("--bed"); ctx.fill();
   }
 
@@ -469,7 +494,7 @@ function render(){
   ctx.save();
   const im = spec.inkMargin || 0;
   outlinePath(plateOff().narrow - im);
-  for(const c of spec.cutouts){ ctx.moveTo(c.x + cutRadius(c) + im, c.y); ctx.arc(c.x, c.y, cutRadius(c) + im, 0, Math.PI * 2); }
+  for(const c of spec.cutouts) cutSubpath(c, im);
   ctx.clip("evenodd");
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   for(const s of design.strokes) drawStroke(s);
@@ -486,8 +511,7 @@ function render(){
 
   // cutout rings and labels
   spec.cutouts.forEach((c, i) => {
-    const r = cutRadius(c);
-    ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.beginPath(); cutSubpath(c, 0);
     ctx.lineWidth = (i === selCut && tool === "cutouts" ? 2 : 1) / view.scale;
     ctx.strokeStyle = i === selCut && tool === "cutouts" ? "#000" : "rgba(0,0,0,.45)";
     ctx.setLineDash(c.placeholder ? [2, 1.5] : []);
@@ -679,7 +703,7 @@ function hitCutout(x, y){
   let best = -1, bd = Infinity;
   spec.cutouts.forEach((c, i) => {
     const d = Math.hypot(x - c.x, y - c.y);
-    if(d <= cutRadius(c) + 3 && d < bd){ bd = d; best = i; }
+    if(inCut(c, x, y, 3) && d < bd){ bd = d; best = i; }
   });
   return best;
 }
@@ -691,12 +715,15 @@ function updateChip(){
   document.getElementById("chipName").textContent = c.name;
   document.getElementById("chipX").textContent = c.x.toFixed(1);
   document.getElementById("chipY").textContent = c.y.toFixed(1);
-  document.getElementById("chipD").textContent = c.d.toFixed(1);
-  chipDia.value = c.d;
+  // rounded rectangles show their size; edit it in Settings
+  document.getElementById("chipD").textContent = c.w ? `${c.w.toFixed(1)}×${c.h.toFixed(1)}` : c.d.toFixed(1);
+  chipDia.style.display = c.w ? "none" : "";
+  if(!c.w) chipDia.value = c.d;
   chip.classList.add("show");
 }
 chipDia.addEventListener("input", () => {
   if(selCut < 0) return;
+  if(spec.cutouts[selCut].w) return;
   spec.cutouts[selCut].d = parseFloat(chipDia.value);
   updateChip(); render();
 });
@@ -711,7 +738,7 @@ const toolBtns = { draw: toolDraw, erase: toolErase, cutouts: toolCut };
 const hints = {
   draw: "Draw with your finger. Strokes are clipped to the plate.",
   erase: "Tap or drag over a stroke to remove it.",
-  cutouts: "Drag a cutout to move it. Use the slider for diameter."
+  cutouts: "Drag a cutout to move it. Use the slider for a round one's diameter."
 };
 function setTool(t){
   tool = t; selCut = -1; dragCut = null;
@@ -794,7 +821,7 @@ function validateSpec(s){
   });
   if(!Array.isArray(s.cutouts)) throw new Error('"cutouts" must be a list');
   s.cutouts.forEach((c, i) => {
-    for(const k of ["x", "y", "d"]) if(typeof c[k] !== "number") throw new Error(`cutout ${i + 1}: "${k}" must be a number`);
+    for(const k of (c.w !== undefined ? ["x", "y", "w", "h"] : ["x", "y", "d"])) if(typeof c[k] !== "number") throw new Error(`cutout ${i + 1}: "${k}" must be a number`);
     if(!c.name) c.name = "Cutout " + (i + 1);
   });
   return s;
@@ -909,6 +936,10 @@ function svgPathForStroke(s){
 btnExportSvg.onclick = () => {
   const w = spec.width, l = spec.length, r = Math.min(spec.cornerRadius, w / 2, l / 2);
   let holes = spec.cutouts.map(c => {
+    if(c.w){
+      const b = cutBox(c, 0), q = b.r;
+      return `M ${b.x + q} ${b.y} H ${b.x + b.w - q} A ${q} ${q} 0 0 1 ${b.x + b.w} ${b.y + q} V ${b.y + b.h - q} A ${q} ${q} 0 0 1 ${b.x + b.w - q} ${b.y + b.h} H ${b.x + q} A ${q} ${q} 0 0 1 ${b.x} ${b.y + b.h - q} V ${b.y + q} A ${q} ${q} 0 0 1 ${b.x + q} ${b.y} Z`;
+    }
     const R = cutRadius(c);
     return `M ${c.x - R} ${c.y} a ${R} ${R} 0 1 0 ${2 * R} 0 a ${R} ${R} 0 1 0 ${-2 * R} 0`;
   }).join(" ");
@@ -1008,33 +1039,47 @@ function initThree(){
   stage.insertBefore(renderer.domElement, viewerNote);
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(getCSS("--bed"));
-  const camera = new THREE.PerspectiveCamera(35, 1, 1, 2000);
+  const camera = new THREE.PerspectiveCamera(35, 1, 0.5, 2000);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 0.9));
   const key = new THREE.DirectionalLight(0xffffff, 0.7); key.position.set(60, 120, 160); scene.add(key);
   const fill = new THREE.DirectionalLight(0xffffff, 0.25); fill.position.set(-80, -40, -120); scene.add(fill);
   const group = new THREE.Group(); scene.add(group);
-  three = { renderer, scene, camera, group, model: null, rot: { x: 0.35, y: -0.45 }, dist: 0 };
-  // orbit: one pointer rotates, two pinch-zoom, wheel zooms
+  three = { renderer, scene, camera, group, model: null, rot: { x: 0.35, y: -0.45 }, dist: 0, pan: { x: 0, y: 0 } };
+  // one pointer orbits (shift or right button pans), two pointers pinch-zoom and pan, wheel zooms, double-click resets
   const el = renderer.domElement, ptrs = new Map();
-  let lastPinch = 0;
-  el.addEventListener("pointerdown", e => { ptrs.set(e.pointerId, [e.clientX, e.clientY]); el.setPointerCapture(e.pointerId); });
+  let lastPinch = 0, lastMid = null, panDrag = false;
+  el.addEventListener("contextmenu", e => e.preventDefault());
+  // screen pixels -> mm at the model's distance
+  const pxToMM = () => 2 * three.dist * Math.tan(three.camera.fov * Math.PI / 360) / (el.clientHeight || 1);
+  const panBy = (dx, dy) => { const k = pxToMM(); three.pan.x += dx * k; three.pan.y -= dy * k; };
+  el.addEventListener("pointerdown", e => {
+    ptrs.set(e.pointerId, [e.clientX, e.clientY]); el.setPointerCapture(e.pointerId);
+    panDrag = e.shiftKey || e.button === 2;
+    if(ptrs.size === 2){ const [a, b] = [...ptrs.values()]; lastMid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; lastPinch = 0; }
+  });
   el.addEventListener("pointermove", e => {
     if(!ptrs.has(e.pointerId)) return;
     const prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]);
     if(ptrs.size === 1){
-      three.rot.y += (e.clientX - prev[0]) * 0.008;
-      three.rot.x = clamp(three.rot.x + (e.clientY - prev[1]) * 0.008, -1.5, 1.5);
+      const dx = e.clientX - prev[0], dy = e.clientY - prev[1];
+      if(panDrag) panBy(dx, dy);
+      else{
+        three.rot.y += dx * 0.008;
+        three.rot.x = clamp(three.rot.x + dy * 0.008, -1.5, 1.5);
+      }
     }else if(ptrs.size === 2){
       const [a, b] = [...ptrs.values()];
-      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-      if(lastPinch) three.dist = clamp(three.dist * (lastPinch / d), 60, 900);
-      lastPinch = d;
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      if(lastPinch) three.dist = clamp(three.dist * (lastPinch / d), 15, 900);
+      if(lastMid) panBy(mid[0] - lastMid[0], mid[1] - lastMid[1]);
+      lastPinch = d; lastMid = mid;
     }
     drawThree();
   });
-  const up = e => { ptrs.delete(e.pointerId); if(ptrs.size < 2) lastPinch = 0; };
+  const up = e => { ptrs.delete(e.pointerId); if(ptrs.size < 2){ lastPinch = 0; lastMid = null; } };
   el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
-  el.addEventListener("wheel", e => { e.preventDefault(); three.dist = clamp(three.dist * (1 + e.deltaY * 0.001), 60, 900); drawThree(); }, { passive: false });
+  el.addEventListener("wheel", e => { e.preventDefault(); three.dist = clamp(three.dist * (1 + e.deltaY * 0.001), 15, 900); drawThree(); }, { passive: false });
+  el.addEventListener("dblclick", () => { three.pan.x = three.pan.y = 0; three.dist = spec.length * 1.9; drawThree(); });
   new ResizeObserver(sizeThree).observe(stage);
 }
 function sizeThree(){
@@ -1047,8 +1092,9 @@ function sizeThree(){
 }
 function drawThree(){
   if(!three) return;
-  const { camera, group, rot, dist } = three;
+  const { camera, group, rot, dist, pan } = three;
   group.rotation.set(rot.x, rot.y + (flipped ? Math.PI : 0), 0);
+  group.position.set(pan.x, pan.y, 0);
   camera.position.set(0, 0, dist); camera.lookAt(0, 0, 0);
   three.renderer.render(three.scene, camera);
 }
@@ -1066,9 +1112,7 @@ function buildPreview(){
   for(const p of built.parts) model.add(meshToThree(p.mesh, p.color));
   if(showFrame){
     for(const p of CaseGeo.frameInPlateSpace(spec, design)){
-      const fm = meshToThree(p.mesh, p.color);
-      fm.material.transparent = true; fm.material.opacity = 0.9;
-      model.add(fm);
+      model.add(meshToThree(p.mesh, p.color));
     }
   }
   // model space is z-up mm with the plate at z>=0; centre it and face the drawn side to the camera
@@ -1079,7 +1123,7 @@ function buildPreview(){
   three.group.add(holder); three.model = holder;
   if(!three.dist) three.dist = spec.length * 1.9;
   const tris = built.parts.reduce((n, p) => n + p.mesh.triCount(), 0);
-  viewerNote.textContent = `${design.mode === "inlay" ? "Flush inlay" : "Relief: each ink at its own height above the plate"}, ${built.parts.length} parts, ${tris.toLocaleString()} triangles${showFrame ? ", case shown assembled" : ""}. Drag to orbit, pinch to zoom.`;
+  viewerNote.textContent = `${design.mode === "inlay" ? "Flush inlay" : "Relief: each ink at its own height above the plate"}, ${built.parts.length} parts, ${tris.toLocaleString()} triangles${showFrame ? ", case shown assembled" : ""}. Drag to orbit, two fingers to zoom and pan (shift-drag on a Mac), double-tap to reset.`;
   drawThree();
 }
 btn3d.onclick = async () => {
