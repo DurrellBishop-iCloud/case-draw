@@ -144,7 +144,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.2.1</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.2.2</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -441,10 +441,26 @@
   }
   // Snap coordinates to a 1 µm grid: keeps repeated boolean ops numerically stable.
   function snap(mp) { return mp.map(poly => poly.map(ring => ring.map(p => [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]))); }
+  // polygon-clipping can throw ("Unable to find segment", "Unable to complete output ring") when edges nearly
+  // coincide. Inputs go in snapped to the same 1 µm grid as the outputs; if it still throws, retry on coarser
+  // grids (10 µm, 50 µm: far below what a printer resolves) before giving up.
+  const snapTo = (m, g) => {
+    const f = ring => ring.map(p => [Math.round(p[0] / g) * g, Math.round(p[1] / g) * g]);
+    return typeof m[0][0][0] === "number" ? m.map(f) : m.map(poly => poly.map(f));
+  };
+  const robust = fn => (...args) => {
+    let err;
+    for (const g of [1e-3, 1e-2, 5e-2]) {
+      try { return snap(fn(...args.map(m => snapTo(m, g)))); } catch (e) { err = e; }
+    }
+    throw err;
+  };
+  const U = robust((...a) => pc.union(...a)), I = robust((a, b) => pc.intersection(a, b)), D = robust((a, ...b) => pc.difference(a, ...b));
+  const has = m => m && m.length;
   const ops = {
-    union: (...a) => snap(pc.union(...a)),
-    intersection: (a, b) => snap(pc.intersection(a, b)),
-    difference: (a, ...b) => snap(pc.difference(a, ...b))
+    union: (...a) => { a = a.filter(has); return a.length ? U(...a) : []; },
+    intersection: (a, b) => has(a) && has(b) ? I(a, b) : [],
+    difference: (a, ...b) => { if (!has(a)) return []; b = b.filter(has); return b.length ? D(a, ...b) : U(a); }
   };
   // Drop slivers (rings under minA mm²) that boolean ops leave where edges nearly coincide; they can't print
   // and the triangulator can't cap them, which leaves the mesh open.
@@ -463,7 +479,7 @@
     const pts = simplify(stroke.pts, 0.08);
     const n = Math.max(10, Math.min(36, Math.round(hw * 10)));
     const polys = [];
-    if (pts.length === 1) return pc.union(circle(pts[0][0], pts[0][1], hw, n));
+    if (pts.length === 1) return ops.union(circle(pts[0][0], pts[0][1], hw, n));
     for (let i = 0; i < pts.length; i++) {
       polys.push(circle(pts[i][0], pts[i][1], hw, n));
       if (i < pts.length - 1) { const q = segmentQuad(pts[i], pts[i + 1], hw); if (q) polys.push(q); }
@@ -566,7 +582,7 @@
       if (r.length) groups.push({ ink: g.ink, top: g.top, region: r });
     }
     groups.sort((a, b) => a.ink - b.ink || a.top - b.top);
-    const inks = design.inks.map((_, i) => { const l = groups.filter(g => g.ink === i).map(g => g.region); return l.length ? (l.length === 1 ? l[0] : pc.union(...l)) : []; });
+    const inks = design.inks.map((_, i) => { const l = groups.filter(g => g.ink === i).map(g => g.region); return l.length ? (l.length === 1 ? l[0] : ops.union(...l)) : []; });
     const all = allInkRegion(design.strokes, design.inks.length);
     const allInk = all.length ? ops.intersection(all, inkArea) : [];
     return { plate: plateRegion, plateWide, inks, groups, allInk, off };
@@ -737,7 +753,7 @@
     walls(mp, 0, T, mesh, xf, true, topMap);
     if (!pockets.length) { cap(mp, 0, false, mesh, xf); return; }
     const pocket = ops.union(...pockets); // one region: no coincident inner walls
-    cap(ringsInside(mp, pocket) ? minusFrom(mp, pocket) : pc.difference(mp, pocket), 0, false, mesh, xf);
+    cap(ringsInside(mp, pocket) ? minusFrom(mp, pocket) : ops.difference(mp, pocket), 0, false, mesh, xf);
     cap(pocket, d, false, mesh, xf);        // pocket ceiling faces down into the pocket
     walls(pocket, 0, d, mesh, xf, false);   // pocket walls face into the pocket
   }
