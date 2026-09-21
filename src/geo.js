@@ -148,10 +148,12 @@
 
   // ---------- paint partition (cached) ----------
   let cellCache = { ref: null, len: -1, inks: -1, cells: [] };
+  // Draw order: later covers earlier, except strokes flagged `top` (text that stays on top), which come last.
+  function orderedStrokes(strokes) { return strokes.some(st => st.top) ? [...strokes.filter(st => !st.top), ...strokes.filter(st => st.top)] : strokes; }
   function paintCells(strokes, inkCount) {
     if (cellCache.ref === strokes && cellCache.len === strokes.length && cellCache.inks === inkCount) return cellCache.cells;
     let cells = []; // { ink, chain, region, bbox }
-    for (const st of strokes) {
+    for (const st of orderedStrokes(strokes)) {
       if (!(st.c === -1 || (st.c >= 0 && st.c < inkCount))) continue;   // -1 = drawn in the panel colour: covers inks
       const S = strokeRegion(st), sb = bbox(S);
       let remaining = S;
@@ -178,7 +180,7 @@
   let allCache = {};
   function allInkRegion(strokes, inkCount) {
     if (allCache.ref === strokes && allCache.len === strokes.length && allCache.inks === inkCount) return allCache.region;
-    const ok = strokes.filter(st => st.c === -1 || (st.c >= 0 && st.c < inkCount));
+    const ok = orderedStrokes(strokes).filter(st => st.c === -1 || (st.c >= 0 && st.c < inkCount));
     let region;
     if (!ok.some(st => st.c === -1)) { const rs = ok.map(strokeRegion); region = rs.length ? ops.union(...rs) : []; }
     else {   // panel-colour strokes cut what was drawn before them: fold the strokes in order
@@ -651,7 +653,7 @@
     return ok.length ? ok : ["plate"];
   }
   function keyColor(key, design) {
-    if (key === "case") return design.plateColor || "#F2F2EF";   // one filament for panel and case (the U1 has 4)
+    if (key === "case") { const k = design.caseInk; return (k >= 0 && design.inks && design.inks[k]) || design.plateColor || "#F2F2EF"; }   // the case is made of one of the four colours
     if (key === "plate") return design.plateColor || "#F2F2EF";
     const i = parseInt(key.slice(3), 10);
     return (design.inks && design.inks[i]) || "#888888";
@@ -1021,5 +1023,5 @@ ${items} </build>
   }
 
 
-  return { traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
+  return { orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
 });

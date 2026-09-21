@@ -39,11 +39,12 @@ main multi-colour target) and a Bambu with AMS. Filament: PLA to start.
   majority pass removes specks. `strokeRegion` accepts `fill`, so layering, 3D, through-mode and export just work.
   Erase removes a whole fill (one colour of a photo) at a time.
 
-## Four drawing colours (v1.6.0)
-All four swatches draw. Ink index -1 = the panel/case colour: geometry treats a -1 stroke as a cut through the inks
-under it (paintCells keeps the cells; buildRegions/inkPlanRegions drop them; allInkRegion folds strokes in order).
-Long-press a circle = makeCaseColour(k): swaps that ink with the panel colour and rewrites stroke indices (once per
-shared object, since undo snapshots share stroke objects) so nothing drawn changes colour.
+## Four colours + the case (v1.7.0)
+Four swatches, all drawable and equal: inks 0-2 (circles) and -1 (the rectangle, also the panel's background). A
+-1 stroke is a cut through the inks under it (paintCells keeps the cells; buildRegions/inkPlanRegions drop them;
+allInkRegion folds strokes in order). The CASE is not a colour of its own: `design.caseInk` (-1 or 0-2) says which
+of the four it is made of (fifth toolbar control, tap to cycle; geo keyColor("case") reads it). Text can be flagged
+`top: true` (Text option "Stays on top", default on): `orderedStrokes` draws those last, in canvas, SVG and geometry.
 
 ## Code layout
 - `index.html` — GENERATED. Do not edit by hand. It's what Pages serves.
