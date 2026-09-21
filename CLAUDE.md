@@ -29,6 +29,16 @@ main multi-colour target) and a Bambu with AMS. Filament: PLA to start.
   Saved specs older than v2/v3 get the measured values on load.
 - A **test coupon** export (top-left 32 mm corner of case + panel) exists to dial in fit before a full print.
 
+## Drawing rules, photo, text (v1.4.0)
+- Rules row: Free / Line / V stripes / H stripes (`design.rule`), Mirror ↔ / ↕ toggles (`design.mirrorX/Y`);
+  mirrors copy every added stroke or shape at commit (`mirrored()`), duplicates dropped.
+- Photo and Text are placed (drag, pinch/scroll to size and turn, 90° buttons), then converted to FILLED SHAPES:
+  a stroke entry `{ c, fill: MultiPolygon mm }`. Conversion samples the placed image on a 0.4 mm (photo) / 0.2 mm
+  (text) grid, one mask per ink, `CaseGeo.traceMask` -> outlines. Photo: nearest of the 4 colours (mine or k-means
+  "photo's colours", which replaces the palette; biggest cluster = panel), panel-colour pixels stay empty, one 3x3
+  majority pass removes specks. `strokeRegion` accepts `fill`, so layering, 3D, through-mode and export just work.
+  Erase removes a whole fill (one colour of a photo) at a time.
+
 ## Code layout
 - `index.html` — GENERATED. Do not edit by hand. It's what Pages serves.
 - `src/index.src.html` — the app: canvas drawing (vector strokes in mm), settings JSON, 3D preview (three.js r128

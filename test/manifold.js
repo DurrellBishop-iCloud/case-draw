@@ -10,6 +10,17 @@ const D = eval('(' + html.match(/const DEFAULT_DESIGN = (\{[\s\S]*?\n\});/)[1] +
 const N = +(process.argv[2] || 6);
 const kinds = {
   bands: rnd => Array.from({ length: 20 }, () => { const y = rnd() * 170 - 3, pts = []; for (let x = -8; x < 86; x += 2 + rnd() * 6) pts.push([x, y + rnd() * 3 + x * 0.03]); return { c: Math.floor(rnd() * 3), w: 2 + rnd() * 8, pts }; }),
+  // photo/text-style filled shapes: blobby masks traced to outlines, plus a few strokes on top
+  fills: rnd => {
+    const g = 0.4, nx = 202, ny = 420, out = [];
+    for (let c = 0; c < 3; c++) {
+      const m = new Uint8Array(nx * ny), blobs = Array.from({ length: 6 }, () => [rnd() * nx, rnd() * ny, 10 + rnd() * 40]);
+      for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) if (blobs.some(([x, y, r]) => (i - x) ** 2 + (j - y) ** 2 < r * r) && rnd() > 0.03) m[j * nx + i] = 1;
+      out.push({ c, fill: G.traceMask(m, nx, ny, -2, -2, g) });
+    }
+    for (let k = 0; k < 4; k++) out.push({ c: k % 3, w: 3, pts: [[rnd() * 80, -5], [rnd() * 80, 170]] });
+    return out;
+  },
   scribbles: rnd => Array.from({ length: 25 }, (_, k) => { const pts = []; let x = rnd() * 90 - 7, y = rnd() * 175 - 5; for (let j = 0; j < 6; j++) { pts.push([x, y]); x += rnd() * 40 - 20; y += rnd() * 40 - 20; } return { c: k % 3, w: 1 + rnd() * 7, pts }; })
 };
 function check(parts) {

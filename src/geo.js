@@ -112,12 +112,13 @@
     }
     throw err;
   };
-  const U = robust((...a) => pc.union(...a)), I = robust((a, b) => pc.intersection(a, b)), D = robust((a, ...b) => pc.difference(a, ...b));
+  const U = robust((...a) => pc.union(...a)), I = robust((a, b) => pc.intersection(a, b)), D = robust((a, ...b) => pc.difference(a, ...b)), X = robust((...a) => pc.xor(...a));
   const has = m => m && m.length;
   const ops = {
     union: (...a) => { a = a.filter(has); return a.length ? U(...a) : []; },
     intersection: (a, b) => has(a) && has(b) ? I(a, b) : [],
-    difference: (a, ...b) => { if (!has(a)) return []; b = b.filter(has); return b.length ? D(a, ...b) : U(a); }
+    difference: (a, ...b) => { if (!has(a)) return []; b = b.filter(has); return b.length ? D(a, ...b) : U(a); },
+    xor: (...a) => { a = a.filter(has); return a.length ? X(...a) : []; }
   };
   // Drop slivers (rings under minA mm²) that boolean ops leave where edges nearly coincide; they can't print
   // and the triangulator can't cap them, which leaves the mesh open.
@@ -132,6 +133,7 @@
 
   // One stroke -> a single clean MultiPolygon (union of capsules).
   function strokeRegion(stroke) {
+    if (stroke.fill) return ops.union(stroke.fill);   // a filled shape (photo, text): already a region
     const hw = stroke.w / 2;
     const pts = simplify(stroke.pts, 0.08);
     const n = Math.max(10, Math.min(36, Math.round(hw * 10)));
@@ -180,6 +182,46 @@
     const region = rs.length ? ops.union(...rs) : [];
     allCache = { ref: strokes, len: strokes.length, inks: inkCount, region };
     return region;
+  }
+
+  // ---------- pixel masks -> regions ----------
+  // mask[j * nx + i] truthy = cell (i, j) filled; cells are g mm square from (x0, y0), y down. Returns a MultiPolygon
+  // in mm: the cell edges between filled and empty, chained into loops (turning right where two cells touch only at a
+  // corner, so loops never cross), straight runs merged, combined even-odd so holes and islands come out right.
+  function traceMask(mask, nx, ny, x0, y0, g) {
+    const V = (i, j) => j * (nx + 1) + i, filled = (i, j) => i >= 0 && j >= 0 && i < nx && j < ny && !!mask[j * nx + i];
+    const out = new Map();   // vertex -> [dir...]; dirs 0:+x 1:+y 2:-x 3:-y
+    const add = (i, j, d) => { const k = V(i, j); if (!out.has(k)) out.set(k, []); out.get(k).push(d); };
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      if (!filled(i, j)) continue;
+      if (!filled(i, j - 1)) add(i, j, 0);
+      if (!filled(i + 1, j)) add(i + 1, j, 1);
+      if (!filled(i, j + 1)) add(i + 1, j + 1, 2);
+      if (!filled(i - 1, j)) add(i, j + 1, 3);
+    }
+    const DX = [1, 0, -1, 0], DY = [0, 1, 0, -1], loops = [];
+    for (const [start, ds] of out) {
+      while (ds.length) {
+        let v = start, d = ds.pop();
+        const ring = [];
+        for (let guard = 0; guard < 4 * nx * ny + 8; guard++) {
+          const i = v % (nx + 1), j = (v - i) / (nx + 1);
+          ring.push([i, j, d]);
+          const ni = i + DX[d], nj = j + DY[d], nv = V(ni, nj);
+          const cand = out.get(nv);
+          if (!cand || !cand.length) break;
+          let pick = -1;
+          for (const t of [(d + 1) % 4, d, (d + 3) % 4]) { pick = cand.indexOf(t); if (pick >= 0) break; }
+          if (pick < 0) break;
+          v = nv; d = cand.splice(pick, 1)[0];
+        }
+        // keep only corners (direction changes)
+        const pts = [];
+        for (let k = 0; k < ring.length; k++) if (ring[k][2] !== ring[(k + ring.length - 1) % ring.length][2]) pts.push([x0 + ring[k][0] * g, y0 + ring[k][1] * g]);
+        if (pts.length >= 3) { pts.push(pts[0]); loops.push([pts]); }
+      }
+    }
+    return loops.length ? ops.xor(...loops) : [];
   }
 
   // ---------- regions ----------
@@ -974,5 +1016,5 @@ ${items} </build>
   }
 
 
-  return { buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
+  return { traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
 });
