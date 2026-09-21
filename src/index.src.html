@@ -144,7 +144,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.2.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.2.1</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -1052,8 +1052,11 @@ function initThree(){
   // screen pixels -> mm at the model's distance
   const pxToMM = () => 2 * three.dist * Math.tan(three.camera.fov * Math.PI / 360) / (el.clientHeight || 1);
   const panBy = (dx, dy) => { const k = pxToMM(); three.pan.x += dx * k; three.pan.y -= dy * k; };
+  // double-tap to reset, detected by hand: iOS Safari doesn't reliably send dblclick to a touch-action:none canvas
+  let lastTap = 0, tapStart = null;
   el.addEventListener("pointerdown", e => {
     ptrs.set(e.pointerId, [e.clientX, e.clientY]); el.setPointerCapture(e.pointerId);
+    tapStart = ptrs.size === 1 ? [e.clientX, e.clientY, performance.now()] : null;
     panDrag = e.shiftKey || e.button === 2;
     if(ptrs.size === 2){ const [a, b] = [...ptrs.values()]; lastMid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; lastPinch = 0; }
   });
@@ -1070,17 +1073,28 @@ function initThree(){
     }else if(ptrs.size === 2){
       const [a, b] = [...ptrs.values()];
       const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-      if(lastPinch) three.dist = clamp(three.dist * (lastPinch / d), 15, 900);
+      if(lastPinch && d > 20) three.dist = clamp(three.dist * (lastPinch / d), 30, 900);
       if(lastMid) panBy(mid[0] - lastMid[0], mid[1] - lastMid[1]);
       lastPinch = d; lastMid = mid;
     }
     drawThree();
   });
-  const up = e => { ptrs.delete(e.pointerId); if(ptrs.size < 2){ lastPinch = 0; lastMid = null; } };
+  const up = e => {
+    ptrs.delete(e.pointerId); if(ptrs.size < 2){ lastPinch = 0; lastMid = null; }
+    if(e.type !== "pointerup" || !tapStart || ptrs.size) return;
+    const now = performance.now(), still = Math.hypot(e.clientX - tapStart[0], e.clientY - tapStart[1]) < 10 && now - tapStart[2] < 300;
+    if(still && now - lastTap < 350){ resetView(); lastTap = 0; } else lastTap = still ? now : 0;
+    tapStart = null;
+  };
   el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
-  el.addEventListener("wheel", e => { e.preventDefault(); three.dist = clamp(three.dist * (1 + e.deltaY * 0.001), 15, 900); drawThree(); }, { passive: false });
-  el.addEventListener("dblclick", () => { three.pan.x = three.pan.y = 0; three.dist = spec.length * 1.9; drawThree(); });
+  el.addEventListener("wheel", e => { e.preventDefault(); three.dist = clamp(three.dist * (1 + e.deltaY * 0.001), 30, 900); drawThree(); }, { passive: false });
   new ResizeObserver(sizeThree).observe(stage);
+}
+// Start every visit to the 3D view from the standard view, so a lost pan or zoom never sticks.
+function resetView(){
+  if(!three) return;
+  three.pan.x = three.pan.y = 0; three.rot.x = 0.35; three.rot.y = -0.45; three.dist = spec.length * 1.9;
+  drawThree();
 }
 function sizeThree(){
   if(!three) return;
@@ -1093,6 +1107,9 @@ function sizeThree(){
 function drawThree(){
   if(!three) return;
   const { camera, group, rot, dist, pan } = three;
+  // keep the model's centre on screen at any zoom, so it can't be panned out of sight
+  const half = dist * Math.tan(camera.fov * Math.PI / 360) * 0.85;
+  pan.x = clamp(pan.x, -half * camera.aspect, half * camera.aspect); pan.y = clamp(pan.y, -half, half);
   group.rotation.set(rot.x, rot.y + (flipped ? Math.PI : 0), 0);
   group.position.set(pan.x, pan.y, 0);
   camera.position.set(0, 0, dist); camera.lookAt(0, 0, 0);
@@ -1134,6 +1151,7 @@ btn3d.onclick = async () => {
   try{
     await loadThree();
     if(!three) initThree();
+    resetView();
     sizeThree();
     setTimeout(() => { try{ buildPreview(); }catch(e){ viewerNote.textContent = "Couldn't build the model: " + e.message; console.error(e); } }, 30);
   }catch(e){ viewerNote.textContent = e.message + ". Check your connection and try again."; }
