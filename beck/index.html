@@ -85,8 +85,11 @@
   .width{display:flex; align-items:center; gap:8px; flex:1; min-width:0}
   .rules{flex-wrap:wrap; row-gap:6px}
   .rules > *{flex:none}
-  .rules .num{display:inline-flex; align-items:center; gap:4px; font-size:13px}
-  .rules .num input{width:54px; font:inherit; font-size:15px; padding:6px; border:1px solid var(--line); border-radius:8px}
+  .stack{position:absolute; right:10px; bottom:54px; display:flex; flex-direction:column; gap:8px; align-items:center}
+  .stack .dot{width:32px; height:32px; border-radius:50%; box-shadow:0 0 0 1px rgba(0,0,0,.3); border:2px solid var(--panel); cursor:grab; touch-action:none}
+  .stack .dot.on{box-shadow:0 0 0 3px var(--text)}
+  .rules .num, .placebar > .num{display:inline-flex; align-items:center; gap:4px; font-size:13px}
+  .rules .num input, .placebar > .num input{width:54px; font:inherit; font-size:15px; padding:6px; border:1px solid var(--line); border-radius:8px}
   .rules .sep{width:1px; align-self:stretch; background:var(--line); margin:4px 2px}
   @media (max-width: 480px){ .rules .sep:first-of-type{display:none} }
   .placebar{flex-wrap:wrap; background:var(--bed); border-radius:10px; padding:8px}
@@ -162,7 +165,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.8.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.9.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -179,6 +182,7 @@
     <input type="range" id="chipDia" min="3" max="40" step="0.5" aria-label="Cutout diameter">
   </div>
   <div class="hint" id="hint" style="display:none" role="status"></div>
+  <div class="stack" id="stack" style="display:none" aria-label="Colour stacking: top dot is on top. Tap to pick, drag to reorder"></div>
 </main>
 
 <footer>
@@ -202,8 +206,16 @@
     <span class="sep"></span>
     <button id="btnPhoto">Photo</button>
     <button id="btnText">Text</button>
-    <button id="btnFromCodes" style="display:none" title="Bring in the drawing saved in Drawn Codes on this device">From Drawn Codes</button>
+    <button id="btnMove" style="display:none" title="Move or turn the whole grid drawing">Move</button>
+    <button id="btnFromCodes" style="display:none" title="Bring in the drawing saved in Drawn Codes on this device">Import</button>
     <input type="file" id="photoIn" accept="image/*" hidden>
+  </div>
+  <div class="row placebar" id="movebar" style="display:none">
+    <button id="mvL" title="Turn left 90°">⟲ 90°</button>
+    <button id="mvR" title="Turn right 90°">⟳ 90°</button>
+    <span class="grow"></span>
+    <button id="mvCancel">Cancel</button>
+    <button id="mvDone" class="on">Done</button>
   </div>
   <div class="row placebar" id="placebar" style="display:none">
     <div class="seg" id="palSeg" role="group" aria-label="Photo colours">
@@ -292,6 +304,15 @@
     <button id="btnClose">Done</button>
   </header>
   <div class="body">
+
+    <section>
+      <h3>Apps</h3>
+      <div class="row">
+        <button id="appDraw">Case Draw</button>
+        <button id="appBeck">Beck</button>
+      </div>
+      <p style="margin-top:8px">Case Draw is freehand. Beck draws on a grid, in 90° and 45° lines. Each keeps its own design.</p>
+    </section>
 
     <section>
       <h3>Drawing sits</h3>
@@ -2472,7 +2493,7 @@ canvas.addEventListener("pointerdown", e => {
   canvas.setPointerCapture(e.pointerId);
   if(touches.size === 2){
     // second finger: abandon any stroke in progress and start a pinch
-    live = null; dragCut = null; activeId = null; placeDrag = null; if(BECK) gridCancel();
+    live = null; dragCut = null; activeId = null; placeDrag = null; moveDrag = null; if(BECK) gridCancel();
     const [a, b] = [...touches.values()];
     pinch = { d0: Math.max(10, Math.hypot(a[0] - b[0], a[1] - b[1])), mid0: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], scale0: view.scale, ox0: view.ox, oy0: view.oy,
               a0: Math.atan2(b[1] - a[1], b[0] - a[0]), stamp: placing ? { w: placing.w, rot: placing.rot } : null };
@@ -2482,7 +2503,7 @@ canvas.addEventListener("pointerdown", e => {
   if(activeId !== null) return;          // one drawing finger at a time
   activeId = e.pointerId;
   const [x, y] = toMM(e.offsetX, e.offsetY);
-  const mh = !placing && tool !== "cutouts" && hitMirrorHandle(x, y);
+  const mh = !placing && !moving && tool !== "cutouts" && hitMirrorHandle(x, y);
   if(mh){
     const now = performance.now();
     if(mirTap.kind === mh.kind && now - mirTap.t < 400){   // double-tap a handle: back to the middle
@@ -2492,6 +2513,8 @@ canvas.addEventListener("pointerdown", e => {
     }
     mirTap = { kind: mh.kind, t: now };
     mirDrag = { kind: mh.kind, dx: mirCX() - x, dy: mirCY() - y };
+  }else if(moving){
+    moveDrag = { x, y, dr: moving.dr, dc: moving.dc };
   }else if(placing){
     placeDrag = { dx: placing.cx - x, dy: placing.cy - y };
   }else if(BECK && (tool === "draw" || tool === "erase")){
@@ -2532,6 +2555,8 @@ canvas.addEventListener("pointermove", e => {
     const [x, y] = toMM(ev.offsetX, ev.offsetY);
     if(mirDrag){
       moveMirror(mirDrag.kind, x + mirDrag.dx, y + mirDrag.dy);
+    }else if(moving){
+      if(moveDrag){ const g = gridGeom(); moving.dc = moveDrag.dc + Math.round((x - moveDrag.x) / g.cell); moving.dr = moveDrag.dr + Math.round((y - moveDrag.y) / g.cell); applyMove(); }
     }else if(placing){
       if(placeDrag){ placing.cx = x + placeDrag.dx; placing.cy = y + placeDrag.dy; }
     }else if(BECK && gridStroke){
@@ -2556,7 +2581,7 @@ function endPointer(e){
   touches.delete(e.pointerId);
   if(pinch){ if(touches.size < 2) pinch = null; return; }
   if(e.pointerId !== activeId) return;
-  activeId = null; placeDrag = null;
+  activeId = null; placeDrag = null; moveDrag = null;
   if(mirDrag){ mirDrag = null; save(); setTimeout(() => showHint(""), 1500); render(); return; }
   if(BECK && gridStroke){ gridEnd(); render(); return; }
   if(tool === "draw" && live && !placing){
@@ -2797,8 +2822,74 @@ function gridEnd(){
   if(s.v0 !== gridLayers.map(m => m.version).join(".") + "|" + design.strokes.length){ undoStack.push(s.before); if(undoStack.length > 100) undoStack.shift(); redoStack = []; updateHistoryButtons(); save(); }
 }
 function gridCancel(){ if(!gridStroke) return; restoreSnap(gridStroke.before); gridStroke = null; }
+// --- colour stacking: a dot per colour, top dot on top; tap picks the colour, drag reorders (as in Drawn Codes) ---
+function buildStack(){
+  const col = document.getElementById("stack"); col.innerHTML = "";
+  for(const L of [...design.beck.order].reverse()){
+    const d = document.createElement("div");
+    d.className = "dot" + (C2L(ink) === L ? " on" : ""); d.style.background = inkCol(L2C(L));
+    d.title = (L < 3 ? "Colour " + (L + 1) : "Colour 4") + ": tap to draw with it, drag up or down to restack";
+    let y0 = 0, dragging = false, pressed = false;
+    d.addEventListener("pointerdown", e => { d.setPointerCapture(e.pointerId); y0 = e.clientY; dragging = false; pressed = true; e.stopPropagation(); });
+    d.addEventListener("pointermove", e => {
+      if(!pressed) return;   // hovering must never drag
+      const dy = e.clientY - y0; if(!dragging && Math.abs(dy) > 6) dragging = true;
+      if(dragging) d.style.transform = `translateY(${dy}px)`;
+    });
+    d.addEventListener("pointerup", e => {
+      if(!pressed) return; pressed = false;
+      const dy = e.clientY - y0; d.style.transform = "";
+      if(!dragging){ ink = L2C(L); if(tool !== "draw" && tool !== "erase") setTool("draw"); buildInks(); return; }
+      const shown = [...design.beck.order].reverse(), pos = shown.indexOf(L), np = clamp(pos + Math.round(dy / 40), 0, shown.length - 1);
+      if(np !== pos){
+        shown.splice(pos, 1); shown.splice(np, 0, L);
+        const back = shown.reverse();
+        if(new Set(back).size === 4){ design.beck.order = back; save(); render(); }
+      }
+      buildStack();
+    });
+    d.addEventListener("pointercancel", () => { pressed = false; dragging = false; buildStack(); });
+    d.addEventListener("lostpointercapture", () => { d.style.transform = ""; });
+    col.appendChild(d);
+  }
+}
+// --- Move: slide the whole grid drawing by cells, or turn it 90 degrees about the middle of the case ---
+let moving = null, moveDrag = null;   // moving = { base: cells per colour, dr, dc, before }
+function applyMove(){
+  gridLayers.forEach((m, i) => m.restore(moving.base[i].map(([r, c, code]) => [r + moving.dr, c + moving.dc, code])));
+  render();
+}
+function startMove(before){
+  if(!gridLayers.some(m => !m.isEmpty)){ showHint("Nothing on the grid to move yet."); return; }
+  moving = { base: gridLayers.map(m => m.serialize()), dr: 0, dc: 0, before: before || snapshot() };
+  movebar.style.display = ""; document.getElementById("rules").style.display = "none";
+  movebar.insertBefore(cellWrap, mvL);   // Cell sizes the drawing, so it comes along into the Move bar
+  showHint("Drag to move it. Cell changes its size.", true); render();
+}
+function endMove(keep){
+  if(!moving) return;
+  if(!keep) restoreSnap(moving.before);
+  else { undoStack.push(moving.before); if(undoStack.length > 100) undoStack.shift(); redoStack = []; updateHistoryButtons(); }
+  moving = null; moveDrag = null; movebar.style.display = "none";
+  beckSeg.after(cellWrap); document.getElementById("rules").style.display = "";
+  showHint(""); save(); render();
+}
+// quarter turn of every cell and of its link bits (cw: up -> right -> down -> left, ur -> dr -> dl -> ul),
+// about the middle of the drawing itself, so it turns in place
+function turnMove(cw){
+  const D = DrawnCodes;
+  const ring = [[D.UP, D.RIGHT], [D.RIGHT, D.DOWN], [D.DOWN, D.LEFT], [D.LEFT, D.UP], [D.UR, D.DR], [D.DR, D.DL], [D.DL, D.UL], [D.UL, D.UR]];
+  const bits = code => { let out = code & D.TOUCHED; for(const [a, b] of ring) if(code & (cw ? a : b)) out |= (cw ? b : a); return out; };
+  const cur = moving.base.map(list => list.map(([r, c, code]) => [r + moving.dr, c + moving.dc, code]));   // fold the slide in
+  let r0 = Infinity, r1 = -Infinity, c0 = Infinity, c1 = -Infinity;
+  for(const l of cur) for(const [r, c] of l){ r0 = Math.min(r0, r); r1 = Math.max(r1, r); c0 = Math.min(c0, c); c1 = Math.max(c1, c); }
+  const sum = Math.floor((c0 + c1 + r0 + r1 + 2) / 2), dif = Math.floor((r0 + r1 - c0 - c1) / 2);   // pivot, snapped to whole cells
+  moving.base = cur.map(list => list.map(([r, c, code]) => cw ? [c + dif, sum - r - 1, bits(code)] : [sum - c - 1, r - dif, bits(code)]));
+  moving.dr = moving.dc = 0; applyMove();
+}
 function syncBeck(){
   if(!BECK) return;
+  buildStack();
   const L = C2L(ink), b = design.beck;
   b45.classList.toggle("on", b.a45[L]); b90.classList.toggle("on", b.a90[L]); bFill.classList.toggle("on", b.fill[L]); bSnap.classList.toggle("on", b.snap);
   cellMm.value = b.cell;
@@ -2808,6 +2899,9 @@ if(BECK){
   flag(b45, "a45"); flag(b90, "a90"); flag(bFill, "fill");
   bSnap.onclick = () => { design.beck.snap = !design.beck.snap; syncBeck(); save(); };
   cellMm.addEventListener("input", () => { const v = parseFloat(cellMm.value); if(v >= 2 && v <= 12){ design.beck.cell = v; save(); render(); } });
+  btnMove.onclick = () => startMove();
+  mvL.onclick = () => turnMove(false); mvR.onclick = () => turnMove(true);
+  mvDone.onclick = () => endMove(true); mvCancel.onclick = () => endMove(false);
   // Drawn Codes keeps its drawing in this browser under the same site, so it can be read directly.
   btnFromCodes.onclick = () => {
     let d = null; try{ d = JSON.parse(localStorage.getItem("drawncodes")); }catch(e){}
@@ -2816,14 +2910,15 @@ if(BECK){
     let r0 = Infinity, r1 = -Infinity, c0 = Infinity, c1 = -Infinity;
     for(const l of lists) for(const [r, c] of l || []){ r0 = Math.min(r0, r); r1 = Math.max(r1, r); c0 = Math.min(c0, c); c1 = Math.max(c1, c); }
     const g = gridGeom(), dr = Math.round(g.ny / 2 - (r0 + r1 + 1) / 2), dc = Math.round(g.nx / 2 - (c0 + c1 + 1) / 2);
-    commit(() => {
+    const before = snapshot();
+    (fn => fn())(() => {
       gridLayers.forEach((m, i) => m.restore((lists[i] || []).map(([r, c, code]) => [r + dr, c + dc, code])));
       for(const k of ["a45", "a90", "fill"]) if(Array.isArray(d[k === "fill" ? "fill" : k])) design.beck[k] = [0, 1, 2, 3].map(i => d[k][i] !== false);
       if(Array.isArray(d.order) && new Set(d.order).size === 4) design.beck.order = d.order.slice();
     });
-    syncBeck(); render();
+    syncBeck(); startMove(before);
     const over = (c1 - c0 + 1) * g.cell > spec.width || (r1 - r0 + 1) * g.cell > spec.length;
-    showHint(`Brought in ${c1 - c0 + 1} × ${r1 - r0 + 1} cells, centred.` + (over ? " It is bigger than the case: make Cell smaller." : ""));
+    showHint(`Brought in ${c1 - c0 + 1} × ${r1 - r0 + 1} cells. Drag to place it, then Done.` + (over ? " It is bigger than the case: make Cell smaller." : ""), true);
   };
 }
 
@@ -3795,13 +3890,17 @@ window.addEventListener("keydown", e => {
   else if(e.key === "Escape"){ closeSheet(); viewer.classList.remove("open"); }
 });
 
+appDraw.onclick = () => { if(BECK) location.href = "../"; else closeSheet(); };
+appBeck.onclick = () => { if(!BECK) location.href = "beck/"; else closeSheet(); };
+(BECK ? appBeck : appDraw).classList.add("on");
+
 // ---------- boot ----------
 load();
 if(BECK){
   beckInit();
   document.querySelector("header h1").textContent = "Beck";
   ruleSeg.style.display = "none"; document.querySelector(".width").style.visibility = "hidden";
-  for(const el of [beckSeg, cellWrap, btnFromCodes]) el.style.display = "";
+  for(const el of [beckSeg, cellWrap, btnFromCodes, btnMove, document.getElementById("stack")]) el.style.display = "";
 }
 buildInks();
 syncRules();

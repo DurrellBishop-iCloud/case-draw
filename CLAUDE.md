@@ -66,6 +66,10 @@ mode with its own drawing surface. Tag `draw-v1.7.0` = Case Draw before Beck exi
   -> a `{c, fill}` shape. ALL CaseGeo calls in the app must take `geoDesign()`, not `design`.
 - Undo snapshots (`snapshot()/restoreSnap()`) cover strokes and grids. "From Drawn Codes" reads the `drawncodes`
   localStorage key (same origin on dbgh.uk) and centres that drawing on the case.
+- v1.9.0: stacking dots (`#stack`, top dot = top layer, tap picks the colour, drag reorders `design.beck.order`;
+  pointermove gated on a pressed flag, the Drawn Codes hover bug); Move mode (`moving`: slide all grids by cells,
+  quarter turns about the drawing's own bbox centre with link bits rotated; Import drops straight into it; Cell is
+  reparented into the Move bar); app switcher at the top of Settings.
 - Tests: `node test/manifold.js` covers shared geometry; Beck tracing needs a browser (Playwright WebKit was used:
   draw by mouse drags, call `window.__beckExport()` for the Save bytes, count non-manifold edges, then the Orca CLI).
 
