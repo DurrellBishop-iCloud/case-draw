@@ -46,6 +46,29 @@ allInkRegion folds strokes in order). The CASE is not a colour of its own: `desi
 of the four it is made of (fifth toolbar control, tap to cycle; geo keyColor("case") reads it). Text can be flagged
 `top: true` (Text option "Stays on top", default on): `orderedStrokes` draws those last, in canvas, SVG and geometry.
 
+## Two apps from one source: Case Draw and Beck (v1.8.0)
+`build.py` builds `index.html` (Case Draw, freehand) and `beck/index.html` (Beck, named after Harry Beck's tube map)
+from the SAME `src/index.src.html`; the page sets `window.APP_MODE`, the app reads `const BECK`. Everything except
+the drawing surface is shared (geometry, 3D, export, colours, case, cutouts, photo, text, mirrors), so a fix lands
+in both. Separate saved designs (`casedraw.v1` / `casedraw.beck.v1`). Do NOT fork the repo or copy the app: the
+user's plan is more siblings later ("Ken", "Margaret", after the associated designers) built the same way, each a
+mode with its own drawing surface. Tag `draw-v1.7.0` = Case Draw before Beck existed.
+- Beck draws on the Drawn Codes grid (the user's own system, github.com/DurrellBishop-iCloud/drawn-codes, live at
+  dbgh.uk/drawn-codes). Its web engine is vendored in `src/vendor/drawncodes/` (see README.txt there); build.py
+  strips the ES-module syntax and exposes `window.DrawnCodes`, in the Beck page only.
+- Four `GridModel`s, one per colour (layer 0-2 = inks, 3 = colour 4 / panel colour = knock-out), stacking
+  `design.beck.order`, per-colour 45 / 90 / Fill flags, global Snap, `cell` mm (default 4; stroke = half a cell).
+  Grid centred on the case (centre on a cell boundary); mirror lines snap to half cells and every cell operation
+  is repeated per mirror (`eachMirror`). Pointer stepping (snap offset, 0.38 corner zones for diagonals) is a port
+  of Drawn Codes' main.js.
+- Canvas draws each layer's `traceSilhouette` Path2D (coarse while the finger is down). Geometry gets
+  `geoDesign()`: design.strokes (photo/text) + each layer traced at ~0.1 mm, simplified, `CaseGeo.ringsToRegion`
+  -> a `{c, fill}` shape. ALL CaseGeo calls in the app must take `geoDesign()`, not `design`.
+- Undo snapshots (`snapshot()/restoreSnap()`) cover strokes and grids. "From Drawn Codes" reads the `drawncodes`
+  localStorage key (same origin on dbgh.uk) and centres that drawing on the case.
+- Tests: `node test/manifold.js` covers shared geometry; Beck tracing needs a browser (Playwright WebKit was used:
+  draw by mouse drags, call `window.__beckExport()` for the Save bytes, count non-manifold edges, then the Orca CLI).
+
 ## Code layout
 - `index.html` — GENERATED. Do not edit by hand. It's what Pages serves.
 - `src/index.src.html` — the app: canvas drawing (vector strokes in mm), settings JSON, 3D preview (three.js r128

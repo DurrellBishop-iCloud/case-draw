@@ -1,4 +1,6 @@
-# Case Draw
+# Case Draw and Beck
+
+Two apps from one source: **Case Draw** (`/`, freehand) and **Beck** (`/beck/`, drawn on the Drawn Codes grid: 90° and 45° lines, filled enclosures). `python3 build.py` builds both pages.
 
 Finger-draw a design on a Nothing Phone (3) case and print it: a one-piece case body plus a glued-on decorated panel, exported as 3MF for Snapmaker Orca / Bambu Studio.
 

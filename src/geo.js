@@ -191,6 +191,11 @@
     return region;
   }
 
+  // Closed rings combined even-odd (outlines and their holes, in any order or direction) -> MultiPolygon.
+  function ringsToRegion(rings) {
+    const polys = rings.filter(r => r.length >= 4).map(r => [[r]]);
+    return polys.length ? ops.xor(...polys) : [];
+  }
   // ---------- pixel masks -> regions ----------
   // mask[j * nx + i] truthy = cell (i, j) filled; cells are g mm square from (x0, y0), y down. Returns a MultiPolygon
   // in mm: the cell edges between filled and empty, chained into loops (turning right where two cells touch only at a
@@ -1023,5 +1028,5 @@ ${items} </build>
   }
 
 
-  return { orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
+  return { ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
 });

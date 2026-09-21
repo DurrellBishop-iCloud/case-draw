@@ -85,6 +85,8 @@
   .width{display:flex; align-items:center; gap:8px; flex:1; min-width:0}
   .rules{flex-wrap:wrap; row-gap:6px}
   .rules > *{flex:none}
+  .rules .num{display:inline-flex; align-items:center; gap:4px; font-size:13px}
+  .rules .num input{width:54px; font:inherit; font-size:15px; padding:6px; border:1px solid var(--line); border-radius:8px}
   .rules .sep{width:1px; align-self:stretch; background:var(--line); margin:4px 2px}
   @media (max-width: 480px){ .rules .sep:first-of-type{display:none} }
   .placebar{flex-wrap:wrap; background:var(--bed); border-radius:10px; padding:8px}
@@ -160,7 +162,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.7.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.8.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -181,18 +183,26 @@
 
 <footer>
   <div class="row rules" id="rules">
-    <div class="seg" role="group" aria-label="Drawing rule">
+    <div class="seg" id="ruleSeg" role="group" aria-label="Drawing rule">
       <button data-rule="free" class="on">Free</button>
       <button data-rule="line">Line</button>
       <button data-rule="vstripe">V stripes</button>
       <button data-rule="hstripe">H stripes</button>
     </div>
+    <div class="seg" id="beckSeg" role="group" aria-label="Grid drawing" style="display:none">
+      <button id="b45" title="Allow 45° lines in this colour">45</button>
+      <button id="b90" title="Allow 90° lines in this colour">90</button>
+      <button id="bFill" title="Fill enclosed areas in this colour">Fill</button>
+      <button id="bSnap" title="Start every stroke from the centre of its cell">Snap</button>
+    </div>
+    <label class="num" id="cellWrap" style="display:none">Cell <input type="number" id="cellMm" min="2" max="12" step="0.5" inputmode="decimal"> mm</label>
     <span class="sep"></span>
     <button id="mirX" aria-pressed="false" title="Mirror left and right">Mirror ↔</button>
     <button id="mirY" aria-pressed="false" title="Mirror top and bottom">Mirror ↕</button>
     <span class="sep"></span>
     <button id="btnPhoto">Photo</button>
     <button id="btnText">Text</button>
+    <button id="btnFromCodes" style="display:none" title="Bring in the drawing saved in Drawn Codes on this device">From Drawn Codes</button>
     <input type="file" id="photoIn" accept="image/*" hidden>
   </div>
   <div class="row placebar" id="placebar" style="display:none">
@@ -427,7 +437,9 @@ const DEFAULT_DESIGN = {
   textStyle: { family: "system-ui, -apple-system, Helvetica, Arial, sans-serif", weight: 700, size: 8, lead: 120, track: 0, align: "center" },
   strokes: []            // { c: inkIndex, w: mm, pts: [[x,y],...] } or a filled shape { c, fill: MultiPolygon mm }
 };
-const STORE_KEY = "casedraw.v1";
+// One source, two apps (build.py sets APP_MODE): Case Draw draws freehand; Beck draws on the Drawn Codes grid.
+const BECK = window.APP_MODE === "beck";
+const STORE_KEY = BECK ? "casedraw.beck.v1" : "casedraw.v1";
 
 // ---------- state ----------
 let spec = clone(DEFAULT_SPEC);
@@ -456,11 +468,13 @@ function load(){
     if(Array.isArray(design.stripeColors)) design.stripeColors = [...new Set(design.stripeColors.map(k => k === "case" ? "plate" : k))];
   }catch(e){ /* storage unavailable; run in memory */ }
 }
+// what gets saved: in Beck the grids are written back into the design first
+function designForSave(){ if(BECK) design.beck.layers = gridLayers.map(m => m.serialize()); return design; }
 let saveT = null;
 function save(){
   clearTimeout(saveT);
   saveT = setTimeout(() => {
-    try{ localStorage.setItem(STORE_KEY, JSON.stringify({ version: 1, spec, design })); }catch(e){}
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify({ version: 1, spec, design: designForSave() })); }catch(e){}
   }, 250);
 }
 
@@ -570,7 +584,9 @@ function render(){
   for(const c of spec.cutouts) cutSubpath(c, im);
   ctx.clip("evenodd");
   ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if(BECK) drawGridLines();
   for(const s of design.strokes) if(!s.top) drawStroke(s);
+  if(BECK) drawGridLayers();
   if(live) for(const m of mirrored(live)) drawStroke(m);
   for(const s of design.strokes) if(s.top) drawStroke(s);
   if(placing) drawPlacing();
@@ -666,7 +682,7 @@ canvas.addEventListener("pointerdown", e => {
   canvas.setPointerCapture(e.pointerId);
   if(touches.size === 2){
     // second finger: abandon any stroke in progress and start a pinch
-    live = null; dragCut = null; activeId = null; placeDrag = null;
+    live = null; dragCut = null; activeId = null; placeDrag = null; if(BECK) gridCancel();
     const [a, b] = [...touches.values()];
     pinch = { d0: Math.max(10, Math.hypot(a[0] - b[0], a[1] - b[1])), mid0: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], scale0: view.scale, ox0: view.ox, oy0: view.oy,
               a0: Math.atan2(b[1] - a[1], b[0] - a[0]), stamp: placing ? { w: placing.w, rot: placing.rot } : null };
@@ -688,6 +704,8 @@ canvas.addEventListener("pointerdown", e => {
     mirDrag = { kind: mh.kind, dx: mirCX() - x, dy: mirCY() - y };
   }else if(placing){
     placeDrag = { dx: placing.cx - x, dy: placing.cy - y };
+  }else if(BECK && (tool === "draw" || tool === "erase")){
+    gridBegin(x, y, tool === "erase");
   }else if(tool === "draw"){
     liveStart = [round2(x), round2(y)];
     live = { c: ink, w: width, pts: rulePts(liveStart, liveStart) };
@@ -726,6 +744,8 @@ canvas.addEventListener("pointermove", e => {
       moveMirror(mirDrag.kind, x + mirDrag.dx, y + mirDrag.dy);
     }else if(placing){
       if(placeDrag){ placing.cx = x + placeDrag.dx; placing.cy = y + placeDrag.dy; }
+    }else if(BECK && gridStroke){
+      gridTo(x, y);
     }else if(tool === "draw" && live){
       if(design.rule === "free"){
         const last = live.pts[live.pts.length - 1];
@@ -748,6 +768,7 @@ function endPointer(e){
   if(e.pointerId !== activeId) return;
   activeId = null; placeDrag = null;
   if(mirDrag){ mirDrag = null; save(); setTimeout(() => showHint(""), 1500); render(); return; }
+  if(BECK && gridStroke){ gridEnd(); render(); return; }
   if(tool === "draw" && live && !placing){
     const add = mirrored(live);
     commit(() => design.strokes.push(...add));
@@ -775,8 +796,14 @@ function round2(v){ return Math.round(v * 100) / 100; }
 function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
 // ---------- history ----------
+// A restore point: the strokes, plus (in Beck) a copy of each colour's grid.
+function snapshot(){ return BECK ? { strokes: design.strokes.slice(), grid: gridLayers.map(m => new Map(m.cells)) } : design.strokes.slice(); }
+function restoreSnap(sn){
+  if(!BECK){ design.strokes = sn; return; }
+  design.strokes = sn.strokes; gridLayers.forEach((m, i) => { m.cells = new Map(sn.grid[i]); m.version++; });
+}
 function commit(fn){
-  undoStack.push(design.strokes.slice());
+  undoStack.push(snapshot());
   if(undoStack.length > 100) undoStack.shift();
   redoStack = [];
   fn();
@@ -784,14 +811,14 @@ function commit(fn){
 }
 function undo(){
   if(!undoStack.length) return;
-  redoStack.push(design.strokes.slice());
-  design.strokes = undoStack.pop();
+  redoStack.push(snapshot());
+  restoreSnap(undoStack.pop());
   updateHistoryButtons(); save(); render();
 }
 function redo(){
   if(!redoStack.length) return;
-  undoStack.push(design.strokes.slice());
-  design.strokes = redoStack.pop();
+  undoStack.push(snapshot());
+  restoreSnap(redoStack.pop());
   updateHistoryButtons(); save(); render();
 }
 function updateHistoryButtons(){
@@ -825,7 +852,7 @@ let eraseBatchOpen = false;
 function eraseAt(x, y){
   const keep = design.strokes.filter(s => !strokeHit(s, x, y));
   if(keep.length === design.strokes.length) return;
-  if(!eraseBatchOpen){ undoStack.push(design.strokes.slice()); redoStack = []; eraseBatchOpen = true; }
+  if(!eraseBatchOpen){ undoStack.push(snapshot()); redoStack = []; eraseBatchOpen = true; }
   design.strokes = keep;
   updateHistoryButtons(); save();
 }
@@ -863,6 +890,153 @@ chipDia.addEventListener("input", () => {
 });
 chipDia.addEventListener("change", () => { syncSpecText(); save(); });
 
+// ---------- Beck: drawing on the Drawn Codes grid ----------
+// Four grids, one per colour (layer 0-2 = inks 1-3, layer 3 = colour 4, the panel colour, which knocks out what is
+// under it). A finger crossing from cell to cell links them at 90 or 45 degrees; the Drawn Codes engine turns the
+// links into rounded strokes and filled enclosures. The grid is centred on the case so mirrors land on cells.
+const gridLayers = BECK ? [0, 1, 2, 3].map(() => new DrawnCodes.GridModel()) : [];
+const L2C = L => L < 3 ? L : -1, C2L = c => c >= 0 ? c : 3;
+const BECK_DEFAULT = { cell: 4, snap: true, a45: [true, true, true, true], a90: [true, true, true, true], fill: [true, true, true, true], order: [0, 1, 2, 3], layers: [[], [], [], []] };
+function beckInit(){
+  design.beck = Object.assign(clone(BECK_DEFAULT), design.beck || {});
+  gridLayers.forEach((m, i) => { m.restore(design.beck.layers[i] || []); m.undoStack = []; });
+}
+// cell (r, c) covers x from ox + c*cell; the case centre sits on a cell boundary
+function gridGeom(){
+  const cell = clamp((design.beck && design.beck.cell) || 4, 2, 12), m = frameOuter() + cell;
+  const nx = Math.ceil((spec.width / 2 + m) / cell), ny = Math.ceil((spec.length / 2 + m) / cell);
+  return { cell, nx: 2 * nx, ny: 2 * ny, ox: spec.width / 2 - nx * cell, oy: spec.length / 2 - ny * cell };
+}
+// Outlines of one colour's grid drawing, cached until that grid (or the fidelity asked for) changes.
+const silCache = [null, null, null, null];
+function layerSil(L, S){
+  const m = gridLayers[L]; if(m.isEmpty) return null;
+  const f = !!design.beck.fill[L], c = silCache[L];
+  if(c && c.ver === m.version && c.S === S && c.f === f) return c.sil;
+  const sil = DrawnCodes.traceSilhouette(m, f ? DrawnCodes.computeFill(m) : null, S);
+  silCache[L] = { ver: m.version, S, f, sil }; return sil;
+}
+function drawGridLines(){
+  const g = gridGeom();
+  ctx.save(); ctx.beginPath();
+  for(let i = 0; i <= g.nx; i++){ ctx.moveTo(g.ox + i * g.cell, g.oy); ctx.lineTo(g.ox + i * g.cell, g.oy + g.ny * g.cell); }
+  for(let j = 0; j <= g.ny; j++){ ctx.moveTo(g.ox, g.oy + j * g.cell); ctx.lineTo(g.ox + g.nx * g.cell, g.oy + j * g.cell); }
+  ctx.lineWidth = 1 / view.scale; ctx.strokeStyle = "rgba(0,0,0,.09)"; ctx.stroke(); ctx.restore();
+}
+function drawGridLayers(){
+  const g = gridGeom();
+  for(const L of design.beck.order){
+    // the colour being drawn right now is traced coarsely so it keeps up with the finger
+    const sil = layerSil(L, gridStroke && gridStroke.L === L ? 10 : 20); if(!sil) continue;
+    ctx.save(); ctx.translate(g.ox + 0.5 * g.cell, g.oy + 0.5 * g.cell); ctx.scale(g.cell, g.cell);
+    ctx.fillStyle = inkCol(L2C(L)); ctx.fill(sil.path, "evenodd"); ctx.restore();
+  }
+}
+// The design the geometry sees: photo and text shapes, then each colour's grid drawing as a filled shape, traced
+// finely (about 0.1 mm). Cached, because the geometry caches on the identity of the strokes list.
+let geoCache = { sig: null, strokes: null };
+function geoDesign(){
+  if(!BECK) return design;
+  const g = gridGeom(), S = clamp(Math.round(g.cell / 0.11), 16, 44);
+  const sig = [g.cell, g.ox, g.oy, design.beck.order.join(""), design.beck.fill.join(""), gridLayers.map(m => m.version).join("."), design.strokes.length].join("|");
+  if(geoCache.sig !== sig || geoCache.ref !== design.strokes){
+    const fills = [];
+    for(const L of design.beck.order){
+      const sil = layerSil(L, S); if(!sil) continue;
+      const rings = sil.loops.map(lp => { const r = lp.map(q => [round2(g.ox + (q[0] + 0.5) * g.cell), round2(g.oy + (q[1] + 0.5) * g.cell)]); r.push(r[0]); return CaseGeo.simplify(r, 0.03); });
+      const fill = CaseGeo.ringsToRegion(rings);
+      if(fill.length) fills.push({ c: L2C(L), fill });
+    }
+    geoCache = { sig, ref: design.strokes, strokes: [...design.strokes, ...fills] };
+  }
+  return Object.assign({}, design, { strokes: geoCache.strokes });
+}
+// --- strokes on the grid (ported from Drawn Codes: snap, 45-degree corner zones, stepping) ---
+let gridStroke = null;   // { L, erasing, snap: [dx, dy] mm, last: [x, y] mm, r, c, inCorner, cr, cc, before, changed }
+const CORNER_ZONE = 0.38;
+// every cell operation is repeated in each mirror image
+function eachMirror(fn){
+  const g = gridGeom(), a2 = Math.round(2 * (mirCX() - g.ox) / g.cell), b2 = Math.round(2 * (mirCY() - g.oy) / g.cell);
+  const ts = [[0, 0]]; if(design.mirrorX) ts.push([1, 0]); if(design.mirrorY) for(const t of ts.slice()) ts.push([t[0], 1]);
+  for(const [mx, my] of ts) fn((r, c) => [my ? b2 - 1 - r : r, mx ? a2 - 1 - c : c]);
+}
+const inGrid = (r, c) => { const g = gridGeom(); return r >= 0 && c >= 0 && r < g.ny && c < g.nx; };
+function gridBegin(x, y, erasing){
+  const g = gridGeom(), L = C2L(ink), wx = (x - g.ox) / g.cell, wy = (y - g.oy) / g.cell;
+  const snap = design.beck.snap && !erasing ? [(Math.floor(wx) + 0.5 - wx) * g.cell, (Math.floor(wy) + 0.5 - wy) * g.cell] : [0, 0];
+  gridStroke = { L, erasing, snap, last: [x + snap[0], y + snap[1]], r: Math.floor(wy), c: Math.floor(wx), inCorner: false, cr: 0, cc: 0, before: snapshot(), v0: gridLayers.map(m => m.version).join(".") + "|" + design.strokes.length };
+  const m = gridLayers[L], s = gridStroke;
+  if(inGrid(s.r, s.c)) eachMirror(T => { const [r, c] = T(s.r, s.c); if(erasing) m.erase(r, c); else m.touch(r, c); });
+  if(erasing) eraseFillsAt(x, y);
+}
+function gridTo(x, y){
+  const s = gridStroke, g = gridGeom(); x += s.snap[0]; y += s.snap[1];
+  const dist = Math.hypot(x - s.last[0], y - s.last[1]), steps = Math.floor(dist / (g.cell / 4)) + 1;
+  for(let i = 1; i <= steps; i++){ const t = i / steps; gridVisit(s.last[0] + (x - s.last[0]) * t, s.last[1] + (y - s.last[1]) * t); }
+  s.last = [x, y];
+  if(s.erasing) eraseFillsAt(x, y);
+}
+function gridVisit(px, py){
+  const s = gridStroke, g = gridGeom(), m = gridLayers[s.L], wx = (px - g.ox) / g.cell, wy = (py - g.oy) / g.cell;
+  const c = Math.floor(wx), r = Math.floor(wy);
+  if(!s.erasing && design.beck.a45[s.L]){
+    const kc = Math.round(wx), kr = Math.round(wy);
+    if(Math.abs(wx - kc) + Math.abs(wy - kr) <= CORNER_ZONE){ if(!s.inCorner){ s.inCorner = true; s.cr = kr; s.cc = kc; } return; }
+    if(s.inCorner){
+      s.inCorner = false;
+      if((r !== s.r || c !== s.c) && s.cr === Math.max(r, s.r) && s.cc === Math.max(c, s.c) && Math.abs(r - s.r) === 1 && Math.abs(c - s.c) === 1){
+        if(inGrid(r, c) && inGrid(s.r, s.c)) eachMirror(T => { const [r0, c0] = T(s.r, s.c), [r1, c1] = T(r, c); m.connectDiagonal(r0, c0, r1, c1); });
+        s.r = r; s.c = c; return;
+      }
+    }
+  }
+  if(c === s.c && r === s.r) return;
+  if(!s.erasing && !design.beck.a90[s.L]){ s.c = c; s.r = r; return; }
+  let cc = s.c, cr = s.r;
+  while(cc !== c || cr !== r){
+    const dx = c - cc, dy = r - cr, nc = Math.abs(dx) >= Math.abs(dy) && dx ? cc + Math.sign(dx) : cc, nr = nc === cc ? cr + Math.sign(dy) : cr;
+    if(inGrid(nr, nc) && (s.erasing || inGrid(cr, cc))) eachMirror(T => { const [r0, c0] = T(cr, cc), [r1, c1] = T(nr, nc); if(s.erasing) m.erase(r1, c1); else m.connect(r0, c0, r1, c1); });
+    cc = nc; cr = nr;
+  }
+  s.c = c; s.r = r;
+}
+// the eraser also takes out a photo or text shape it touches
+function eraseFillsAt(x, y){ const keep = design.strokes.filter(st => !strokeHit(st, x, y)); if(keep.length !== design.strokes.length) design.strokes = keep; }
+function gridEnd(){
+  const s = gridStroke; gridStroke = null;
+  if(s.v0 !== gridLayers.map(m => m.version).join(".") + "|" + design.strokes.length){ undoStack.push(s.before); if(undoStack.length > 100) undoStack.shift(); redoStack = []; updateHistoryButtons(); save(); }
+}
+function gridCancel(){ if(!gridStroke) return; restoreSnap(gridStroke.before); gridStroke = null; }
+function syncBeck(){
+  if(!BECK) return;
+  const L = C2L(ink), b = design.beck;
+  b45.classList.toggle("on", b.a45[L]); b90.classList.toggle("on", b.a90[L]); bFill.classList.toggle("on", b.fill[L]); bSnap.classList.toggle("on", b.snap);
+  cellMm.value = b.cell;
+}
+if(BECK){
+  const flag = (btn, key) => btn.onclick = () => { const L = C2L(ink); design.beck[key][L] = !design.beck[key][L]; if(tool !== "draw") setTool("draw"); syncBeck(); save(); render(); };
+  flag(b45, "a45"); flag(b90, "a90"); flag(bFill, "fill");
+  bSnap.onclick = () => { design.beck.snap = !design.beck.snap; syncBeck(); save(); };
+  cellMm.addEventListener("input", () => { const v = parseFloat(cellMm.value); if(v >= 2 && v <= 12){ design.beck.cell = v; save(); render(); } });
+  // Drawn Codes keeps its drawing in this browser under the same site, so it can be read directly.
+  btnFromCodes.onclick = () => {
+    let d = null; try{ d = JSON.parse(localStorage.getItem("drawncodes")); }catch(e){}
+    const lists = d && Array.isArray(d.layers) ? d.layers.slice(0, 4) : [];
+    if(!lists.some(l => l && l.length)){ showHint("No Drawn Codes drawing found in this browser. Draw one at dbgh.uk/drawn-codes first."); return; }
+    let r0 = Infinity, r1 = -Infinity, c0 = Infinity, c1 = -Infinity;
+    for(const l of lists) for(const [r, c] of l || []){ r0 = Math.min(r0, r); r1 = Math.max(r1, r); c0 = Math.min(c0, c); c1 = Math.max(c1, c); }
+    const g = gridGeom(), dr = Math.round(g.ny / 2 - (r0 + r1 + 1) / 2), dc = Math.round(g.nx / 2 - (c0 + c1 + 1) / 2);
+    commit(() => {
+      gridLayers.forEach((m, i) => m.restore((lists[i] || []).map(([r, c, code]) => [r + dr, c + dc, code])));
+      for(const k of ["a45", "a90", "fill"]) if(Array.isArray(d[k === "fill" ? "fill" : k])) design.beck[k] = [0, 1, 2, 3].map(i => d[k][i] !== false);
+      if(Array.isArray(d.order) && new Set(d.order).size === 4) design.beck.order = d.order.slice();
+    });
+    syncBeck(); render();
+    const over = (c1 - c0 + 1) * g.cell > spec.width || (r1 - r0 + 1) * g.cell > spec.length;
+    showHint(`Brought in ${c1 - c0 + 1} × ${r1 - r0 + 1} cells, centred.` + (over ? " It is bigger than the case: make Cell smaller." : ""));
+  };
+}
+
 // ---------- drawing rules and symmetry ----------
 let liveStart = null;
 // The points of the stroke being drawn, from where the finger went down (a) to where it is now (b).
@@ -874,8 +1048,9 @@ function rulePts(a, b){
   return [a];
 }
 // Where the mirror lines are (they can be dragged off-centre by their handles).
-const mirCX = () => design.mirrorCX != null ? design.mirrorCX : spec.width / 2;
-const mirCY = () => design.mirrorCY != null ? design.mirrorCY : spec.length / 2;
+// (In Beck they snap to half cells, so a mirrored cell is always a whole cell.)
+const mirCX = () => { const v = design.mirrorCX != null ? design.mirrorCX : spec.width / 2; if(!BECK) return v; const g = gridGeom(); return g.ox + Math.round((v - g.ox) / g.cell * 2) / 2 * g.cell; };
+const mirCY = () => { const v = design.mirrorCY != null ? design.mirrorCY : spec.length / 2; if(!BECK) return v; const g = gridGeom(); return g.oy + Math.round((v - g.oy) / g.cell * 2) / 2 * g.cell; };
 // A stroke or filled shape plus its mirror copies, duplicates dropped (a V stripe mirrored top-bottom is itself).
 function mirrored(s){
   const W = spec.width, L = spec.length, out = [s];
@@ -1235,7 +1410,7 @@ btnFit.onclick = () => { fitView(); render(); };
 const toolBtns = { draw: toolDraw, erase: toolErase, cutouts: toolCut };
 const hints = {
   draw: "Draw with your finger. Strokes are clipped to the plate.",
-  erase: "Tap or drag over a stroke to remove it.",
+  erase: BECK ? "Drag over cells to rub out the selected colour." : "Tap or drag over a stroke to remove it.",
   cutouts: "Drag a cutout to move it. Use the slider for a round one's diameter."
 };
 function setTool(t){
@@ -1252,8 +1427,8 @@ toolErase.onclick = () => {
   const now = performance.now(), dbl = now - eraseTap < 400;
   eraseTap = dbl ? 0 : now;
   if(!dbl){ setTool("erase"); showHint("Tap or drag over a stroke to remove it. Double-tap Erase to clear everything."); return; }
-  if(!design.strokes.length){ showHint("Nothing to clear."); return; }
-  commit(() => { design.strokes = []; });
+  if(!design.strokes.length && !(BECK && gridLayers.some(m => !m.isEmpty))){ showHint("Nothing to clear."); return; }
+  commit(() => { design.strokes = []; if(BECK) gridLayers.forEach(m => m.clear()); });
   render(); showHint("Cleared. Undo brings it back.");
 };
 toolCut.onclick = () => setTool("cutouts");
@@ -1286,6 +1461,7 @@ function buildInks(){
   };
   design.inks.forEach((col, i) => swatch(i, "ink", "Ink " + (i + 1)));
   swatch(-1, "ink plate", "Colour 4 (also the panel background)");
+  syncBeck();
   caseBtn = document.createElement("button");
   caseBtn.className = "ink casesel"; caseBtn.setAttribute("aria-label", "Case colour"); caseBtn.title = "Case colour: tap to change";
   caseBtn.onclick = () => {
@@ -1421,7 +1597,7 @@ function showCopy(name, text){
 function stamp(){ return new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-"); }
 btnExportJson.onclick = () => {
   fileMsg.textContent = "";
-  download(`case-${stamp()}.json`, JSON.stringify({ version: 1, spec, design }, null, 2), "application/json")
+  download(`case-${stamp()}.json`, JSON.stringify({ version: 1, spec, design: designForSave() }, null, 2), "application/json")
     .then(r => { fileMsg.textContent = saveMsg[r] || ""; });
 };
 btnImportJson.onclick = () => fileIn.click();
@@ -1432,6 +1608,7 @@ fileIn.addEventListener("change", async () => {
     if(o.spec) spec = validateSpec(o.spec);
     if(o.design) design = Object.assign(clone(DEFAULT_DESIGN), o.design);
     undoStack = []; redoStack = []; ink = 0;
+    if(BECK) beckInit();
     buildInks(); syncSpecText(); syncColorInputs(); syncMode(); updateHistoryButtons(); fitView(); save(); render();
     fileMsg.textContent = `Opened ${f.name} (${design.strokes.length} strokes).`;
   }catch(e){ fileMsg.textContent = "Couldn't open that file: " + e.message; }
@@ -1460,7 +1637,7 @@ btnExportSvg.onclick = () => {
     return `M ${c.x - R} ${c.y} a ${R} ${R} 0 1 0 ${2 * R} 0 a ${R} ${R} 0 1 0 ${-2 * R} 0`;
   }).join(" ");
   const plate = `M ${r} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${l - r} A ${r} ${r} 0 0 1 ${w - r} ${l} H ${r} A ${r} ${r} 0 0 1 0 ${l - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
-  const paths = CaseGeo.orderedStrokes(design.strokes).map(s => s.fill
+  const paths = CaseGeo.orderedStrokes(geoDesign().strokes).map(s => s.fill
     ? `<path d="${s.fill.map(poly => poly.map(r => "M " + r.map(q => q[0] + " " + q[1]).join(" L ") + " Z").join(" ")).join(" ")}" fill="${inkCol(s.c)}" stroke="none" fill-rule="evenodd"/>`
     : `<path d="${svgPathForStroke(s)}" stroke="${inkCol(s.c)}" stroke-width="${s.w}"/>`).join("\n    ");
   const inks = `  <g id="drawing" fill="none" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#plate-clip)">\n    ${paths}\n  </g>`;
@@ -1477,9 +1654,9 @@ ${inks}
 };
 
 btnClear.onclick = () => {
-  if(!design.strokes.length) return;
+  if(!design.strokes.length && !(BECK && gridLayers.some(m => !m.isEmpty))) return;
   if(!confirm("Remove every stroke? You can undo this.")) return;
-  commit(() => { design.strokes = []; });
+  commit(() => { design.strokes = []; if(BECK) gridLayers.forEach(m => m.clear()); });
   render(); closeSheet();
 };
 
@@ -1493,7 +1670,7 @@ btnExport3mf.onclick = () => {
   btnExport3mf.disabled = true;
   setTimeout(async () => {
     try{
-      const built = CaseGeo.buildParts(spec, design);
+      const built = CaseGeo.buildParts(spec, geoDesign());
       const bytes = CaseGeo.to3MF(built.parts, `${spec.phone} case back`);
       const tris = built.parts.reduce((n, p) => n + p.mesh.triCount(), 0);
       const r = await download(`case-panel-${design.mode}-${stamp()}.3mf`, bytes, "model/3mf");
@@ -1665,12 +1842,12 @@ function meshToThree(m, color){
   return new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05, flatShading: true }));
 }
 function buildPreview(){
-  const built = CaseGeo.buildParts(spec, design);
+  const built = CaseGeo.buildParts(spec, geoDesign());
   if(three.model){ three.group.remove(three.model); three.model.traverse(o => { if(o.geometry) o.geometry.dispose(); if(o.material) o.material.dispose(); }); }
   const model = new THREE.Group();
   for(const p of built.parts) model.add(meshToThree(p.mesh, p.color));
   if(showFrame){
-    for(const p of CaseGeo.frameInPlateSpace(spec, design)){
+    for(const p of CaseGeo.frameInPlateSpace(spec, geoDesign())){
       model.add(meshToThree(p.mesh, p.color));
     }
   }
@@ -1759,7 +1936,7 @@ btnExportFrame.onclick = () => {
   fileMsg.textContent = "Building case…";
   setTimeout(async () => {
     try{
-      const f = CaseGeo.buildFrame(spec, design);
+      const f = CaseGeo.buildFrame(spec, geoDesign());
       const bytes = CaseGeo.to3MF(f.parts, `${spec.phone} case`);
       const r = await download(`case-body-${stamp()}.3mf`, bytes, "model/3mf");
       fileMsg.textContent = r === "cancelled" ? "" : (r === "nobinary" ? saveMsg.nobinary : `Case ${f.H.toFixed(2)} mm tall, ${f.parts.length} part${f.parts.length > 1 ? "s" : ""}, ${(bytes.length / 1024).toFixed(0)} KB. ` + (saveMsg[r] || ""));
@@ -1791,7 +1968,7 @@ function exportPrint(msgEl){
   msgEl.textContent = "Building case and panel…";
   setTimeout(async () => {
     try{
-      const set = CaseGeo.buildPrintSet(spec, design);
+      const set = CaseGeo.buildPrintSet(spec, geoDesign());
       const bytes = CaseGeo.to3MF(set.parts, `${spec.phone} case`);
       const r = await download(`case-print-${stamp()}.3mf`, bytes, "model/3mf");
       msgEl.textContent = r === "cancelled" ? "" : (r === "nobinary" ? saveMsg.nobinary : `Case and panel, ${set.parts.length} parts, ${(bytes.length / 1024).toFixed(0)} KB. ` + (saveMsg[r] || ""));
@@ -1800,6 +1977,7 @@ function exportPrint(msgEl){
     }catch(e){ msgEl.textContent = "Couldn't build the print file: " + e.message; console.error(e); }
   }, 30);
 }
+window.__beckExport = () => CaseGeo.to3MF(CaseGeo.buildPrintSet(spec, geoDesign()).parts, "test");   // test hook: the bytes Save makes
 btnExportPrint.onclick = () => exportPrint(fileMsg);
 btnSavePrint.onclick = () => exportPrint(viewerNote);
 btnSave.onclick = () => { btnSettings.click(); setTimeout(() => filesHead.scrollIntoView({ block: "start", behavior: "smooth" }), 250); };
@@ -1808,7 +1986,7 @@ btnExportCoupon.onclick = () => {
   fileMsg.textContent = "Building coupon…";
   setTimeout(async () => {
     try{
-      const c = CaseGeo.buildCoupon(spec, design, 32);
+      const c = CaseGeo.buildCoupon(spec, geoDesign(), 32);
       const bytes = CaseGeo.to3MF(c.parts, `${spec.phone} test coupon`);
       const r = await download(`case-coupon-${stamp()}.3mf`, bytes, "model/3mf");
       fileMsg.textContent = r === "cancelled" ? "" : (r === "nobinary" ? saveMsg.nobinary : `Coupon: two objects, ${c.parts.length} parts, ${(bytes.length / 1024).toFixed(0)} KB. ` + (saveMsg[r] || ""));
@@ -1829,6 +2007,12 @@ window.addEventListener("keydown", e => {
 
 // ---------- boot ----------
 load();
+if(BECK){
+  beckInit();
+  document.querySelector("header h1").textContent = "Beck";
+  ruleSeg.style.display = "none"; document.querySelector(".width").style.visibility = "hidden";
+  for(const el of [beckSeg, cellWrap, btnFromCodes]) el.style.display = "";
+}
 buildInks();
 syncRules();
 document.getElementById("subtitle").textContent = `${spec.phone || "Phone"}, back view`;
