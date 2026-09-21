@@ -35,6 +35,16 @@ main multi-colour target) and a Bambu with AMS. Filament: PLA to start.
   polygon-clipping (vendored). Coordinates are snapped to 1 µm after every boolean op for robustness.
 - `build.py` — inlines vendor libs + geo.js into the app → `index.html`. Run it after any src change; commit both.
 
+## 3MF layout (v1.2.4+)
+Written the way Orca / Snapmaker Orca / Bambu Studio save projects: each group (case, panel) is an object whose
+parts live in `3D/Objects/object_N.model` (production extension, `p:path` components), and
+`Metadata/model_settings.config` gives every part a name and `extruder` (filament slot). Slots: panel colour first,
+then Ink 1-3, then case; identical colours share a slot; beyond 4 (the U1's tools) a colour joins the nearest.
+Do NOT add a partial `Metadata/project_settings.config` (e.g. just filament_colour): Orca then fails to load the
+file. Keep names ASCII (Orca mangles non-ASCII in its object file names). Verify with the Orca CLI:
+`"/Applications/Snapmaker Orca.app/Contents/MacOS/Snapmaker_Orca" --datadir <scratch> --outputdir <out>
+--export-3mf re.3mf file.3mf`, then read `extruder` and `mesh_stat` in the re-exported model_settings.config.
+
 ## Testing without a browser
 `npm i earcut polygon-clipping` then in Node: `const G = require('./src/geo.js')`, call `G.buildParts(spec, design)`,
 `G.buildFrame(spec, design)`, `G.buildCoupon(...)`, write `G.to3MF(parts, title)` to a file. Meshes were validated

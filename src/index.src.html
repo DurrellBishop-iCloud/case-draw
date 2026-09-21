@@ -144,7 +144,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.2.3</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.2.4</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -297,7 +297,7 @@
       <input type="file" id="fileIn" accept="application/json,.json" hidden>
       <div class="ok" id="fileMsg"></div>
       <p style="margin-top:8px">The test coupon is the top-left 32 mm corner of the case and of the panel, side by side: press the phone's corner in to check the lip and clearance, and drop the panel corner on to check the camera collar. Print it before the whole case.</p>
-      <p>The case 3MF is oriented back-down, ready to slice. The panel 3MF opens in Snapmaker Orca or Bambu Studio as one object with a Panel part and one part per ink. Right-click each part to assign its filament. Where inks overlap, the stroke drawn last wins, as on screen.</p>
+      <p>The case 3MF is oriented back-down, ready to slice. The 3MF opens in Snapmaker Orca or Bambu Studio with every part already on a filament slot: the panel colour on 1, then Ink 1, 2 and 3, then the case colour (a fifth colour shares the nearest slot). Load matching filaments in those slots; the slots each colour went to are shown here after you save. Where inks overlap, the stroke drawn last wins, as on screen.</p>
     </section>
 
     <section>
@@ -984,6 +984,7 @@ btnExport3mf.onclick = () => {
       const r = await download(`case-panel-${design.mode}-${stamp()}.3mf`, bytes, "model/3mf");
       const info = `${built.parts.length} parts, ${tris.toLocaleString()} triangles, ${(bytes.length / 1024).toFixed(0)} KB. `;
       fileMsg.textContent = r === "cancelled" ? "" : (r === "nobinary" ? saveMsg.nobinary : info + (saveMsg[r] || ""));
+      if(r !== "cancelled" && r !== "nobinary") showSlots(fileMsg, bytes);
     }catch(e){ fileMsg.textContent = "Couldn't build the 3MF: " + e.message; console.error(e); }
     btnExport3mf.disabled = false;
   }, 30);
@@ -1099,6 +1100,7 @@ function resetView(){
 function sizeThree(){
   if(!three) return;
   const r = stage.getBoundingClientRect();
+  if(r.width < 1 || r.height < 1) return;   // viewer closed: a 0x0 size would make the aspect NaN
   three.renderer.setSize(r.width, r.height, false);
   three.renderer.domElement.style.width = r.width + "px"; three.renderer.domElement.style.height = r.height + "px";
   three.camera.aspect = r.width / r.height; three.camera.updateProjectionMatrix();
@@ -1109,7 +1111,8 @@ function drawThree(){
   const { camera, group, rot, dist, pan } = three;
   // keep the model's centre on screen at any zoom, so it can't be panned out of sight
   const half = dist * Math.tan(camera.fov * Math.PI / 360) * 0.85;
-  pan.x = clamp(pan.x, -half * camera.aspect, half * camera.aspect); pan.y = clamp(pan.y, -half, half);
+  if(isFinite(half * camera.aspect)){ pan.x = clamp(pan.x, -half * camera.aspect, half * camera.aspect); pan.y = clamp(pan.y, -half, half); }
+  if(!isFinite(pan.x) || !isFinite(pan.y)) pan.x = pan.y = 0;
   group.rotation.set(rot.x, rot.y + (flipped ? Math.PI : 0), 0);
   group.position.set(pan.x, pan.y, 0);
   camera.position.set(0, 0, dist); camera.lookAt(0, 0, 0);
@@ -1221,9 +1224,28 @@ btnExportFrame.onclick = () => {
       const bytes = CaseGeo.to3MF(f.parts, `${spec.phone} case`);
       const r = await download(`case-body-${stamp()}.3mf`, bytes, "model/3mf");
       fileMsg.textContent = r === "cancelled" ? "" : (r === "nobinary" ? saveMsg.nobinary : `Case ${f.H.toFixed(2)} mm tall, ${f.parts.length} part${f.parts.length > 1 ? "s" : ""}, ${(bytes.length / 1024).toFixed(0)} KB. ` + (saveMsg[r] || ""));
+      if(r !== "cancelled" && r !== "nobinary") showSlots(fileMsg, bytes);
     }catch(e){ fileMsg.textContent = "Couldn't build the frame: " + e.message; console.error(e); }
   }, 30);
 };
+
+// After an export, show which filament slot (U1 tool) each colour was given in the file.
+function showSlots(el, bytes){
+  if(!bytes.colours || !bytes.colours.length) return;
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:6px;color:var(--text)";
+  row.append("Filament slots:");
+  bytes.colours.forEach((c, i) => {
+    const sw = document.createElement("span");
+    sw.style.cssText = "display:inline-flex;align-items:center;gap:4px";
+    const sq = document.createElement("span");
+    sq.style.cssText = `width:16px;height:16px;border-radius:4px;background:${c};box-shadow:0 0 0 1px var(--line)`;
+    sw.append(sq, String(i + 1));
+    row.append(sw);
+  });
+  if(bytes.merged && bytes.merged.length) row.append(`(${bytes.merged.length} more colour${bytes.merged.length > 1 ? "s share" : " shares"} the nearest slot: the U1 has 4 tools)`);
+  el.append(row);
+}
 
 // Case + panel in one file, ready for the slicer
 function exportPrint(msgEl){
@@ -1234,6 +1256,8 @@ function exportPrint(msgEl){
       const bytes = CaseGeo.to3MF(set.parts, `${spec.phone} case`);
       const r = await download(`case-print-${stamp()}.3mf`, bytes, "model/3mf");
       msgEl.textContent = r === "cancelled" ? "" : (r === "nobinary" ? saveMsg.nobinary : `Case and panel, ${set.parts.length} parts, ${(bytes.length / 1024).toFixed(0)} KB. ` + (saveMsg[r] || ""));
+      if(r !== "cancelled" && r !== "nobinary" && msgEl === fileMsg) showSlots(fileMsg, bytes);
+      else if(r !== "cancelled" && r !== "nobinary") msgEl.textContent += " Slots: " + bytes.colours.map((c, i) => `${i + 1} ${c}`).join(", ") + ".";
     }catch(e){ msgEl.textContent = "Couldn't build the print file: " + e.message; console.error(e); }
   }, 30);
 }
@@ -1249,6 +1273,7 @@ btnExportCoupon.onclick = () => {
       const bytes = CaseGeo.to3MF(c.parts, `${spec.phone} test coupon`);
       const r = await download(`case-coupon-${stamp()}.3mf`, bytes, "model/3mf");
       fileMsg.textContent = r === "cancelled" ? "" : (r === "nobinary" ? saveMsg.nobinary : `Coupon: two objects, ${c.parts.length} parts, ${(bytes.length / 1024).toFixed(0)} KB. ` + (saveMsg[r] || ""));
+      if(r !== "cancelled" && r !== "nobinary") showSlots(fileMsg, bytes);
     }catch(e){ fileMsg.textContent = "Couldn't build the coupon: " + e.message; console.error(e); }
   }, 30);
 };

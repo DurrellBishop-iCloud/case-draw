@@ -836,45 +836,67 @@
     }
     return mesh;
   }
-  function modelXml(parts, title) {
+  // ---------- 3MF in the layout Orca / Snapmaker Orca / Bambu Studio write themselves ----------
+  // Each group (case, panel) is one object whose parts live in 3D/Objects/object_N.model; Metadata/model_settings.config
+  // names every part and gives it a filament slot ("extruder"), so the parts open already assigned to the U1's tools.
+  const hexRGB = c => { const m = /^#?([0-9a-f]{6})/i.exec(c || ""); return m ? "#" + m[1].toUpperCase() : "#808080"; };
+  const rgbDist = (a, b) => { const p = x => [1, 3, 5].map(i => parseInt(x.slice(i, i + 2), 16)); const A = p(a), B = p(b); return Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]); };
+  // Filament slots: panel colour and Ink 1-3 first (the plate plus three inks = the four tools), then the case.
+  // Colours beyond maxTools share the slot of the nearest colour.
+  function assignTools(parts, maxTools) {
+    const rank = p => p.name === "Panel" ? 0 : /^Ink \d/.test(p.name) ? parseInt(p.name.slice(4), 10) : p.key === "case" || p.name === "Case" ? 10 : 20;
+    const order = parts.map((p, i) => i).sort((i, j) => rank(parts[i]) - rank(parts[j]) || i - j);
+    const colours = [];
+    for (const i of order) { const c = hexRGB(parts[i].color); if (!colours.includes(c)) colours.push(c); }
+    const kept = colours.slice(0, maxTools), merged = colours.slice(maxTools);
+    const toolOf = c => { const k = kept.indexOf(c); if (k >= 0) return k + 1; let best = 0; kept.forEach((x, j) => { if (rgbDist(x, c) < rgbDist(kept[best], c)) best = j; }); return best + 1; };
+    return { tools: parts.map(p => toolOf(hexRGB(p.color))), colours: kept, merged };
+  }
+  const uuid = (a, b) => (a.toString(16).padStart(8, "0") + "-" + b.toString(16).padStart(4, "0") + "-4c03-9d28-80fed5dfa1dc");
+  function packageFiles(parts, title, maxTools) {
     parts = parts.map(p => ({ ...p, mesh: weld(p.mesh) }));
-    let res = "";
-    res += `  <basematerials id="1">\n`;
-    parts.forEach(p => { res += `    <base name="${esc(p.name)}" displaycolor="${esc(p.color)}FF"/>\n`; });
-    res += `  </basematerials>\n`;
+    const { tools, colours, merged } = assignTools(parts, maxTools || 4);
     const groups = [...new Set(parts.map(p => p.group || ""))];
-    parts.forEach((p, i) => {
-      const id = 10 + i;
-      res += `  <object id="${id}" name="${esc(p.name)}" type="model" pid="1" pindex="${i}">\n   <mesh>\n    <vertices>\n`;
-      const v = p.mesh.v;
-      for (let k = 0; k < v.length; k += 3) res += `     <vertex x="${f3(v[k])}" y="${f3(v[k + 1])}" z="${f3(v[k + 2])}"/>\n`;
-      res += `    </vertices>\n    <triangles>\n`;
-      const t = p.mesh.t;
-      for (let k = 0; k < t.length; k += 3) res += `     <triangle v1="${t[k]}" v2="${t[k + 1]}" v3="${t[k + 2]}"/>\n`;
-      res += `    </triangles>\n   </mesh>\n  </object>\n`;
-    });
-    let items = "";
+    const NS = `xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" requiredextensions="p"`;
+    const files = [], objIds = [];
+    let main = "", items = "", settings = "", rels = "";
     groups.forEach((g, gi) => {
-      const groupId = 10 + parts.length + gi;
-      const name = g ? `${title} — ${g}` : title;
-      res += `  <object id="${groupId}" name="${esc(name)}" type="model">\n   <components>\n`;
-      parts.forEach((p, i) => { if ((p.group || "") === g) res += `    <component objectid="${10 + i}"/>\n`; });
-      res += `   </components>\n  </object>\n`;
-      const off = (parts.find(p => (p.group || "") === g) || {}).offset || [0, 0, 0];
-      items += `  <item objectid="${groupId}" transform="1 0 0 0 1 0 0 0 1 ${f3(off[0])} ${f3(off[1])} ${f3(off[2])}"/>\n`;
+      const members = parts.map((p, i) => i).filter(i => (parts[i].group || "") === g);
+      const path = `3D/Objects/object_${gi + 1}.model`, objId = parts.length + 1 + gi, name = g ? `${title} - ${g}` : title;   // plain hyphen: Orca turns non-ASCII into ??? in its file names
+      let meshes = "", comps = "", ps = "";
+      for (const i of members) {
+        const p = parts[i], id = i + 1, v = p.mesh.v, t = p.mesh.t;
+        meshes += `  <object id="${id}" name="${esc(p.name)}" p:UUID="${uuid(id, 0x1000)}" type="model">\n   <mesh>\n    <vertices>\n`;
+        for (let k = 0; k < v.length; k += 3) meshes += `     <vertex x="${f3(v[k])}" y="${f3(v[k + 1])}" z="${f3(v[k + 2])}"/>\n`;
+        meshes += `    </vertices>\n    <triangles>\n`;
+        for (let k = 0; k < t.length; k += 3) meshes += `     <triangle v1="${t[k]}" v2="${t[k + 1]}" v3="${t[k + 2]}"/>\n`;
+        meshes += `    </triangles>\n   </mesh>\n  </object>\n`;
+        comps += `    <component p:path="/${path}" objectid="${id}" p:UUID="${uuid(id, 0x2000)}" transform="1 0 0 0 1 0 0 0 1 0 0 0"/>\n`;
+        ps += `    <part id="${id}" subtype="normal_part">\n      <metadata key="name" value="${esc(p.name)}"/>\n      <metadata key="matrix" value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/>\n      <metadata key="extruder" value="${tools[i]}"/>\n    </part>\n`;
+      }
+      files.push({ name: path, text: `<?xml version="1.0" encoding="UTF-8"?>\n<model unit="millimeter" xml:lang="en-US" ${NS}>\n <metadata name="BambuStudio:3mfVersion">1</metadata>\n <resources>\n${meshes} </resources>\n <build/>\n</model>\n` });
+      rels += ` <Relationship Target="/${path}" Id="rel-${gi + 1}" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>\n`;
+      main += `  <object id="${objId}" name="${esc(name)}" p:UUID="${uuid(objId, 0)}" type="model">\n   <components>\n${comps}   </components>\n  </object>\n`;
+      const off = parts[members[0]].offset || [0, 0, 0];
+      items += `  <item objectid="${objId}" p:UUID="${uuid(objId, 0x3000)}" transform="1 0 0 0 1 0 0 0 1 ${f3(off[0])} ${f3(off[1])} ${f3(off[2])}" printable="1"/>\n`;
+      settings += `  <object id="${objId}">\n    <metadata key="name" value="${esc(name)}"/>\n    <metadata key="extruder" value="${tools[members[0]]}"/>\n${ps}  </object>\n`;
+      objIds.push(objId);
     });
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
- <metadata name="Title">${esc(title)}</metadata>
+    files.unshift({ name: "3D/3dmodel.model", text: `<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US" ${NS}>
  <metadata name="Application">Case Draw</metadata>
+ <metadata name="BambuStudio:3mfVersion">1</metadata>
+ <metadata name="Title">${esc(title)}</metadata>
  <resources>
-${res} </resources>
- <build>
+${main} </resources>
+ <build p:UUID="${uuid(0, 0x4000)}">
 ${items} </build>
 </model>
-`;
+` });
+    files.push({ name: "3D/_rels/3dmodel.model.rels", text: `<?xml version="1.0" encoding="UTF-8"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n${rels}</Relationships>\n` });
+    files.push({ name: "Metadata/model_settings.config", text: `<?xml version="1.0" encoding="UTF-8"?>\n<config>\n${settings}</config>\n` });
+    return { files, tools, colours, merged };
   }
-
   const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -931,14 +953,18 @@ ${items} </build>
     return out;
   }
 
-  function to3MF(parts, title) {
-    const enc = new TextEncoder();
-    return zip([
+  // Returns the 3MF bytes; .tools/.colours/.merged on the result say which filament slot each colour went to.
+  function to3MF(parts, title, maxTools) {
+    const enc = new TextEncoder(), pk = packageFiles(parts, title, maxTools);
+    const out = zip([
       { name: "[Content_Types].xml", data: enc.encode(CONTENT_TYPES) },
       { name: "_rels/.rels", data: enc.encode(RELS) },
-      { name: "3D/3dmodel.model", data: enc.encode(modelXml(parts, title)) }
+      ...pk.files.map(f => ({ name: f.name, data: enc.encode(f.text) }))
     ]);
+    out.colours = pk.colours; out.merged = pk.merged;
+    return out;
   }
+
 
   return { buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
 });
