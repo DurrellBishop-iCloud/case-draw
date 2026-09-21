@@ -598,12 +598,13 @@
     return lists.map(l => !l.length ? [] : l.length === 1 ? l[0] : ops.union(...l));
   }
   function stripeKeys(design) {
-    const list = (design.stripeColors && design.stripeColors.length) ? design.stripeColors : ["case", "ink0"];
-    const ok = list.filter(k => k === "case" || k === "plate" || /^ink\d+$/.test(k));
-    return ok.length ? ok : ["case"];
+    // the case is the panel colour, so an old "case" entry means "plate"
+    const list = (design.stripeColors && design.stripeColors.length) ? design.stripeColors : ["plate", "ink0"];
+    const ok = [...new Set(list.map(k => k === "case" ? "plate" : k))].filter(k => k === "plate" || /^ink\d+$/.test(k));
+    return ok.length ? ok : ["plate"];
   }
   function keyColor(key, design) {
-    if (key === "case") return design.frameColor || "#3A3A3A";
+    if (key === "case") return design.plateColor || "#F2F2EF";   // one filament for panel and case (the U1 has 4)
     if (key === "plate") return design.plateColor || "#F2F2EF";
     const i = parseInt(key.slice(3), 10);
     return (design.inks && design.inks[i]) || "#888888";
