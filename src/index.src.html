@@ -78,6 +78,10 @@
   .ink.on{box-shadow:0 0 0 2px var(--text)}
   .ink input{position:absolute; inset:0; opacity:0; width:100%; height:100%; pointer-events:none}
   .ink.plate{border-radius:6px; width:26px; height:26px; margin-left:6px}
+  .ink.casecol{background:var(--panel); margin-left:4px}
+  .chips{display:flex; gap:6px; align-items:center; flex-wrap:wrap}
+  .chip-sw{width:26px; height:26px; min-height:0; padding:0; border-radius:6px; border:2px solid var(--panel); box-shadow:0 0 0 1px var(--line); opacity:.3}
+  .chip-sw.on{opacity:1; box-shadow:0 0 0 2px var(--text)}
   .width{display:flex; align-items:center; gap:8px; flex:1; min-width:0}
   .width input{flex:1; min-width:0}
   .width output{font:700 16px var(--dot); width:56px; text-align:right}
@@ -144,7 +148,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.3.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.3.1</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -208,6 +212,7 @@
       <button id="vStyStripes">Stripes</button>
       <button id="vStyExtrude">Drawing through</button>
     </div>
+    <div class="chips" id="vStripeCols" style="display:none" aria-label="Stripe colours"></div>
   </div>
   <div class="stage" id="stage"><div class="note" id="viewerNote">Building…</div></div>
 </div>
@@ -249,7 +254,7 @@
           <input type="number" id="stripeHeight" min="0.2" max="10" step="0.1" style="width:64px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm
         </label>
         <span style="font-size:13px">Cycle through:</span>
-        <label class="field"><input type="checkbox" id="sc_case"> Case</label>
+        <label class="field"><input type="checkbox" id="sc_case"> Case colour</label>
         <label class="field"><input type="checkbox" id="sc_plate"> Panel</label>
         <label class="field"><input type="checkbox" id="sc_ink0"> Ink 1</label>
         <label class="field"><input type="checkbox" id="sc_ink1"> Ink 2</label>
@@ -781,6 +786,15 @@ function buildInks(){
   pin.addEventListener("input", () => { design.plateColor = pin.value; pl.style.background = pin.value; syncColorInputs(); save(); render(); });
   pl.appendChild(pin); pl.onclick = () => pin.click();
   inksEl.appendChild(pl);
+  // case colour: drawn as a frame, since it's the colour of the case body (and of its stripes)
+  const cc = document.createElement("button"), cin = document.createElement("input");
+  const caseCol = () => design.frameColor || "#3A3A3A";
+  cc.className = "ink plate casecol"; cc.style.boxShadow = `inset 0 0 0 6px ${caseCol()}, 0 0 0 1px var(--line)`;
+  cc.setAttribute("aria-label", "Case colour"); cc.title = "Case colour";
+  cin.type = "color"; cin.value = caseCol(); cin.tabIndex = -1;
+  cin.addEventListener("input", () => { design.frameColor = cin.value; cc.style.boxShadow = `inset 0 0 0 6px ${cin.value}, 0 0 0 1px var(--line)`; syncColorInputs(); syncStripeChips(); save(); render(); });
+  cc.appendChild(cin); cc.onclick = () => cin.click();
+  inksEl.appendChild(cc);
 }
 
 // ---------- settings sheet ----------
@@ -808,7 +822,7 @@ function syncColorInputs(){
   [ink0, ink1, ink2].forEach((el, i) => el.value = design.inks[i]);
 }
 plateColor.addEventListener("input", () => { design.plateColor = plateColor.value; buildInks(); save(); render(); });
-frameColor.addEventListener("input", () => { design.frameColor = frameColor.value; save(); render(); });
+frameColor.addEventListener("input", () => { design.frameColor = frameColor.value; buildInks(); syncStripeChips(); save(); render(); });
 [ink0, ink1, ink2].forEach((el, i) => el.addEventListener("input", () => { design.inks[i] = el.value; buildInks(); save(); render(); }));
 
 const specJson = document.getElementById("specJson"), specErr = document.getElementById("specErr");
@@ -1006,10 +1020,34 @@ for(const k in vStyBtns) vStyBtns[k].onclick = () => {
   design.caseStyle = k; syncStyle(); save();
   showFrame = true; btnFrame.classList.add("on"); scheduleRebuild();
 };
+// Stripe colours as swatches in the 3D view: tap to add or drop a colour from the cycle.
+const STRIPE_KEYS = ["case", "plate", "ink0", "ink1", "ink2"];
+const stripeName = { case: "Case colour", plate: "Panel colour", ink0: "Ink 1", ink1: "Ink 2", ink2: "Ink 3" };
+const stripeCol = k => k === "case" ? (design.frameColor || "#3A3A3A") : k === "plate" ? design.plateColor : design.inks[+k.slice(3)];
+function syncStripeChips(){
+  const box = document.getElementById("vStripeCols");
+  box.style.display = design.caseStyle === "stripes" ? "" : "none";
+  box.innerHTML = "";
+  const on = design.stripeColors || [];
+  for(const k of STRIPE_KEYS){
+    const b = document.createElement("button");
+    b.className = "chip-sw" + (on.includes(k) ? " on" : "");
+    b.style.background = stripeCol(k); b.title = stripeName[k] + (on.includes(k) ? " (in stripes)" : " (not in stripes)");
+    b.setAttribute("aria-label", b.title); b.setAttribute("aria-pressed", on.includes(k));
+    b.onclick = () => {
+      const cur = new Set(design.stripeColors || []);
+      if(cur.has(k)){ if(cur.size > 1) cur.delete(k); } else cur.add(k);
+      design.stripeColors = STRIPE_KEYS.filter(x => cur.has(x));
+      syncStyle(); save(); scheduleRebuild();
+    };
+    box.appendChild(b);
+  }
+}
 function syncStyle(){
   const st = design.caseStyle || "plain";
   for(const k in styBtns) styBtns[k].classList.toggle("on", k === st);
   for(const k in vStyBtns) vStyBtns[k].classList.toggle("on", k === st);
+  syncStripeChips();
   document.getElementById("styHelp").textContent = styHelp[st];
   stripeOpts.style.display = st === "stripes" ? "" : "none";
   stripeHeight.value = design.stripeHeight || 1;
@@ -1019,7 +1057,7 @@ for(const k in styBtns) styBtns[k].onclick = () => { design.caseStyle = k; syncS
 stripeHeight.addEventListener("change", () => { const v = parseFloat(stripeHeight.value); if(v >= 0.2){ design.stripeHeight = v; save(); } });
 for(const k of ["case", "plate", "ink0", "ink1", "ink2"]) document.getElementById("sc_" + k).addEventListener("change", () => {
   design.stripeColors = ["case", "plate", "ink0", "ink1", "ink2"].filter(x => document.getElementById("sc_" + x).checked);
-  save();
+  syncStripeChips(); save();
 });
 
 // ---------- 3D preview ----------
