@@ -87,9 +87,13 @@
   .rules .sep{width:1px; align-self:stretch; background:var(--line); margin:4px 2px}
   @media (max-width: 480px){ .rules .sep:first-of-type{display:none} }
   .placebar{flex-wrap:wrap; background:var(--bed); border-radius:10px; padding:8px}
-  .placebar input[type=text]{font:inherit; font-size:15px; padding:7px 9px; border:1px solid var(--line); border-radius:8px; min-width:0; flex:1 1 140px}
   .placebar select{font:inherit; font-size:14px; padding:7px; border:1px solid var(--line); border-radius:8px; background:var(--panel)}
   .placebar .grow{flex:1}
+  .textopts{display:flex; flex-direction:column; gap:6px; flex:1 1 100%}
+  .textopts .row{flex-wrap:wrap; gap:6px}
+  .textopts textarea{font:inherit; font-size:16px; padding:7px 9px; border:1px solid var(--line); border-radius:8px; resize:vertical; min-height:44px; width:100%}
+  .textopts .num{display:inline-flex; align-items:center; gap:4px; font-size:13px}
+  .textopts .num input{width:58px; font:inherit; font-size:15px; padding:6px; border:1px solid var(--line); border-radius:8px}
   .width input{flex:1; min-width:0}
   .width output{font:700 16px var(--dot); width:56px; text-align:right}
   input[type=range]{accent-color:#000}
@@ -155,7 +159,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.4.1</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.5.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -195,14 +199,29 @@
       <button data-pal="mine" class="on">My colours</button>
       <button data-pal="photo">Photo's colours</button>
     </div>
-    <input type="text" id="textIn" value="Hello" aria-label="Text">
-    <select id="fontSel" aria-label="Font">
-      <option value="800 160px system-ui, -apple-system, Helvetica, Arial, sans-serif">Bold</option>
-      <option value="700 160px ui-rounded, 'SF Pro Rounded', system-ui, sans-serif">Rounded</option>
-      <option value="700 160px Georgia, 'Times New Roman', serif">Serif</option>
-      <option value="700 160px ui-monospace, Menlo, monospace">Mono</option>
-      <option value="700 160px 'Doto', ui-monospace, monospace">Dots</option>
-    </select>
+    <div class="textopts" id="textOpts">
+      <textarea id="textIn" rows="2" aria-label="Text">Hello</textarea>
+      <div class="row">
+        <select id="fontSel" aria-label="Font">
+          <option value="system-ui, -apple-system, Helvetica, Arial, sans-serif">Sans</option>
+          <option value="ui-rounded, 'SF Pro Rounded', system-ui, sans-serif">Rounded</option>
+          <option value="Georgia, 'Times New Roman', serif">Serif</option>
+          <option value="ui-monospace, Menlo, monospace">Mono</option>
+          <option value="'Doto', ui-monospace, monospace">Dots</option>
+        </select>
+        <select id="weightSel" aria-label="Weight">
+          <option value="300">Light</option><option value="400">Regular</option><option value="700">Bold</option><option value="900">Black</option>
+        </select>
+        <div class="seg" id="alignSeg" role="group" aria-label="Alignment">
+          <button data-align="left" title="Align left">Left</button><button data-align="center" title="Centre">Centre</button><button data-align="right" title="Align right">Right</button>
+        </div>
+      </div>
+      <div class="row">
+        <label class="num">Size <input type="number" id="tSize" min="1" max="120" step="0.5" inputmode="decimal"> mm</label>
+        <label class="num">Leading <input type="number" id="tLead" min="60" max="300" step="5" inputmode="numeric"> %</label>
+        <label class="num">Spacing <input type="number" id="tTrack" min="-20" max="100" step="1" inputmode="numeric"> %</label>
+      </div>
+    </div>
     <button id="rotL" title="Turn left 90°">⟲ 90°</button>
     <button id="rotR" title="Turn right 90°">⟳ 90°</button>
     <span class="grow"></span>
@@ -1459,6 +1478,7 @@ const DEFAULT_DESIGN = {
   rule: "free",           // drawing rule: free | line | vstripe | hstripe
   mirrorX: false,         // mirror left-right
   mirrorY: false,         // mirror top-bottom
+  textStyle: { family: "system-ui, -apple-system, Helvetica, Arial, sans-serif", weight: 700, size: 8, lead: 120, track: 0, align: "center" },
   strokes: []            // { c: inkIndex, w: mm, pts: [[x,y],...] } or a filled shape { c, fill: MultiPolygon mm }
 };
 const STORE_KEY = "casedraw.v1";
@@ -1722,6 +1742,7 @@ canvas.addEventListener("pointermove", e => {
     if(pinch.stamp && placing){   // placing: two fingers size and turn the photo or text
       placing.w = clamp(pinch.stamp.w * d / pinch.d0, 3, 600);
       placing.rot = pinch.stamp.rot + Math.atan2(b[1] - a[1], b[0] - a[0]) - pinch.a0;
+      textSizeFromW();
       render(); return;
     }
     const k = clamp(pinch.scale0 * d / pinch.d0, minScale() * 0.8, minScale() * 12) / pinch.scale0;
@@ -1772,7 +1793,7 @@ window.addEventListener("resize", resize);
 // mouse wheel / trackpad zoom around the cursor
 canvas.addEventListener("wheel", e => {
   e.preventDefault();
-  if(placing){ placing.w = clamp(placing.w * Math.exp(-e.deltaY * 0.0015), 3, 600); render(); return; }
+  if(placing){ placing.w = clamp(placing.w * Math.exp(-e.deltaY * 0.0015), 3, 600); textSizeFromW(); render(); return; }
   const k = clamp(view.scale * Math.exp(-e.deltaY * 0.0015), minScale() * 0.8, minScale() * 12) / view.scale;
   view.ox = e.offsetX - (e.offsetX - view.ox) * k;
   view.oy = e.offsetY - (e.offsetY - view.oy) * k;
@@ -1933,11 +1954,24 @@ function currentPal(){ return placing.pal === "photo" ? placing.photoPal : [desi
 function makePreview(){
   const P = placing;
   if(P.kind === "text"){
-    const f = fontSel.value, m = document.createElement("canvas").getContext("2d");
-    m.font = f; const tw = Math.max(20, Math.ceil(m.measureText(P.text || " ").width)), th = 200;
-    const c = document.createElement("canvas"); c.width = tw + 40; c.height = th;
-    const x = c.getContext("2d"); x.font = f; x.textBaseline = "middle"; x.fillStyle = design.inks[ink]; x.fillText(P.text || " ", 20, th / 2);
-    P.src = c; P.prev = c; P.aspect = c.width / c.height; return;
+    // Rendered at 160 px per em; Size is the em in mm, Leading the line pitch in % of it, Spacing extra space
+    // between letters in % of it. Letters are placed one by one when spaced, so it works in every browser.
+    const st = textStyle(), EM = 160, f = `${st.weight} ${EM}px ${st.family}`;
+    const lines = (P.text || " ").split("\n"), trk = st.track / 100 * EM, lineH = EM * st.lead / 100, pad = EM * 0.3;
+    const m = document.createElement("canvas").getContext("2d"); m.font = f;
+    const lineW = ln => trk ? [...ln].reduce((t, ch) => t + m.measureText(ch).width, 0) + trk * Math.max(0, [...ln].length - 1) : m.measureText(ln).width;
+    const widths = lines.map(lineW), maxW = Math.max(EM * 0.3, ...widths);
+    const c = document.createElement("canvas"); c.width = Math.ceil(maxW + 2 * pad); c.height = Math.ceil(lines.length * lineH + 2 * pad);
+    const x = c.getContext("2d"); x.font = f; x.textBaseline = "middle"; x.fillStyle = design.inks[ink];
+    lines.forEach((ln, k) => {
+      let px = pad + (st.align === "center" ? (maxW - widths[k]) / 2 : st.align === "right" ? maxW - widths[k] : 0);
+      const py = pad + (k + 0.5) * lineH;
+      if(!trk){ x.fillText(ln, px, py); return; }
+      for(const ch of ln){ x.fillText(ch, px, py); px += m.measureText(ch).width + trk; }
+    });
+    P.src = c; P.prev = c; P.aspect = c.width / c.height;
+    P.w = c.width * st.size / EM;   // the text's size sets its width on the case
+    return;
   }
   const s = P.src, k = Math.min(1, 260 / Math.max(s.width, s.height));
   const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(s.width * k)); c.height = Math.max(1, Math.round(s.height * k));
@@ -1971,11 +2005,11 @@ function startPlacing(P){
   placing = Object.assign({ cx: spec.width / 2, cy: spec.length / 2, rot: 0, pal: "mine" }, P);
   if(tool !== "draw") setTool("draw");
   makePreview();
-  if(placing.kind === "text") placing.w = Math.min(spec.width * 0.8, 12 * placing.aspect);
-  else placing.w = Math.max(spec.width, spec.length * placing.aspect) + 4;   // cover the whole back to start
+  if(placing.kind !== "text") placing.w = Math.max(spec.width, spec.length * placing.aspect) + 4;   // cover the whole back to start
   placebar.style.display = "";
   palSeg.style.display = placing.kind === "photo" ? "" : "none";
-  textIn.style.display = fontSel.style.display = placing.kind === "text" ? "" : "none";
+  textOpts.style.display = placing.kind === "text" ? "" : "none";
+  if(placing.kind === "text") syncTextOpts();
   for(const b of palSeg.querySelectorAll("button")) b.classList.toggle("on", b.dataset.pal === placing.pal);
   document.getElementById("rules").style.display = "none";
   showHint(placing.kind === "photo" ? "Drag to move, pinch (or scroll) to size and turn. Outside the case is cut off." : "Type, then drag to move and pinch to size and turn. It uses the selected ink.", true);
@@ -1999,8 +2033,29 @@ photoIn.addEventListener("change", () => {
   img.src = url;
 });
 btnText.onclick = () => { startPlacing({ kind: "text", text: textIn.value || "Hello" }); setTimeout(() => { textIn.focus(); textIn.select(); }, 50); };
-textIn.addEventListener("input", () => { if(placing && placing.kind === "text"){ const h = placing.w / placing.aspect; placing.text = textIn.value; makePreview(); placing.w = h * placing.aspect; render(); } });
-fontSel.addEventListener("change", () => { if(placing && placing.kind === "text"){ const h = placing.w / placing.aspect; makePreview(); placing.w = h * placing.aspect; render(); } });
+// after a pinch or scroll, the text's Size follows its new width
+function textSizeFromW(){
+  if(!placing || placing.kind !== "text") return;
+  const size = round1(placing.w * 160 / placing.src.width);
+  design.textStyle = Object.assign(textStyle(), { size }); tSize.value = size; save();
+}
+function textStyle(){ return Object.assign({ family: fontSel.options[0].value, weight: 700, size: 8, lead: 120, track: 0, align: "center" }, design.textStyle || {}); }
+function syncTextOpts(){
+  const st = textStyle();
+  fontSel.value = st.family; weightSel.value = String(st.weight);
+  tSize.value = round1(st.size); tLead.value = st.lead; tTrack.value = st.track;
+  for(const b of alignSeg.querySelectorAll("button")) b.classList.toggle("on", b.dataset.align === st.align);
+}
+function setTextStyle(ch){
+  design.textStyle = Object.assign(textStyle(), ch); save();
+  if(placing && placing.kind === "text"){ makePreview(); render(); }
+}
+textIn.addEventListener("input", () => { if(placing && placing.kind === "text"){ placing.text = textIn.value; makePreview(); render(); } });
+fontSel.addEventListener("change", () => setTextStyle({ family: fontSel.value }));
+weightSel.addEventListener("change", () => setTextStyle({ weight: +weightSel.value }));
+for(const b of alignSeg.querySelectorAll("button")) b.onclick = () => { setTextStyle({ align: b.dataset.align }); syncTextOpts(); };
+const numIn = (el, key, lo, hi) => el.addEventListener("input", () => { const v = parseFloat(el.value); if(isFinite(v) && v >= lo && v <= hi) setTextStyle({ [key]: v }); });
+numIn(tSize, "size", 1, 120); numIn(tLead, "lead", 60, 300); numIn(tTrack, "track", -20, 100);
 for(const b of palSeg.querySelectorAll("button")) b.onclick = () => { placing.pal = b.dataset.pal; for(const o of palSeg.querySelectorAll("button")) o.classList.toggle("on", o === b); makePreview(); render(); };
 rotL.onclick = () => { if(placing){ placing.rot -= Math.PI / 2; render(); } };
 rotR.onclick = () => { if(placing){ placing.rot += Math.PI / 2; render(); } };
