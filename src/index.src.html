@@ -155,7 +155,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.4.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.4.1</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -1028,7 +1028,17 @@ function setTool(t){
   updateChip(); render();
 }
 toolDraw.onclick = () => setTool("draw");
-toolErase.onclick = () => setTool("erase");
+// Erase: tap to pick the tool; double-tap to clear the whole drawing (undoable). Timed by hand, since iOS
+// Safari doesn't reliably send dblclick.
+let eraseTap = 0;
+toolErase.onclick = () => {
+  const now = performance.now(), dbl = now - eraseTap < 400;
+  eraseTap = dbl ? 0 : now;
+  if(!dbl){ setTool("erase"); showHint("Tap or drag over a stroke to remove it. Double-tap Erase to clear everything."); return; }
+  if(!design.strokes.length){ showHint("Nothing to clear."); return; }
+  commit(() => { design.strokes = []; });
+  render(); showHint("Cleared. Undo brings it back.");
+};
 toolCut.onclick = () => setTool("cutouts");
 
 const widthIn = document.getElementById("width"), widthOut = document.getElementById("widthOut");
