@@ -159,7 +159,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.5.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.5.1</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -202,13 +202,8 @@
     <div class="textopts" id="textOpts">
       <textarea id="textIn" rows="2" aria-label="Text">Hello</textarea>
       <div class="row">
-        <select id="fontSel" aria-label="Font">
-          <option value="system-ui, -apple-system, Helvetica, Arial, sans-serif">Sans</option>
-          <option value="ui-rounded, 'SF Pro Rounded', system-ui, sans-serif">Rounded</option>
-          <option value="Georgia, 'Times New Roman', serif">Serif</option>
-          <option value="ui-monospace, Menlo, monospace">Mono</option>
-          <option value="'Doto', ui-monospace, monospace">Dots</option>
-        </select>
+        <select id="fontSel" aria-label="Font"></select>
+        <input type="file" id="fontFileIn" accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2" hidden>
         <select id="weightSel" aria-label="Weight">
           <option value="300">Light</option><option value="400">Regular</option><option value="700">Bold</option><option value="900">Black</option>
         </select>
@@ -955,7 +950,10 @@ function startPlacing(P){
   placebar.style.display = "";
   palSeg.style.display = placing.kind === "photo" ? "" : "none";
   textOpts.style.display = placing.kind === "text" ? "" : "none";
-  if(placing.kind === "text") syncTextOpts();
+  if(placing.kind === "text"){
+    buildFontList(); syncTextOpts();
+    ensureFont(textStyle().family).then(() => { if(placing && placing.kind === "text"){ makePreview(); render(); } }).catch(() => {});
+  }
   for(const b of palSeg.querySelectorAll("button")) b.classList.toggle("on", b.dataset.pal === placing.pal);
   document.getElementById("rules").style.display = "none";
   showHint(placing.kind === "photo" ? "Drag to move, pinch (or scroll) to size and turn. Outside the case is cut off." : "Type, then drag to move and pinch to size and turn. It uses the selected ink.", true);
@@ -985,7 +983,100 @@ function textSizeFromW(){
   const size = round1(placing.w * 160 / placing.src.width);
   design.textStyle = Object.assign(textStyle(), { size }); tSize.value = size; save();
 }
-function textStyle(){ return Object.assign({ family: fontSel.options[0].value, weight: 700, size: 8, lead: 120, track: 0, align: "center" }, design.textStyle || {}); }
+// ---------- fonts: built in, Google Fonts (loaded on demand), this device's, uploaded ----------
+const BUILTIN_FONTS = [
+  ["Sans", "system-ui, -apple-system, Helvetica, Arial, sans-serif"], ["Rounded", "ui-rounded, 'SF Pro Rounded', system-ui, sans-serif"],
+  ["Serif", "Georgia, 'Times New Roman', serif"], ["Mono", "ui-monospace, Menlo, monospace"], ["Dots", "'Doto', ui-monospace, monospace"]];
+// chunky display faces that survive being printed in 0.4 mm lines
+const GOOGLE_FONTS = ["Bebas Neue", "Anton", "Archivo Black", "Alfa Slab One", "Bungee", "Rubik Mono One", "Titan One", "Lilita One",
+  "Luckiest Guy", "Bangers", "Righteous", "Staatliches", "Black Ops One", "Dela Gothic One", "Shrikhand", "Abril Fatface", "Chango",
+  "Fredoka", "Baloo 2", "Rubik", "Poppins", "Montserrat", "Inter", "Space Grotesk", "Oswald", "Big Shoulders Display", "DM Serif Display",
+  "Playfair Display", "Pacifico", "Lobster", "Permanent Marker", "Press Start 2P", "Silkscreen", "VT323", "Space Mono", "Cherry Bomb One"];
+const DEVICE_FONTS = ["Helvetica Neue", "Futura", "Avenir Next", "Avenir Next Condensed", "Gill Sans", "Optima", "Didot", "Bodoni 72",
+  "Baskerville", "Palatino", "Hoefler Text", "American Typewriter", "Courier New", "Rockwell", "Copperplate", "Marker Felt", "Chalkboard SE",
+  "Noteworthy", "Party LET", "Snell Roundhand", "Trattatello", "Impact", "Arial Black", "Verdana", "Trebuchet MS", "Comic Sans MS", "Segoe UI", "Roboto"];
+const quoteFam = n => `'${n.replace(/'/g, "")}', system-ui, sans-serif`;
+// A device font counts as installed if text in it measures differently from both fallbacks.
+function fontInstalled(name){
+  const c = document.createElement("canvas").getContext("2d"), t = "mmmmmmmmlli10OQW@", w = f => { c.font = f; return c.measureText(t).width; };
+  return w(`72px '${name}', monospace`) !== w("72px monospace") || w(`72px '${name}', serif`) !== w("72px serif");
+}
+const googleLoaded = new Map();
+// Fetch a Google Font's CSS, trying the full weight range, then common weights, then just the regular.
+function loadGoogleFont(name){
+  if(googleLoaded.has(name)) return googleLoaded.get(name);
+  const fam = encodeURIComponent(name).replace(/%20/g, "+");
+  const tries = [`${fam}:wght@100..900`, `${fam}:wght@400;700`, fam].map(q => `https://fonts.googleapis.com/css2?family=${q}&display=block`);
+  const pr = (async () => {
+    for(const url of tries){
+      // a weight range the font doesn't have comes back as an error without CORS headers, which fetch reports
+      // as a network failure: so any failure means "try the next form"
+      let r; try{ r = await fetch(url); }catch(e){ continue; }
+      if(!r.ok) continue;
+      const st = document.createElement("style"); st.textContent = await r.text(); document.head.appendChild(st);
+      await Promise.all([300, 400, 700, 900].map(w => document.fonts.load(`${w} 40px '${name}'`).catch(() => {})));
+      return;
+    }
+    throw new Error(`Couldn't load "${name}" from Google Fonts (check the name and the connection)`);
+  })();
+  pr.catch(() => googleLoaded.delete(name));
+  googleLoaded.set(name, pr); return pr;
+}
+// Uploaded fonts live in this browser (base64 in localStorage when there's room).
+const FONT_STORE = "casedraw.fonts";
+function storedFonts(){ try{ return JSON.parse(localStorage.getItem(FONT_STORE) || "{}"); }catch(e){ return {}; } }
+const b64ToBuf = b => Uint8Array.from(atob(b), c => c.charCodeAt(0)).buffer;
+async function addFontFace(name, buf){ const ff = new FontFace(name, buf); await ff.load(); document.fonts.add(ff); }
+const uploadedReady = Promise.all(Object.entries(storedFonts()).map(([n, b]) => addFontFace(n, b64ToBuf(b)).catch(() => {})));
+let fontEntries = [];   // [{ label, family, kind: builtin|google|device|upload }]
+function buildFontList(){
+  const st = design.textStyle || {}, extraGoogle = design.googleFonts || [];
+  fontEntries = [
+    ...BUILTIN_FONTS.map(([label, family]) => ({ label, family, kind: "builtin" })),
+    ...Object.keys(storedFonts()).map(n => ({ label: n, family: quoteFam(n), kind: "upload" })),
+    ...[...new Set([...extraGoogle, ...GOOGLE_FONTS])].map(n => ({ label: n, family: quoteFam(n), kind: "google" })),
+    ...DEVICE_FONTS.filter(fontInstalled).map(n => ({ label: n, family: quoteFam(n), kind: "device" }))];
+  const groups = { builtin: "Built in", upload: "Your fonts", google: "Google Fonts", device: "On this device" };
+  fontSel.innerHTML = "";
+  for(const k of Object.keys(groups)){
+    const list = fontEntries.filter(e => e.kind === k); if(!list.length) continue;
+    const og = document.createElement("optgroup"); og.label = groups[k];
+    for(const e of list){ const o = document.createElement("option"); o.value = e.family; o.textContent = e.label; og.appendChild(o); }
+    fontSel.appendChild(og);
+  }
+  const more = document.createElement("optgroup"); more.label = "More";
+  more.innerHTML = `<option value="__google">Other Google Font…</option><option value="__upload">Upload font file…</option>`;
+  fontSel.appendChild(more);
+  if(st.family && !fontEntries.some(e => e.family === st.family)){   // keep an unlisted saved choice selectable
+    const o = document.createElement("option"); o.value = st.family; o.textContent = st.family.split(",")[0].replace(/'/g, ""); fontSel.prepend(o);
+  }
+}
+// Make sure the chosen family is loaded before drawing with it.
+async function ensureFont(family){
+  await uploadedReady;
+  const e = fontEntries.find(x => x.family === family);
+  if(e && e.kind === "google") await loadGoogleFont(e.label);
+  else if(!e && /^'[^']+'/.test(family) && !fontInstalled(family.match(/^'([^']+)'/)[1])) await loadGoogleFont(family.match(/^'([^']+)'/)[1]).catch(() => {});
+}
+async function chooseFamily(family){
+  const prev = textStyle().family;
+  showHint("Loading font…", true);
+  try{ await ensureFont(family); showHint(""); setTextStyle({ family }); }
+  catch(err){ showHint(err.message + "."); fontSel.value = prev; }
+}
+fontFileIn.addEventListener("change", async () => {
+  const f = fontFileIn.files[0]; fontFileIn.value = ""; if(!f){ syncTextOpts(); return; }
+  const name = f.name.replace(/\.(ttf|otf|woff2?)$/i, "").replace(/[^\w \-]/g, " ").trim() || "My font";
+  try{
+    const buf = await f.arrayBuffer(); await addFontFace(name, buf);
+    try{   // remember it here if it fits
+      let bin = ""; const u8 = new Uint8Array(buf); for(let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+      const all = storedFonts(); all[name] = btoa(bin); localStorage.setItem(FONT_STORE, JSON.stringify(all));
+    }catch(e){ showHint("Font loaded for now; it's too big to keep in this browser."); }
+    buildFontList(); setTextStyle({ family: quoteFam(name) }); syncTextOpts();
+  }catch(e){ showHint("That file isn't a font this browser can read."); syncTextOpts(); }
+});
+function textStyle(){ return Object.assign({ family: BUILTIN_FONTS[0][1], weight: 700, size: 8, lead: 120, track: 0, align: "center" }, design.textStyle || {}); }
 function syncTextOpts(){
   const st = textStyle();
   fontSel.value = st.family; weightSel.value = String(st.weight);
@@ -997,7 +1088,21 @@ function setTextStyle(ch){
   if(placing && placing.kind === "text"){ makePreview(); render(); }
 }
 textIn.addEventListener("input", () => { if(placing && placing.kind === "text"){ placing.text = textIn.value; makePreview(); render(); } });
-fontSel.addEventListener("change", () => setTextStyle({ family: fontSel.value }));
+fontSel.addEventListener("change", () => {
+  const v = fontSel.value;
+  if(v === "__upload"){ fontFileIn.click(); return; }
+  if(v === "__google"){
+    const n = (prompt("Google Font name (as on fonts.google.com):", "") || "").trim();
+    if(!n){ syncTextOpts(); return; }
+    showHint("Loading font…", true);
+    loadGoogleFont(n).then(() => {
+      design.googleFonts = [...new Set([n, ...(design.googleFonts || [])])];
+      buildFontList(); showHint(""); setTextStyle({ family: quoteFam(n) }); syncTextOpts();
+    }).catch(err => { showHint(err.message + "."); syncTextOpts(); });
+    return;
+  }
+  chooseFamily(v);
+});
 weightSel.addEventListener("change", () => setTextStyle({ weight: +weightSel.value }));
 for(const b of alignSeg.querySelectorAll("button")) b.onclick = () => { setTextStyle({ align: b.dataset.align }); syncTextOpts(); };
 const numIn = (el, key, lo, hi) => el.addEventListener("input", () => { const v = parseFloat(el.value); if(isFinite(v) && v >= lo && v <= hi) setTextStyle({ [key]: v }); });
