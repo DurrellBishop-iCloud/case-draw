@@ -1,0 +1,118 @@
+{
+  "id": "iphone-16-plus",
+  "name": "iPhone 16 Plus",
+  "drawingDate": "2024-09-19",
+  "width": 77.76,
+  "length": 160.89,
+  "thickness": 7.81,
+  "corner": {
+    "profile": [
+      0,
+      0.04,
+      0.59,
+      2.29,
+      5.24,
+      9.06,
+      13.21,
+      17.4
+    ],
+    "radius": null
+  },
+  "camera": {
+    "plateau": {
+      "x0": 1.09,
+      "x1": 26.16,
+      "y0": 1.25,
+      "y1": 43.72,
+      "shape": "pill",
+      "r": null
+    },
+    "lenses": [
+      {
+        "x": 13.62,
+        "y": 13.62,
+        "d": 16.0
+      },
+      {
+        "x": 13.62,
+        "y": 31.34,
+        "d": 16.0
+      }
+    ],
+    "extras": [
+      {
+        "name": "flash",
+        "x": 30.01,
+        "y": 22.48,
+        "d": 6.28
+      },
+      {
+        "name": "rear mic",
+        "x": 20.55,
+        "y": 22.48,
+        "d": 1.0,
+        "inside": true
+      }
+    ],
+    "bump": 3.48,
+    "plateauHeight": 1.85
+  },
+  "buttons": [
+    {
+      "name": "Action button",
+      "side": "left",
+      "centre": 34.08,
+      "half": 3.45,
+      "width": 2.66,
+      "centreLine": 3.91
+    },
+    {
+      "name": "Volume up",
+      "side": "left",
+      "centre": 48.23,
+      "half": 5.6,
+      "width": 2.66,
+      "centreLine": 3.91
+    },
+    {
+      "name": "Volume down",
+      "side": "left",
+      "centre": 62.43,
+      "half": 5.6,
+      "width": 2.66,
+      "centreLine": 3.91
+    },
+    {
+      "name": "SIM tray",
+      "side": "left",
+      "centre": 104.1,
+      "half": 9.82,
+      "width": 2.56,
+      "centreLine": 3.91,
+      "kind": "sim"
+    },
+    {
+      "name": "Side button",
+      "side": "right",
+      "centre": 55.33,
+      "half": 8.85,
+      "width": 2.66,
+      "centreLine": 3.91
+    },
+    {
+      "name": "Camera control",
+      "side": "right",
+      "centre": 109.48,
+      "half": 8.55,
+      "width": 3.03,
+      "centreLine": 3.91
+    }
+  ],
+  "bottom": {
+    "from": 20.16,
+    "to": 62.11,
+    "datum": "0.00 at left of bottom view; view drawn with display up (camera bump at lower right)",
+    "connectorWidth": null
+  },
+  "notes": "TEXT-CHECK NOT POSSIBLE FOR ANY SHEET: on this PDF ALL sheets' lettering is vector outlines, not text (get_text('words') returns only the footer), so sheet-1 numbers were read visually from zoomed renders (z=3.3 to 10) and cross-checked by arithmetic (connector/screw ordinates sum to the product width; button centres agree with drawn positions to ~0.2 mm); an independent macOS Vision OCR pass also found 29 of 42 distinct values verbatim and produced no conflicting reading for the rest. Corner profile: the list on the vertical axis reads 0.00 0.04 0.59 2.29 5.24 9.06 13.21 17.40 (reported); the list along the top reads 0.00 0.04 0.59 2.30 5.25 9.06 13.21 17.40 (differs by 0.01 in two places, as printed by Apple). Camera detail differs from iPhone 16 by 0.01 in two places, confirmed at z=10: inner plateau top is 3.96 (16: 3.97) and rear mic x is 20.55 (16: 20.54). Inner plateau outline x 3.79-23.45, y 3.96-41.00. Left-side button positions are identical to iPhone 16 (34.08/48.23/62.43/104.10), as printed. Buttons 0.45 proud, SIM tray 0.00, camera control 0.00. Connector width not dimensioned: bottom ordinates 34.38 and 43.38 are the connector opening edges; Detail C recommended connector keepout 12.45 x 6.60 (2X R3.25), centred 3.91 from face, 38.88 across width. Bottom ordinates: 20.16 26.92 31.95 34.38 43.38 45.80 50.83 62.11 (10X dia 1.35 ports, 2X dia 1.50 screws)."
+}

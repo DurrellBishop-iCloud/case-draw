@@ -73,6 +73,31 @@ mode with its own drawing surface. Tag `draw-v1.7.0` = Case Draw before Beck exi
 - Tests: `node test/manifold.js` covers shared geometry; Beck tracing needs a browser (Playwright WebKit was used:
   draw by mouse drags, call `window.__beckExport()` for the Save bytes, count non-manifold edges, then the Orca CLI).
 
+## Phones (v1.10.0)
+Settings > Phone picks a preset; it replaces only the phone's keys (`PHONE_KEYS`), never the case settings.
+- Nothing Phone (3) = `DEFAULT_SPEC` (hand-measured). `specVersion: 4`: button slots 5.2 high, `buttonClearance` 1.2.
+- 26 iPhones (12 mini ... 17 Pro Max, 16e, 17e, Air) from Apple's public dimensional drawings
+  (developer.apple.com/accessories/dimensional-drawings/). Raw readings: `data/phones/iphone-*.json` (one per phone,
+  notes inside). `data/phones/_measured.json` = the few values Apple draws but does not dimension (bar-camera
+  outlines on 17 Pro / Pro Max / Air, three plateau edges, two unlabelled corner ordinates) measured from the vector
+  linework with a calibrated mm grid (+/-0.2), plus the y-axis corner lists where a sheet gives the axes separately.
+  `python3 tools/make_phones.py` -> `src/phones.js` (inlined by build.py). Do not hand-edit phones.js.
+- How the readings were verified: digits on sheets with a text layer matched `get_text` verbatim; sheets whose
+  lettering is vector strokes were decoded glyph-by-glyph from `get_drawings()` by an independent pass (all numbers
+  confirmed); overall sizes match Apple's tech specs. NOT verified: fit on a real phone. Nothing here has been printed.
+- Apple's sheets: buttons are dimensioned by CENTRE from the top + HALF-length; left/right are as seen from the
+  FRONT (the app uses the BACK view, so sides swap); camera ordinates are from the back view's top-left.
+- Corners: `cornerProfile` (+ optional `cornerProfileY`) = Apple's ordinate table; point i = (X[i], Y[n-1-i]) (checked
+  against the drawn crosses). `phoneOutline` fits a shape-preserving curve through them (max miss 0.007 mm) and
+  offsets along normals; plain `cornerRadius` phones keep the old circular code path untouched.
+- `cutoutRegion` = all back cutouts as one region; cutouts closer than `minWeb` (1.6) are joined by a slot (iPhone
+  16/17 flash beside the camera pill). Slab holes and collars are clipped to the phone outline so a camera 1 mm from
+  the edge cannot break the wall. Plateau corner radius is never dimensioned by Apple: presets use 0.22 x the short
+  side (real is about 0.27), so the opening always clears.
+- Converter merges side openings that would leave < 1.5 mm of wall (volume up + down -> one slot); the bottom
+  opening spans the sheet's port ordinates AND their mirror image (the bottom view's handedness is not stated).
+- `node test/phones.js`: every preset must fit its corner points, keep openings inside the wall, and export manifold.
+
 ## Code layout
 - `index.html` — GENERATED. Do not edit by hand. It's what Pages serves.
 - `src/index.src.html` — the app: canvas drawing (vector strokes in mm), settings JSON, 3D preview (three.js r128

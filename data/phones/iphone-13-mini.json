@@ -1,0 +1,114 @@
+{
+  "id": "iphone-13-mini",
+  "name": "iPhone 13 mini",
+  "drawingDate": "2021-09-28",
+  "width": 64.21,
+  "length": 131.5,
+  "thickness": 7.65,
+  "corner": {
+    "profile": [
+      0,
+      0.06,
+      0.82,
+      2.93,
+      6.25,
+      10.12,
+      14.09
+    ],
+    "radius": null
+  },
+  "camera": {
+    "plateau": {
+      "x0": null,
+      "x1": null,
+      "y0": null,
+      "y1": null,
+      "shape": "roundrect",
+      "r": null,
+      "w": 32.07,
+      "h": 31.97
+    },
+    "lenses": [
+      {
+        "x": 10.85,
+        "y": 10.85,
+        "d": 13.69
+      },
+      {
+        "x": 23.21,
+        "y": 23.21,
+        "d": 13.69
+      }
+    ],
+    "extras": [
+      {
+        "name": "flash",
+        "x": null,
+        "y": 8.98,
+        "d": 6.28,
+        "inside": true
+      },
+      {
+        "name": "rear mic",
+        "x": 9.4,
+        "y": 24.66,
+        "d": 2.4,
+        "inside": true
+      }
+    ],
+    "bump": 1.48,
+    "plateauHeight": 2.51
+  },
+  "buttons": [
+    {
+      "name": "Ring/silent switch",
+      "side": "left",
+      "centre": 23.37,
+      "half": null,
+      "width": 2.15,
+      "centreLine": 3.75,
+      "length": 5.7
+    },
+    {
+      "name": "Volume up",
+      "side": "left",
+      "centre": 36.68,
+      "half": 5.82,
+      "width": 3.11,
+      "centreLine": 3.82
+    },
+    {
+      "name": "Volume down",
+      "side": "left",
+      "centre": 50.68,
+      "half": 5.82,
+      "width": 3.11,
+      "centreLine": 3.82
+    },
+    {
+      "name": "SIM tray",
+      "side": "left",
+      "centre": 97.83,
+      "half": null,
+      "width": 2.36,
+      "centreLine": 3.82,
+      "length": 16.03,
+      "kind": "sim"
+    },
+    {
+      "name": "Side button",
+      "side": "right",
+      "centre": 43.68,
+      "half": 9.07,
+      "width": 3.11,
+      "centreLine": 3.82
+    }
+  ],
+  "bottom": {
+    "from": 17.74,
+    "to": 50.22,
+    "datum": "0.00 at left of bottom view; view drawn with display up and camera bump down, so 0.00 is the phone's left edge as seen from the front",
+    "connectorWidth": null
+  },
+  "notes": "Dimension numbers on this drawing are vector outlines, not PDF text: pg.get_text('words') returns only the title/footer, so the verbatim text check cannot confirm any value; every number was read visually from crops at 3.5x-12x zoom and cross-checked by symmetry about the centre ordinate and by an independent tesseract OCR pass over the rendered sheet (which found all but a handful of the values; those were re-read at higher zoom). centreLine values are measured across the thickness (about half of it); which face they are taken from was not determined. THIS SHEET IS DIMENSIONED DIFFERENTLY. (1) Camera plateau (Detail Y): the outermost outline is given only as overall sizes 32.07 wide x 31.97 high (extra keys w/h), measured from the back-glass boundary line that the plateau's top and left edges coincide with; that line's offset from the 0.00 datum is NOT dimensioned, so x0/x1/y0/y1 are null (an inner outline is 28.32 x 28.32). (2) Flash x is not dimensioned (only y 8.98 and dia 6.28); it is NOT on the 23.21 line. (3) 13.69 is the '2X dia 13.69 REAR CAMERA' callout, which points at the outer turret ring ('RCAM TURRET KEEPOUT 1.51 mm ABOVE HOUSING SURFACE'). (4) The side view labels 2.51 as 'BACK GLASS TO CAMERA PLATEAU' and 1.48 as 'BACK GLASS TO REAR CAMERA GLASS'; reported exactly as labelled, but 2.51 is drawn as the wider gap, so a case must clear at least 2.51 - the labels look swapped on Apple's sheet. (5) Ring/silent switch pocket and SIM tray are given as FULL lengths (5.70 and 16.03, extra key 'length'), not half-lengths, so half is null. (6) Corner table differs slightly between axes: across-width list 0.06 0.82 2.93 6.25 10.12 14.09 (reported), down-length list 0.06 0.81 2.94 6.24 10.12 14.09. Ring/silent values are for the POCKET (23.37, 3.75 'POCKET CENTER', 2.15 width). Connector width not dimensioned (height 2.30; keepout 13.65 x 6.85; ordinates 28.08 and 36.13 straddle the 32.11 centre). Bottom ordinates: 17.74 21.53 25.71 28.08 36.13 38.50 then two overprinted labels (approx 43.4x, 45.71) 47.96 50.22; port centre-line 3.75 / 3.82. Button protrusion: switch 0.60, volume 0.45, side 0.45."
+}

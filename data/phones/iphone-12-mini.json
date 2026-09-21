@@ -1,0 +1,110 @@
+{
+  "id": "iphone-12-mini",
+  "name": "iPhone 12 mini",
+  "drawingDate": "2020-10-16",
+  "width": 64.21,
+  "length": 131.5,
+  "thickness": 7.39,
+  "corner": {
+    "profile": [
+      0,
+      0.11,
+      0.94,
+      2.93,
+      5.92,
+      9.42,
+      13.03
+    ],
+    "radius": null
+  },
+  "camera": {
+    "plateau": {
+      "x0": 1.67,
+      "x1": 30.76,
+      "y0": 1.67,
+      "y1": 33.95,
+      "shape": "roundrect",
+      "r": null
+    },
+    "lenses": [
+      {
+        "x": 10.67,
+        "y": 10.67,
+        "d": 12.1
+      },
+      {
+        "x": 10.67,
+        "y": 24.95,
+        "d": 12.1
+      }
+    ],
+    "extras": [
+      {
+        "name": "flash",
+        "x": 22.21,
+        "y": 17.81,
+        "d": 5.66,
+        "inside": true
+      },
+      {
+        "name": "rear mic",
+        "x": 22.21,
+        "y": 10.22,
+        "d": 2.4,
+        "inside": true
+      }
+    ],
+    "bump": 1.51,
+    "plateauHeight": 0.73
+  },
+  "buttons": [
+    {
+      "name": "Ring/silent switch",
+      "side": "left",
+      "centre": 23.37,
+      "half": 2.85,
+      "width": 2.15,
+      "centreLine": 3.68
+    },
+    {
+      "name": "Volume up",
+      "side": "left",
+      "centre": 36.68,
+      "half": 5.65,
+      "width": 2.76,
+      "centreLine": 3.69
+    },
+    {
+      "name": "Volume down",
+      "side": "left",
+      "centre": 50.68,
+      "half": 5.65,
+      "width": 2.76,
+      "centreLine": 3.69
+    },
+    {
+      "name": "SIM tray",
+      "side": "left",
+      "centre": 96.67,
+      "half": 7.99,
+      "width": 2.3,
+      "centreLine": 3.69,
+      "kind": "sim"
+    },
+    {
+      "name": "Side button",
+      "side": "right",
+      "centre": 43.68,
+      "half": 8.9,
+      "width": 2.76,
+      "centreLine": 3.69
+    }
+  ],
+  "bottom": {
+    "from": 17.78,
+    "to": 50.94,
+    "datum": "0.00 at left of bottom view; view drawn with display up and camera bump down, so 0.00 is the phone's left edge as seen from the front",
+    "connectorWidth": null
+  },
+  "notes": "Dimension numbers on this drawing are vector outlines, not PDF text: pg.get_text('words') returns only the title/footer, so the verbatim text check cannot confirm any value; every number was read visually from crops at 3.5x-12x zoom and cross-checked by symmetry about the centre ordinate and by an independent tesseract OCR pass over the rendered sheet (which found all but a handful of the values; those were re-read at higher zoom). centreLine values are measured across the thickness (about half of it); which face they are taken from was not determined. Ring/silent switch values are for its POCKET (drawing labels 23.37 and 3.68 'POCKET CENTER', 2X 2.85 half-length, 2.15 pocket width). Plateau = outermost camera outline; an inner outline is also dimensioned at x 3.61-28.82, y 3.61-32.01. Corner radius of plateau not dimensioned. Flash and rear mic are inside the plateau. Connector width not dimensioned (connector height 2.70; recommended connector keepout 13.65 x 6.85 with 2X R3.40; bottom-view ordinates 27.89 and 36.33 straddle the 32.11 centre and appear to be the connector ends). Bottom ordinates: 17.78 21.49 25.71 27.89 36.33 38.50 42.73 50.94; port centre-line 3.69 from the face. Button protrusion from front view: switch 0.60, volume 0.45, side 0.45."
+}

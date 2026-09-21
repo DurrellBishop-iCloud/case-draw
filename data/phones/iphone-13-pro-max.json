@@ -1,0 +1,20 @@
+{
+  "id": "iphone-13-pro-max", "name": "iPhone 13 Pro Max", "drawingDate": "2021-09-28",
+  "width": 78.07, "length": 160.84, "thickness": 7.65,
+  "corner": { "profile": [0, 0.08, 1.00, 3.61, 7.67, 12.44, 17.32], "radius": null },
+  "camera": {
+    "plateau": { "x0": 1.15, "x1": 42.39, "y0": 1.15, "y1": 43.62, "shape": "roundrect", "r": null },
+    "lenses": [ { "x": 13.43, "y": 13.43, "d": 15.53 }, { "x": 13.43, "y": 31.35, "d": 15.53 }, { "x": 30.08, "y": 22.39, "d": 15.53 } ],
+    "extras": [ { "name": "flash", "x": 30.08, "y": 9.42, "d": 6.28, "inside": true }, { "name": "rear mic", "x": 35.76, "y": 32.21, "d": 1.15, "inside": true } ],
+    "bump": 3.60, "plateauHeight": 1.68
+  },
+  "buttons": [
+    { "name": "Ring/silent switch", "side": "left", "centre": 32.22, "half": 2.90, "width": 2.15, "centreLine": 3.75 },
+    { "name": "Volume up", "side": "left", "centre": 45.53, "half": 5.80, "width": 3.06, "centreLine": 3.82 },
+    { "name": "Volume down", "side": "left", "centre": 59.53, "half": 5.80, "width": 3.06, "centreLine": 3.82 },
+    { "name": "SIM tray", "kind": "sim", "side": "left", "centre": 80.28, "half": 8.07, "width": 2.76, "centreLine": 3.82 },
+    { "name": "Side button", "side": "right", "centre": 52.53, "half": 9.05, "width": 3.06, "centreLine": 3.82 }
+  ],
+  "bottom": { "from": 20.16, "to": 62.42, "datum": "0.00 at left of bottom view; view drawn with display up (camera bump down)", "connectorWidth": null },
+  "notes": "Main sheet has NO text layer (dimensions are stroked vector glyphs), so pg.get_text('words') cannot verify anything; every number was instead checked against a decode of the vector stroke glyphs plus zoomed crops. Corner list is identical on both axes. Camera DETAIL D: outer plateau outline 1.15..42.39 (x) and 1.15..43.62 (y); on the top/left the outer outline coincides with the bold 'start of flat area' line at 1.15; inner (plateau top) outline 4.27..39.28 x, 4.27..40.51 y. Corner radius of plateau not dimensioned. Flash and rear mic are inside the plateau. Bump is labelled '3X 3.60 BACK GLASS TO REAR CAMERA GLASS'. Ring/silent switch: 32.22 and 3.75 are labelled POCKET CENTER, 2.15 is pocket width. Bottom ordinates: 20.16 28.46 32.64 34.70 43.42 45.43 49.62 62.42 (10X dia 1.53 ports, 2X dia 1.50 screws). Connector width itself not dimensioned; recommended connector keepout is 13.65 wide x 6.85 high, centred at 39.04."
+}

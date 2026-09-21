@@ -1,0 +1,115 @@
+{
+  "id": "iphone-12-pro",
+  "name": "iPhone 12 Pro",
+  "drawingDate": "2020-10-16",
+  "width": 71.52,
+  "length": 146.71,
+  "thickness": 7.39,
+  "corner": {
+    "profile": [
+      0,
+      0.13,
+      1.07,
+      3.31,
+      6.66,
+      10.59,
+      14.64
+    ],
+    "radius": null
+  },
+  "camera": {
+    "plateau": {
+      "x0": 2.12,
+      "x1": 35.44,
+      "y0": 2.12,
+      "y1": 37.62,
+      "shape": "roundrect",
+      "r": null
+    },
+    "lenses": [
+      {
+        "x": 12.16,
+        "y": 12.16,
+        "d": 12.45
+      },
+      {
+        "x": 12.16,
+        "y": 27.58,
+        "d": 12.45
+      },
+      {
+        "x": 25.51,
+        "y": 19.87,
+        "d": 12.45
+      }
+    ],
+    "extras": [
+      {
+        "name": "flash",
+        "x": 25.51,
+        "y": 9.17,
+        "d": 6.28,
+        "inside": true
+      },
+      {
+        "name": "rear mic",
+        "x": 30.23,
+        "y": 27.38,
+        "d": 1.15,
+        "inside": true
+      }
+    ],
+    "bump": 1.72,
+    "plateauHeight": 0.94
+  },
+  "buttons": [
+    {
+      "name": "Ring/silent switch",
+      "side": "left",
+      "centre": 25.99,
+      "half": 2.85,
+      "width": 2.12,
+      "centreLine": 3.69
+    },
+    {
+      "name": "Volume up",
+      "side": "left",
+      "centre": 39.31,
+      "half": 5.65,
+      "width": 2.76,
+      "centreLine": 3.69
+    },
+    {
+      "name": "Volume down",
+      "side": "left",
+      "centre": 53.31,
+      "half": 5.65,
+      "width": 2.76,
+      "centreLine": 3.69
+    },
+    {
+      "name": "SIM tray",
+      "side": "left",
+      "centre": 111.88,
+      "half": 8.02,
+      "width": 2.66,
+      "centreLine": null,
+      "kind": "sim"
+    },
+    {
+      "name": "Side button",
+      "side": "right",
+      "centre": 46.31,
+      "half": 8.9,
+      "width": 2.76,
+      "centreLine": 3.69
+    }
+  ],
+  "bottom": {
+    "from": 19.18,
+    "to": 56.85,
+    "datum": "0.00 at left of bottom view; view drawn with display up and camera bump down, so 0.00 is the phone's left edge as seen from the front",
+    "connectorWidth": null
+  },
+  "notes": "Dimension numbers on this drawing are vector outlines, not PDF text: pg.get_text('words') returns only the title/footer, so the verbatim text check cannot confirm any value; every number was read visually from crops at 3.5x-12x zoom and cross-checked by symmetry about the centre ordinate and by an independent tesseract OCR pass over the rendered sheet (which found all but a handful of the values; those were re-read at higher zoom). centreLine values are measured across the thickness (about half of it); which face they are taken from was not determined. Ring/silent switch values are for its POCKET (25.99 and 3.69 'POCKET CENTER', 2X 2.85, 2.12 pocket width). SIM tray: width 2.66 and a 1.33 tray-edge-to-centre dimension, but no centre-line distance from a face, so centreLine is null. Plateau = outermost camera outline; inner outline also dimensioned at x 4.62-32.94, y 4.62-35.11. Plateau corner radius not dimensioned. LiDAR scanner is not drawn or dimensioned in Detail D (it sits inside the plateau). Connector width not dimensioned (height 3.01; keepout 13.65 x 6.85; ordinates 31.38 and 40.14 straddle the 35.76 centre). Bottom ordinates: 19.18 25.14 29.37 31.38 40.14 42.16 46.38 56.85. Button protrusion: switch 0.60, volume 0.45, side 0.45."
+}

@@ -18,3 +18,10 @@ Finger-draw a design on a Nothing Phone (3) case and print it: a one-piece case 
 - Case: one part per colour, oriented back-down. Assign filaments per part in the slicer.
 - Panel: inlay prints face-down (glass-smooth), relief prints face-up. Glue to the case; inlay panels key in with camera collars.
 - Print the test coupon first (Settings → Files) to dial in `lipDepth`, `phoneClearance` and `collarClearance`.
+
+## Phones
+
+Settings > Phone. The Nothing Phone (3) was measured by hand. The iPhone presets use dimensions read from Apple's public
+[dimensional drawings for accessory makers](https://developer.apple.com/accessories/dimensional-drawings/) (the numbers only; the
+drawings themselves are Apple's and are not included). See `data/phones/` and `tools/make_phones.py`. Print the test coupon before a
+whole case: none of these presets has been checked against a real phone yet.

@@ -165,7 +165,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.9.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.10.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -306,6 +306,14 @@
   <div class="body">
 
     <section>
+      <h3>Phone</h3>
+      <div class="row">
+        <select id="phoneSel" aria-label="Phone" style="font:inherit;font-size:15px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);max-width:100%"></select>
+      </div>
+      <p id="phoneNote" style="margin-top:8px"></p>
+    </section>
+
+    <section>
       <h3>Apps</h3>
       <div class="row">
         <button id="appDraw">Case Draw</button>
@@ -408,7 +416,7 @@
 // ---------- defaults ----------
 const DEFAULT_SPEC = {
   phone: "Nothing Phone (3)",
-  specVersion: 3,        // 2: measured outline and camera island; 3: measured thickness and buttons
+  specVersion: 4,        // 2: measured outline and camera island; 3: measured thickness and buttons; 4: roomier button holes
   width: 76.8,
   length: 163.8,
   thickness: 8.2,         // measured; the case adds phoneClearance under the phone as play
@@ -425,13 +433,13 @@ const DEFAULT_SPEC = {
   collarClearance: 0.15,
   cutoutClearance: 0.6,
   inkMargin: 0.6,
-  buttonClearance: 0.4,   // added to each end of every side opening
+  buttonClearance: 1.2,   // added to each end of every side opening
   // Back view: the phone's right side (screen towards you) is on the left here. Measured from the top edge;
   // fromScreen = button centre below the screen face, height = hole height (rounded ends).
   sideCutouts: [
-    { side: "left",   name: "Volume",        from: 45.8, to: 67.5, fromScreen: 2.8, height: 4 },
-    { side: "left",   name: "Power",         from: 75.3, to: 85.2, fromScreen: 2.8, height: 4 },
-    { side: "right",  name: "Essential key", from: 45.5, to: 56.8, fromScreen: 2.8, height: 4 },
+    { side: "left",   name: "Volume",        from: 45.8, to: 67.5, fromScreen: 2.8, height: 5.2 },
+    { side: "left",   name: "Power",         from: 75.3, to: 85.2, fromScreen: 2.8, height: 5.2 },
+    { side: "right",  name: "Essential key", from: 45.5, to: 56.8, fromScreen: 2.8, height: 5.2 },
     { side: "bottom", name: "USB-C + speakers", from: 18, to: 58, placeholder: true }
   ],
   cutouts: [
@@ -483,6 +491,10 @@ function load(){
     const s = JSON.parse(raw);
     if(s.spec && !(s.spec.specVersion >= 2)) for(const k of ["width", "length", "cornerRadius", "cutouts"]) s.spec[k] = clone(DEFAULT_SPEC[k]);
     if(s.spec && !(s.spec.specVersion >= 3)) for(const k of ["specVersion", "thickness", "sideCutouts", "buttonClearance"]) s.spec[k] = clone(DEFAULT_SPEC[k]);
+    if(s.spec && !(s.spec.specVersion >= 4)){   // roomier button holes on the Nothing Phone (3)
+      s.spec.specVersion = 4; s.spec.buttonClearance = Math.max(s.spec.buttonClearance || 0, DEFAULT_SPEC.buttonClearance);
+      for(const k of s.spec.sideCutouts || []) if(typeof k.fromScreen === "number" && (k.height || 4) < 5.2) k.height = 5.2;
+    }
     if(s.spec){ spec = Object.assign(clone(DEFAULT_SPEC), s.spec); for(const k of ["plateThickness", "ledge", "dovetail", "skinThickness", "tongueThickness", "tipHeight", "bumpHeight", "bumpRise", "bumpLength", "snapClearance", "snapBumps"]) delete spec[k]; }
     if(s.design) design = Object.assign(clone(DEFAULT_DESIGN), s.design);
     delete design.frameColor;   // the case is the panel colour now
@@ -525,9 +537,27 @@ function fitView(){
 function toMM(px, py){ return [(px - view.ox) / view.scale, (py - view.oy) / view.scale]; }
 
 function outlinePath(o){ // phone outline offset outward by o mm
-  const r = Math.min(spec.cornerRadius, spec.width / 2, spec.length / 2) + o;
   ctx.beginPath();
+  if(Array.isArray(spec.cornerProfile)){   // a measured corner curve (Apple's drawings), not a plain radius
+    const ring = CaseGeo.phoneOutline(spec, o, 16)[0];
+    ctx.moveTo(ring[0][0], ring[0][1]); for(let i = 1; i < ring.length; i++) ctx.lineTo(ring[i][0], ring[i][1]); ctx.closePath();
+    return;
+  }
+  const r = Math.min(spec.cornerRadius, spec.width / 2, spec.length / 2) + o;
   ctx.roundRect(-o, -o, spec.width + 2 * o, spec.length + 2 * o, Math.max(0, r));
+}
+// All the back cutouts as one outline (close ones are joined, as the geometry does), grown by `grow`.
+let cutPathCache = { key: null, path: null };
+function cutoutsPath(grow){
+  const key = JSON.stringify([spec.cutouts, spec.cutoutClearance, spec.minWeb, grow]);
+  if(cutPathCache.key !== key || !cutPathCache.map) cutPathCache = { key, map: cutPathCache.map || new Map() };
+  if(!cutPathCache.map.has(key)){
+    const path = new Path2D();
+    for(const poly of CaseGeo.cutoutRegion(spec, grow)) for(const ring of poly){ path.moveTo(ring[0][0], ring[0][1]); for(let i = 1; i < ring.length; i++) path.lineTo(ring[i][0], ring[i][1]); path.closePath(); }
+    if(cutPathCache.map.size > 8) cutPathCache.map.clear();
+    cutPathCache.map.set(key, path);
+  }
+  return cutPathCache.map.get(key);
 }
 function plateOff(){ return CaseGeo.plateOffsets(spec); }
 function frameOuter(){ return spec.phoneClearance + spec.frameWall; }
@@ -593,17 +623,14 @@ function render(){
   ctx.restore();
 
   // holes
-  for(const c of spec.cutouts){
-    ctx.beginPath(); cutSubpath(c, 0);
-    ctx.fillStyle = getCSS("--bed"); ctx.fill();
-  }
+  ctx.fillStyle = getCSS("--bed"); ctx.fill(cutoutsPath(0));
 
   // strokes clipped to the plate's outer face, kept inkMargin clear of the edge and the holes
   ctx.save();
   const im = spec.inkMargin || 0;
   outlinePath(plateOff().narrow - im);
-  for(const c of spec.cutouts) cutSubpath(c, im);
-  ctx.clip("evenodd");
+  ctx.clip();
+  { const keep = new Path2D(); keep.rect(-50, -50, spec.width + 100, spec.length + 100); keep.addPath(cutoutsPath(im)); ctx.clip(keep, "evenodd"); }
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   if(BECK) drawGridLines();
   for(const s of design.strokes) if(!s.top) drawStroke(s);
@@ -1570,7 +1597,7 @@ function syncCaseBtn(){ if(caseBtn) caseBtn.style.boxShadow = `inset 0 0 0 5px $
 
 // ---------- settings sheet ----------
 const sheet = document.getElementById("sheet"), scrim = document.getElementById("scrim");
-function openSheet(){ syncSpecText(); syncColorInputs(); syncMode(); syncInkDepth(); syncStyle(); sheet.classList.add("open"); scrim.classList.add("open"); }
+function openSheet(){ buildPhoneList(); syncSpecText(); syncColorInputs(); syncMode(); syncInkDepth(); syncStyle(); sheet.classList.add("open"); scrim.classList.add("open"); }
 function closeSheet(){ sheet.classList.remove("open"); scrim.classList.remove("open"); }
 btnSettings.onclick = openSheet; btnClose.onclick = closeSheet; scrim.onclick = closeSheet;
 
@@ -1731,7 +1758,9 @@ btnExportSvg.onclick = () => {
     const R = cutRadius(c);
     return `M ${c.x - R} ${c.y} a ${R} ${R} 0 1 0 ${2 * R} 0 a ${R} ${R} 0 1 0 ${-2 * R} 0`;
   }).join(" ");
-  const plate = `M ${r} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${l - r} A ${r} ${r} 0 0 1 ${w - r} ${l} H ${r} A ${r} ${r} 0 0 1 0 ${l - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
+  const plate = Array.isArray(spec.cornerProfile)
+    ? "M " + CaseGeo.phoneOutline(spec, 0, 16)[0].map(q => round2(q[0]) + " " + round2(q[1])).join(" L ") + " Z"
+    : `M ${r} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${l - r} A ${r} ${r} 0 0 1 ${w - r} ${l} H ${r} A ${r} ${r} 0 0 1 0 ${l - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
   const paths = CaseGeo.orderedStrokes(geoDesign().strokes).map(s => s.fill
     ? `<path d="${s.fill.map(poly => poly.map(r => "M " + r.map(q => q[0] + " " + q[1]).join(" L ") + " Z").join(" ")).join(" ")}" fill="${inkCol(s.c)}" stroke="none" fill-rule="evenodd"/>`
     : `<path d="${svgPathForStroke(s)}" stroke="${inkCol(s.c)}" stroke-width="${s.w}"/>`).join("\n    ");
@@ -2098,6 +2127,32 @@ window.addEventListener("keydown", e => {
   else if(e.key === "d") setTool("draw");
   else if(e.key === "e") setTool("erase");
   else if(e.key === "Escape"){ closeSheet(); viewer.classList.remove("open"); }
+});
+
+// ---------- phones ----------
+// Presets replace only what belongs to the phone; the case settings (wall, clearances...) stay as they are.
+const PHONE_KEYS = ["phone", "width", "length", "thickness", "cornerRadius", "cornerProfile", "cornerProfileY", "cutouts", "sideCutouts", "source"];
+const PHONES = [{ id: "nothing-3", name: "Nothing Phone (3)", group: "Nothing", note: "Measured by hand with calipers (the USB-C opening is still an estimate).", spec: Object.fromEntries(PHONE_KEYS.filter(k => k in DEFAULT_SPEC).map(k => [k, DEFAULT_SPEC[k]])) }].concat(window.PHONES || []);
+function buildPhoneList(){
+  phoneSel.innerHTML = "";
+  const groups = [...new Set(PHONES.map(p => p.group || "Other"))];
+  for(const g of groups){
+    const og = document.createElement("optgroup"); og.label = g;
+    for(const p of PHONES.filter(p => (p.group || "Other") === g)){ const o = document.createElement("option"); o.value = p.id; o.textContent = p.name; og.appendChild(o); }
+    phoneSel.appendChild(og);
+  }
+  const cur = PHONES.find(p => p.spec.phone === spec.phone);
+  if(cur) phoneSel.value = cur.id; else { const o = document.createElement("option"); o.value = ""; o.textContent = spec.phone || "Custom"; phoneSel.prepend(o); phoneSel.value = ""; }
+  phoneNote.textContent = cur ? (cur.note || "") : "Custom dimensions (edited below).";
+}
+phoneSel.addEventListener("change", () => {
+  const p = PHONES.find(x => x.id === phoneSel.value); if(!p) return;
+  for(const k of PHONE_KEYS) delete spec[k];
+  Object.assign(spec, clone(p.spec));
+  selCut = -1; syncSpecText(); specErr.textContent = "";
+  document.getElementById("subtitle").textContent = `${spec.phone}, back view`;
+  buildPhoneList(); fitView(); save(); render();
+  showHint(`${p.name}: ${spec.width} × ${spec.length} × ${spec.thickness} mm. Your drawing is kept; check it still fits.`);
 });
 
 appDraw.onclick = () => { if(BECK) location.href = "../"; else closeSheet(); };

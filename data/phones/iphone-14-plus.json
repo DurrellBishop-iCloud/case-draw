@@ -1,0 +1,20 @@
+{
+  "id": "iphone-14-plus", "name": "iPhone 14 Plus", "drawingDate": "2022-09-21",
+  "width": 78.07, "length": 160.84, "thickness": 7.80,
+  "corner": { "profile": [0, 0.17, 1.35, 4.10, 8.10, 12.67, 17.32], "radius": null },
+  "camera": {
+    "plateau": { "x0": 1.28, "x1": 36.57, "y0": 1.28, "y1": 36.57, "shape": "roundrect", "r": null },
+    "lenses": [ { "x": 12.55, "y": 12.55, "d": 14.38 }, { "x": 25.30, "y": 25.30, "d": 14.38 } ],
+    "extras": [ { "name": "flash", "x": 26.97, "y": 10.87, "d": 6.28, "inside": true }, { "name": "rear mic", "x": 11.29, "y": 26.56, "d": 2.10, "inside": true } ],
+    "bump": 3.42, "plateauHeight": 1.85
+  },
+  "buttons": [
+    { "name": "Ring/silent switch", "side": "left", "centre": 31.98, "half": 2.96, "width": 2.35, "centreLine": 3.90 },
+    { "name": "Volume up", "side": "left", "centre": 45.43, "half": 5.92, "width": 3.31, "centreLine": 3.90 },
+    { "name": "Volume down", "side": "left", "centre": 59.63, "half": 5.92, "width": 3.31, "centreLine": 3.90 },
+    { "name": "SIM tray", "kind": "sim", "side": "left", "centre": 110.70, "half": 7.97, "width": 2.56, "centreLine": 3.90 },
+    { "name": "Side button", "side": "right", "centre": 52.53, "half": 9.17, "width": 3.31, "centreLine": 3.90 }
+  ],
+  "bottom": { "from": 20.16, "to": 62.42, "datum": "0.00 at left of bottom view; view drawn with display up (camera bump down)", "connectorWidth": null },
+  "notes": "Main sheet has NO text layer (dimensions are stroked vector glyphs), so pg.get_text('words') cannot verify anything; every number was instead checked against a decode of the vector stroke glyphs plus zoomed crops. CORNER: the two axes carry DIFFERENT lists on this sheet. 'profile' is the horizontal (x) list 0 0.17 1.35 4.10 8.10 12.67 17.32; the vertical (y) list is 0 -0.07 -0.85 -3.14 -6.85 -11.32 -15.96. Curve points pair crosswise: (0,-15.96) (0.17,-11.32) (1.35,-6.85) (4.10,-3.14) (8.10,-0.85) (12.67,-0.07) (17.32,0). CAMERA DETAIL A: outer outline 1.28..36.57 on both axes, inner (plateau top) outline 3.88..33.97; plateau corner radius not dimensioned. Flash and rear mic are inside the plateau. Ring/silent switch: 31.98 and 3.90 are labelled POCKET CENTER, 2.35 is pocket width. Bottom ordinates: 20.16 28.46 32.64 34.81 43.26 45.43 49.62 62.42 (10X dia 1.53 ports, 2X dia 1.50 screws). Connector width itself not dimensioned; recommended connector keepout is 13.65 wide x 6.85 high, centred at 39.04."
+}

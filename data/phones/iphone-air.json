@@ -1,0 +1,21 @@
+{
+  "id": "iphone-air", "name": "iPhone Air", "drawingDate": "2025-09-09",
+  "width": 74.70, "length": 156.18, "thickness": 5.64,
+  "corner": { "profile": [0.00, 0.04, 0.91, 3.78, 8.43, 13.85], "radius": null },
+  "camera": {
+    "plateau": { "x0": null, "x1": null, "y0": null, "y1": null, "shape": "bar", "r": null },
+    "lenses": [ { "x": 16.29, "y": 16.29, "d": 15.82 } ],
+    "extras": [ { "name": "rear mic", "x": 51.34, "y": 16.29, "d": 2.30, "inside": true }, { "name": "flash", "x": 58.42, "y": 16.29, "d": 6.30, "inside": true } ],
+    "bump": 5.68, "plateauHeight": 3.03
+  },
+  "buttons": [
+    { "name": "Action button", "side": "left", "centre": 34.08, "half": 3.45, "width": 2.35, "centreLine": null },
+    { "name": "Volume up", "side": "left", "centre": 48.23, "half": 5.60, "width": 2.35, "centreLine": null },
+    { "name": "Volume down", "side": "left", "centre": 62.43, "half": 5.60, "width": 2.35, "centreLine": null },
+    { "name": "Side button", "side": "right", "centre": 55.33, "half": 8.90, "width": 2.35, "centreLine": 2.82 },
+    { "name": "Camera control", "side": "right", "centre": 104.77, "half": 8.55, "width": 2.53, "centreLine": 2.82 }
+  ],
+  "bottom": { "from": 24.34, "to": 50.36, "datum": "0.00 at left of bottom view; view drawn with display up (camera bump at the bottom of the view)", "connectorWidth": null },
+  "textLayerVerified": false,
+  "notes": "NO TEXT LAYER: on this PDF the main dimensioned sheet (page index 1) has all lettering converted to vector outlines, so pg.get_text('words') returns only the footer and the guide's verbatim text check CANNOT be applied to it. Every value was read visually from crops at 3x to 5x zoom and cross-checked where possible by arithmetic (the bottom ordinates mirror about the centre and each pair sums to the 74.70 width: 24.34+50.36, 26.33+48.38, 30.01+44.70, 33.05+41.65; centreLine 2.82 is half of thickness 5.64). CAMERA PLATEAU EDGES ARE NOT DIMENSIONED anywhere in this PDF: the full-width bar is drawn in DETAIL D (sheet 1) and DETAIL N (sheet 3) but neither gives its bottom edge, side insets or radii, so x0/x1/y0/y1 are null; only its height off the back (3.03) and the items on it are dimensioned. The drawing writes the camera row y as '3X -16.29' (negative = downward); reported positive per the guide's y-down convention. Lens, rear mic and flash all sit inside an inner pill outline on the bar. Left view gives only the button width '3X 2.35' and no centre-line dimension, so centreLine is null for the three left buttons (right view gives 2.82). No SIM tray is drawn on this phone. Camera Control is flush (0.00 proud); other buttons 0.45 proud. Bottom ordinates: 24.34 26.33 30.01 33.05 41.65 44.70 48.38 50.36 (33.05 and 41.65 point at the two ends of the USB-C opening; width not dimensioned directly); the port row is positioned '6X 2.71' across the thickness (which face it is measured from was not determined). Recommended connector keepout 12.45 wide x 6.60 high, 2X R3.25 ends, centred at 37.35."
+}

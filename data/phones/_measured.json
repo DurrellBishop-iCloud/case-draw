@@ -1,0 +1,160 @@
+{
+ "_about": "Values Apple's drawings do NOT dimension, measured from the vector linework of the same drawings with a millimetre grid calibrated on dimensioned lens centres (about +/-0.2 mm). Merged over the read values by tools/make_phones.py and flagged in the preset's note. 'corner' entries merge what the sheet gives across its two axes (profileY = the list down the side) or supply a value the sheet draws but does not label.",
+ "iphone-13-mini": {
+  "plateau": {
+   "x0": 1.05,
+   "y0": 1.05,
+   "x1": 33.12,
+   "y1": 33.02
+  }
+ },
+ "iphone-13": {
+  "plateau": {
+   "y1": 35.12
+  }
+ },
+ "iphone-14": {
+  "plateau": {
+   "y0": 1.15
+  },
+  "corner": {
+   "profileY": [
+    0,
+    0.07,
+    0.95,
+    3.4,
+    7.2,
+    11.63,
+    16.14
+   ],
+   "why": "sheet lists the two axes separately"
+  }
+ },
+ "iphone-17-pro": {
+  "plateau": {
+   "x0": 0.6,
+   "x1": 71.25,
+   "y0": 0.6,
+   "y1": 47.9,
+   "r": 11.0
+  }
+ },
+ "iphone-17-pro-max": {
+  "plateau": {
+   "x0": 0.6,
+   "x1": 77.38,
+   "y0": 0.6,
+   "y1": 47.9,
+   "r": 11.0
+  }
+ },
+ "iphone-air": {
+  "plateau": {
+   "x0": 0.6,
+   "x1": 74.1,
+   "y0": 0.6,
+   "y1": 34.2,
+   "r": 8.0
+  },
+  "corner": {
+   "profile": [
+    0,
+    0.04,
+    0.91,
+    3.78,
+    8.43,
+    13.85,
+    19.4
+   ],
+   "why": "the sheet draws a seventh point but does not label it; measured about 19.4 on the linework"
+  }
+ },
+ "iphone-14-plus": {
+  "corner": {
+   "profileY": [
+    0,
+    0.07,
+    0.85,
+    3.14,
+    6.85,
+    11.32,
+    15.96
+   ],
+   "why": "sheet lists the two axes separately"
+  }
+ },
+ "iphone-14-pro-max": {
+  "corner": {
+   "profileY": [
+    0,
+    0.06,
+    0.81,
+    3.01,
+    6.6,
+    10.98,
+    15.55
+   ],
+   "why": "sheet lists the two axes separately"
+  }
+ },
+ "iphone-16e": {
+  "corner": {
+   "profile": [
+    0,
+    0.06,
+    0.86,
+    3.22,
+    6.97,
+    11.38,
+    15.89
+   ],
+   "profileY": [
+    0,
+    0.07,
+    0.95,
+    3.4,
+    7.2,
+    11.63,
+    16.14
+   ],
+   "why": "sheet lists the two axes separately and leaves the 0.86 ordinate unlabelled; it is the same table as iPhone 14, which labels it"
+  }
+ },
+ "iphone-17e": {
+  "corner": {
+   "profile": [
+    0,
+    0.06,
+    0.86,
+    3.22,
+    6.97,
+    11.38,
+    15.89
+   ],
+   "profileY": [
+    0,
+    0.07,
+    0.95,
+    3.4,
+    7.2,
+    11.63,
+    16.14
+   ],
+   "why": "sheet lists the two axes separately and leaves the 0.86 ordinate unlabelled; it is the same table as iPhone 14, which labels it"
+  }
+ },
+ "iphone-16-pro-max": {
+  "corner": {
+   "profile": [
+    0,
+    0.04,
+    0.89,
+    3.74,
+    8.36,
+    13.75,
+    19.23
+   ],
+   "why": "the sheet draws a seventh point but does not label it; it measures 19.28 on the linework and the identical iPhone 16 Pro table prints 19.23"
+  }
+ }
+}

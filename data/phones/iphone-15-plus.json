@@ -1,0 +1,111 @@
+{
+  "id": "iphone-15-plus",
+  "name": "iPhone 15 Plus",
+  "drawingDate": "2023-10-10",
+  "width": 77.76,
+  "length": 160.89,
+  "thickness": 7.81,
+  "corner": {
+    "profile": [
+      0,
+      0.04,
+      0.59,
+      2.29,
+      5.24,
+      9.06,
+      13.21,
+      17.4
+    ],
+    "radius": null
+  },
+  "camera": {
+    "plateau": {
+      "x0": 1.22,
+      "x1": 37.15,
+      "y0": 1.22,
+      "y1": 37.15,
+      "shape": "roundrect",
+      "r": null
+    },
+    "lenses": [
+      {
+        "x": 12.73,
+        "y": 12.73,
+        "d": 15.07
+      },
+      {
+        "x": 25.64,
+        "y": 25.64,
+        "d": 15.07
+      }
+    ],
+    "extras": [
+      {
+        "name": "flash",
+        "x": 27.32,
+        "y": 11.06,
+        "d": 6.28,
+        "inside": true
+      },
+      {
+        "name": "rear mic",
+        "x": 11.47,
+        "y": 26.9,
+        "d": 2.1,
+        "inside": true
+      }
+    ],
+    "bump": 3.48,
+    "plateauHeight": 1.85
+  },
+  "buttons": [
+    {
+      "name": "Ring/silent switch",
+      "side": "left",
+      "centre": 31.94,
+      "half": 2.96,
+      "width": 2.35,
+      "centreLine": 3.91
+    },
+    {
+      "name": "Volume up",
+      "side": "left",
+      "centre": 45.39,
+      "half": 5.6,
+      "width": 2.66,
+      "centreLine": 3.91
+    },
+    {
+      "name": "Volume down",
+      "side": "left",
+      "centre": 59.59,
+      "half": 5.6,
+      "width": 2.66,
+      "centreLine": 3.91
+    },
+    {
+      "name": "SIM tray",
+      "side": "left",
+      "centre": 110.72,
+      "half": 7.97,
+      "width": 2.56,
+      "centreLine": 3.91,
+      "kind": "sim"
+    },
+    {
+      "name": "Side button",
+      "side": "right",
+      "centre": 52.49,
+      "half": 8.85,
+      "width": 2.66,
+      "centreLine": 3.91
+    }
+  ],
+  "bottom": {
+    "from": 20.39,
+    "to": 61.87,
+    "datum": "0.00 at left of bottom view; view drawn with display up (camera bump at lower right)",
+    "connectorWidth": null
+  },
+  "notes": "TEXT-CHECK NOT POSSIBLE FOR SHEET 1: on this PDF the main dimensioned sheet's lettering is vector outlines, not text (get_text('words') returns only the footer), so sheet-1 numbers were read visually from zoomed renders (z=3.3 to 10) and cross-checked by arithmetic (connector/screw ordinates sum to the product width; button centres agree with drawn positions to ~0.2 mm); an independent macOS Vision OCR pass also found 24 of 39 distinct values verbatim and produced no conflicting reading for the rest. Text on sheets 2-3 confirms 37.15 (plateau edge), 38.88 (half width), 52.49 (side button), 3.91. Sheet writes the camera y ordinates and the vertical corner ordinates as negatives (-12.73 etc.); reported here as positive, y downward. Ring/silent switch 31.94 and its 3.91 are labelled POCKET CENTER; 2X 2.96 is the half-length of the switch pocket, 2.35 its width. Apple mislabels the 7.81 thickness dimension as 'PRODUCT WIDTH' on the right side view. Inner plateau outline x 3.90-34.47, y 3.90-34.47; plateau corner radius not dimensioned. Nothing a case must clear lies outside the plateau (flash and mic are inside). Ring switch 0.60 proud, other buttons 0.45. Sheet 2 also shows a do-not-obstruct-with-metal window on the right side (not a button): centre 103.11 from top, 2X 12.55 half-length, 5.26 wide, centre-line 3.91. Connector width not dimensioned: bottom ordinates 34.09 and 43.67 are the connector opening edges; Detail C recommended connector keepout 12.45 x 6.60 (4X R3.25), centred 3.91 from face, 38.88 across width. Bottom ordinates: 20.39 27.16 31.95 34.09 43.67 45.80 50.60 61.87 (10X dia 1.35 ports, 2X dia 1.50 screws)."
+}

@@ -1,0 +1,110 @@
+{
+  "id": "iphone-13",
+  "name": "iPhone 13",
+  "drawingDate": "2021-09-28",
+  "width": 71.52,
+  "length": 146.7,
+  "thickness": 7.65,
+  "corner": {
+    "profile": [
+      0,
+      0.07,
+      0.92,
+      3.31,
+      7.04,
+      11.43,
+      15.89
+    ],
+    "radius": null
+  },
+  "camera": {
+    "plateau": {
+      "x0": 1.15,
+      "x1": 35.12,
+      "y0": 1.15,
+      "y1": null,
+      "shape": "roundrect",
+      "r": null
+    },
+    "lenses": [
+      {
+        "x": 11.88,
+        "y": 11.88,
+        "d": 13.69
+      },
+      {
+        "x": 24.24,
+        "y": 24.24,
+        "d": 13.69
+      }
+    ],
+    "extras": [
+      {
+        "name": "flash",
+        "x": 26.11,
+        "y": 10.01,
+        "d": 6.28,
+        "inside": true
+      },
+      {
+        "name": "rear mic",
+        "x": 10.43,
+        "y": 25.69,
+        "d": 2.4,
+        "inside": true
+      }
+    ],
+    "bump": 2.59,
+    "plateauHeight": 1.5
+  },
+  "buttons": [
+    {
+      "name": "Ring/silent switch",
+      "side": "left",
+      "centre": 32.22,
+      "half": 2.9,
+      "width": 2.15,
+      "centreLine": 3.75
+    },
+    {
+      "name": "Volume up",
+      "side": "left",
+      "centre": 45.53,
+      "half": 5.82,
+      "width": 3.11,
+      "centreLine": 3.82
+    },
+    {
+      "name": "Volume down",
+      "side": "left",
+      "centre": 59.53,
+      "half": 5.82,
+      "width": 3.11,
+      "centreLine": 3.82
+    },
+    {
+      "name": "SIM tray",
+      "side": "left",
+      "centre": 110.04,
+      "half": 8.05,
+      "width": 2.72,
+      "centreLine": 3.82,
+      "kind": "sim"
+    },
+    {
+      "name": "Side button",
+      "side": "right",
+      "centre": 52.53,
+      "half": 9.07,
+      "width": 3.11,
+      "centreLine": 3.82
+    }
+  ],
+  "bottom": {
+    "from": 19.14,
+    "to": 56.89,
+    "datum": "0.00 at left of bottom view; view drawn with display up and camera bump down, so 0.00 is the phone's left edge as seen from the front",
+    "connectorWidth": null
+  },
+  "notes": "Dimension numbers on this drawing are vector outlines, not PDF text: pg.get_text('words') returns only the title/footer, so the verbatim text check cannot confirm any value; every number was read visually from crops at 3.5x-12x zoom and cross-checked by symmetry about the centre ordinate and by an independent tesseract OCR pass over the rendered sheet (which found all but a handful of the values; those were re-read at higher zoom). centreLine values are measured across the thickness (about half of it); which face they are taken from was not determined. Plateau bottom edge (y1) is NOT dimensioned in Detail D: y ordinates stop at 1.15 (outer top) and 3.64 (inner top); x ordinates are 1.15 / 3.64 (left outer / inner) and 32.48 / 35.12 (right inner / outer). Plateau corner radius not dimensioned. Corner table differs between axes in one entry: across-width list has 11.43 (reported), down-length list has 11.42. The 'SIM TRAY' leader on the left view is drawn pointing at the centre-line just below the volume-down button, but the dimensioned slot with the eject hole is centred at 110.04 (2X 8.05, 2.72 wide, 3.82 centre-line) and that is what is reported. Ring/silent values are for the POCKET (32.22, 3.75 'POCKET CENTER', 2X 2.90, 2.15 width). 13.69 is the '2X dia 13.69' callout pointing at the outer lens ring. 'BACK GLASS TO REAR CAMERA GLASS' is written '3X 2.59'. Connector width not dimensioned (height 2.30; keepout 13.65 x 6.85; ordinates 31.74 and 39.79 straddle the 35.76 centre). Bottom ordinates: 19.14 25.18 29.37 31.74 39.79 42.16 46.34 56.89. Button protrusion: switch 0.60, volume 0.45, side 0.45."
+}

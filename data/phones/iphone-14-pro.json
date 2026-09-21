@@ -1,0 +1,20 @@
+{
+  "id": "iphone-14-pro", "name": "iPhone 14 Pro", "drawingDate": "2022-09-21",
+  "width": 71.45, "length": 147.46, "thickness": 7.85,
+  "corner": { "profile": [0, 0.08, 1.00, 3.61, 7.68, 12.45, 17.32], "radius": null },
+  "camera": {
+    "plateau": { "x0": 2.19, "x1": 44.12, "y0": 2.19, "y1": 45.61, "shape": "roundrect", "r": null },
+    "lenses": [ { "x": 14.28, "y": 14.28, "d": 15.61 }, { "x": 14.28, "y": 33.52, "d": 15.61 }, { "x": 32.12, "y": 23.90, "d": 15.61 } ],
+    "extras": [ { "name": "flash", "x": 32.12, "y": 10.32, "d": 6.90, "inside": true }, { "name": "rear mic", "x": 37.91, "y": 33.98, "d": 1.15, "inside": true } ],
+    "bump": 4.18, "plateauHeight": 1.85
+  },
+  "buttons": [
+    { "name": "Ring/silent switch", "side": "left", "centre": 31.14, "half": 2.96, "width": 2.35, "centreLine": 3.85 },
+    { "name": "Volume up", "side": "left", "centre": 44.59, "half": 5.90, "width": 3.26, "centreLine": 3.92 },
+    { "name": "Volume down", "side": "left", "centre": 58.79, "half": 5.90, "width": 3.26, "centreLine": 3.92 },
+    { "name": "SIM tray", "kind": "sim", "side": "left", "centre": 86.24, "half": 7.97, "width": 2.56, "centreLine": 3.92 },
+    { "name": "Side button", "side": "right", "centre": 55.54, "half": 9.15, "width": 3.26, "centreLine": 3.92 }
+  ],
+  "bottom": { "from": 19.11, "to": 56.86, "datum": "0.00 at left of bottom view; view drawn with display up (camera bump down)", "connectorWidth": null },
+  "notes": "Main sheet has NO text layer (dimensions are stroked vector glyphs), so pg.get_text('words') cannot verify anything; every number was instead checked against a decode of the vector stroke glyphs plus zoomed crops. Corner list is identical on both axes. CAMERA DETAIL D: outer outline 2.19..44.12 (x) and 2.19..45.61 (y); inner (plateau top) outline 4.79..41.52 x, 4.79..43.01 y; plateau corner radius not dimensioned. '2X 14.28' on the x axis covers cameras 1 and 2; 32.12 appears twice on x (flash, camera 3). Flash and rear mic are inside the plateau. Ring/silent switch: 31.14 and 3.85 are labelled POCKET CENTER, 2.35 is pocket width. Bottom ordinates: 19.11 25.15 29.33 31.35 40.11 42.12 46.31 56.86 (8X dia 1.53 ports, 2X dia 1.50 screws). Connector width itself not dimensioned; recommended connector keepout is 12.59 wide x 6.85 high, centred at 35.73."
+}

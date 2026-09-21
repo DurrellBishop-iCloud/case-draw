@@ -1,0 +1,122 @@
+{
+  "id": "iphone-15-pro",
+  "name": "iPhone 15 Pro",
+  "drawingDate": "2023-10-10",
+  "width": 70.6,
+  "length": 146.61,
+  "thickness": 8.25,
+  "corner": {
+    "profile": [
+      0,
+      0.05,
+      0.9,
+      3.48,
+      7.58,
+      12.36,
+      17.24
+    ],
+    "radius": null
+  },
+  "camera": {
+    "plateau": {
+      "x0": 1.04,
+      "x1": 45.22,
+      "y0": 1.04,
+      "y1": 46.54,
+      "shape": "roundrect",
+      "r": null
+    },
+    "lenses": [
+      {
+        "x": 14.17,
+        "y": 14.17,
+        "d": 16.2
+      },
+      {
+        "x": 14.17,
+        "y": 33.41,
+        "d": 16.2
+      },
+      {
+        "x": 32.16,
+        "y": 23.79,
+        "d": 16.2
+      }
+    ],
+    "extras": [
+      {
+        "name": "flash",
+        "x": 32.16,
+        "y": 10.22,
+        "d": 6.92,
+        "inside": true
+      },
+      {
+        "name": "rear mic",
+        "x": 37.95,
+        "y": 33.86,
+        "d": 0.75,
+        "inside": true
+      },
+      {
+        "name": "rear sensor (LiDAR) keepout",
+        "x": 32.16,
+        "y": 36.62,
+        "d": 14.37,
+        "inside": true
+      }
+    ],
+    "bump": 3.78,
+    "plateauHeight": 2.05
+  },
+  "buttons": [
+    {
+      "name": "Action button",
+      "side": "left",
+      "centre": 31.67,
+      "half": 3.02,
+      "width": 2.66,
+      "centreLine": 4.12
+    },
+    {
+      "name": "Volume up",
+      "side": "left",
+      "centre": 45.22,
+      "half": 5.6,
+      "width": 2.66,
+      "centreLine": 4.12
+    },
+    {
+      "name": "Volume down",
+      "side": "left",
+      "centre": 59.42,
+      "half": 5.6,
+      "width": 2.66,
+      "centreLine": 4.12
+    },
+    {
+      "name": "SIM tray",
+      "side": "left",
+      "centre": 87.05,
+      "half": 8.07,
+      "width": 2.76,
+      "centreLine": 4.12,
+      "kind": "sim"
+    },
+    {
+      "name": "Side button",
+      "side": "right",
+      "centre": 56.17,
+      "half": 8.85,
+      "width": 2.66,
+      "centreLine": 4.12
+    }
+  ],
+  "bottom": {
+    "from": 19.59,
+    "to": 55.52,
+    "datum": "0.00 at left of bottom view; view drawn with display up (camera bumps at lower right)",
+    "connectorWidth": null
+  },
+  "notes": "TEXT-CHECK NOT POSSIBLE FOR SHEET 1: on this PDF the main dimensioned sheet's lettering is vector outlines, not text (get_text('words') returns only the footer), so sheet-1 numbers were read visually from zoomed renders (z=3.3 to 10) and cross-checked by arithmetic (connector/screw ordinates sum to the product width; button centres agree with drawn positions to ~0.2 mm); an independent macOS Vision OCR pass also found 28 of 40 distinct values verbatim and produced no conflicting reading for the rest. Text on sheet 2 confirms 45.22 (plateau right edge), 32.16, 35.30 (half width), 4.12, 12.36. Sheet writes camera y ordinates and vertical corner ordinates as negatives; reported positive, y downward. Plateau is not square: x 1.04-45.22, y 1.04-46.54; inner outline x 4.70-41.56, y 4.70-42.88; corner radius not dimensioned. '2X 32.16' is the shared x of the flash and rear camera 3. LiDAR is not dimensioned on sheet 1; the extras entry is sheet 2 Detail F 'REAR SENSOR KEEPOUT contacting plateau surface' (x 32.16, y 36.62, dia 14.37 is the keepout zone, not the window) and is text-verified. Centre-line 4.12 is measured from one face of the 8.25-thick body (8.25/2 = 4.125). Buttons 0.45 proud. Sheet 2 also shows a do-not-obstruct-with-metal window on the right side (not a button): centre 93.81, 2X 12.55 half-length, 5.46 wide, centre-line 4.12. Connector width not dimensioned: bottom ordinates 30.45 and 40.16 are the connector opening edges; Detail C recommended connector keepout 12.45 x 6.60 (2X R3.25), centred 4.12 from face, 35.30 across width. Bottom ordinates: 19.59 24.10 28.38 30.45 40.16 42.23 46.50 55.52 (8X dia 1.35 ports, 2X dia 1.50 screws)."
+}

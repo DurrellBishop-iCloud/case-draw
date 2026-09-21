@@ -1,0 +1,118 @@
+{
+  "id": "iphone-16",
+  "name": "iPhone 16",
+  "drawingDate": "2024-09-19",
+  "width": 71.63,
+  "length": 147.64,
+  "thickness": 7.81,
+  "corner": {
+    "profile": [
+      0,
+      0.04,
+      0.59,
+      2.29,
+      5.24,
+      9.06,
+      13.21,
+      17.4
+    ],
+    "radius": null
+  },
+  "camera": {
+    "plateau": {
+      "x0": 1.09,
+      "x1": 26.16,
+      "y0": 1.25,
+      "y1": 43.72,
+      "shape": "pill",
+      "r": null
+    },
+    "lenses": [
+      {
+        "x": 13.62,
+        "y": 13.62,
+        "d": 16.0
+      },
+      {
+        "x": 13.62,
+        "y": 31.34,
+        "d": 16.0
+      }
+    ],
+    "extras": [
+      {
+        "name": "flash",
+        "x": 30.01,
+        "y": 22.48,
+        "d": 6.28
+      },
+      {
+        "name": "rear mic",
+        "x": 20.54,
+        "y": 22.48,
+        "d": 1.0,
+        "inside": true
+      }
+    ],
+    "bump": 3.48,
+    "plateauHeight": 1.85
+  },
+  "buttons": [
+    {
+      "name": "Action button",
+      "side": "left",
+      "centre": 34.08,
+      "half": 3.45,
+      "width": 2.66,
+      "centreLine": 3.91
+    },
+    {
+      "name": "Volume up",
+      "side": "left",
+      "centre": 48.23,
+      "half": 5.6,
+      "width": 2.66,
+      "centreLine": 3.91
+    },
+    {
+      "name": "Volume down",
+      "side": "left",
+      "centre": 62.43,
+      "half": 5.6,
+      "width": 2.66,
+      "centreLine": 3.91
+    },
+    {
+      "name": "SIM tray",
+      "side": "left",
+      "centre": 104.1,
+      "half": 9.82,
+      "width": 2.56,
+      "centreLine": 3.91,
+      "kind": "sim"
+    },
+    {
+      "name": "Side button",
+      "side": "right",
+      "centre": 55.33,
+      "half": 8.85,
+      "width": 2.66,
+      "centreLine": 3.91
+    },
+    {
+      "name": "Camera control",
+      "side": "right",
+      "centre": 96.23,
+      "half": 8.55,
+      "width": 3.03,
+      "centreLine": 3.91
+    }
+  ],
+  "bottom": {
+    "from": 19.75,
+    "to": 56.39,
+    "datum": "0.00 at left of bottom view; view drawn with display up (camera bump at lower right)",
+    "connectorWidth": null
+  },
+  "notes": "All numbers found verbatim in sheet-1 page text. Inner plateau outline is x 3.79-23.45, y 3.97-41.00. Buttons stand 0.45 proud of the side, SIM tray 0.00, camera control 0.00 (flush). Connector width is not dimensioned as such: bottom-view ordinates 31.31 and 40.31 are the connector opening edges; Detail C gives a recommended connector keepout 12.45 wide x 6.60 high (2X R3.25), centred 3.91 from the face and at 35.81 across the width. Bottom ordinates: 19.75 24.26 28.89 31.31 40.31 42.74 47.37 56.39 (8X dia 1.35 ports, 2X dia 1.50 screws). centreLine 3.91 is half of the 7.81 thickness so the reference face does not matter."
+}

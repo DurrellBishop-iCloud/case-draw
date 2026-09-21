@@ -1,0 +1,22 @@
+{
+  "id": "iphone-17-pro", "name": "iPhone 17 Pro", "drawingDate": "2025-09-09",
+  "width": 71.85, "length": 150.01, "thickness": 8.75,
+  "corner": { "profile": [0.00, 0.04, 0.92, 3.80, 8.46, 13.90, 19.43], "radius": null },
+  "camera": {
+    "plateau": { "x0": null, "x1": null, "y0": null, "y1": null, "shape": "bar", "r": null },
+    "lenses": [ { "x": 14.37, "y": 14.37, "d": 16.20 }, { "x": 14.37, "y": 33.61, "d": 16.20 }, { "x": 32.36, "y": 23.99, "d": 16.20 } ],
+    "extras": [ { "name": "flash", "x": 58.03, "y": 13.82, "d": 6.80, "inside": true }, { "name": "rear mic", "x": 58.03, "y": 23.99, "d": 1.05, "inside": true }, { "name": "rear sensor (LiDAR)", "x": 58.03, "y": 34.16, "d": 6.65, "inside": true } ],
+    "bump": null, "plateauHeight": 2.55
+  },
+  "buttons": [
+    { "name": "Action button", "side": "left", "centre": 34.28, "half": 3.45, "width": 2.66, "centreLine": 4.375 },
+    { "name": "Volume up", "side": "left", "centre": 48.43, "half": 5.60, "width": 2.66, "centreLine": 4.375 },
+    { "name": "Volume down", "side": "left", "centre": 62.63, "half": 5.60, "width": 2.66, "centreLine": 4.375 },
+    { "name": "SIM tray", "kind": "sim", "side": "left", "centre": 114.19, "half": 8.05, "width": 2.56, "centreLine": 4.375 },
+    { "name": "Side button", "side": "right", "centre": 55.53, "half": 8.85, "width": 2.66, "centreLine": 4.375 },
+    { "name": "Camera control", "side": "right", "centre": 98.40, "half": 8.55, "width": 3.03, "centreLine": 4.375 }
+  ],
+  "bottom": { "from": 15.40, "to": 56.45, "datum": "0.00 at left of bottom view; view drawn with display up (camera bump at the bottom of the view)", "connectorWidth": 9.00 },
+  "textLayerVerified": false,
+  "notes": "NO TEXT LAYER: on this PDF the main dimensioned sheet (page index 1) has all lettering converted to vector outlines, so pg.get_text('words') returns only the footer and the guide's verbatim text check CANNOT be applied to it. Every value was read visually from crops at 3x to 8x zoom and cross-checked where possible by arithmetic (all seven mirrored pairs of bottom ordinates sum to the 71.85 width; centreLine 4.375 is half of thickness 8.75). CAMERA PLATEAU EDGES ARE NOT DIMENSIONED anywhere in this PDF: DETAIL D shows the full-width bar but gives only the lens, flash, mic and rear-sensor positions, so x0/x1/y0/y1 are null. The drawing writes camera y values as negatives (-14.37 -23.99 -33.61 -13.82 -34.16); reported positive per the guide's y-down convention. '3X 58.03' is the shared x of flash, rear mic and rear sensor; all three sit on the plateau. BUMP IS NULL ON PURPOSE: the sheet gives 2.55 'BACK PLATE TO CAMERA PLATEAU' and 1.88 labelled 'BACK PLATE TO REAR CAMERA GLASS', but the 1.88 arrows span from the plateau surface to the camera glass (and the 17 Pro Max sheet labels the same 1.88 'CAMERA PLATEAU TO REAR CAMERA GLASS'), so 1.88 is the lens height ABOVE the plateau, not above the back; the total is not dimensioned. '4X 4.375' on the left view covers three buttons and SIM tray, '2X 4.375' on the right covers side button and Camera Control. Camera Control is flush (0.00 proud); other buttons 0.45 proud. Bottom ordinates: 15.40 17.65 19.91 22.16 24.42 29.00 31.43 40.42 42.85 47.43 49.69 51.94 54.20 56.45 (31.43 and 40.42 point at the ends of the USB-C opening). connectorWidth 9.00 is the dimension drawn across the USB-C opening in DETAIL C (unlabelled; my reading of what it spans). Recommended connector keepout 12.45 wide x 6.60 high, 2X R3.25 ends, centred at 35.92."
+}

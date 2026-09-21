@@ -1,0 +1,103 @@
+{
+  "id": "iphone-16e",
+  "name": "iPhone 16e",
+  "drawingDate": "2025-03-17",
+  "width": 71.52,
+  "length": 146.71,
+  "thickness": 7.8,
+  "corner": {
+    "profile": [
+      0,
+      0.07,
+      0.95,
+      3.4,
+      7.2,
+      11.63,
+      16.14
+    ],
+    "radius": null
+  },
+  "camera": {
+    "plateau": {
+      "x0": null,
+      "x1": null,
+      "y0": null,
+      "y1": null,
+      "shape": null,
+      "r": null
+    },
+    "lenses": [
+      {
+        "x": 13.32,
+        "y": 13.32,
+        "d": 14.97
+      }
+    ],
+    "extras": [
+      {
+        "name": "rear mic",
+        "x": 24.3,
+        "y": 13.32,
+        "d": 1.3
+      },
+      {
+        "name": "flash",
+        "x": 29.68,
+        "y": 13.32,
+        "d": 3.75
+      }
+    ],
+    "bump": 1.68,
+    "plateauHeight": null
+  },
+  "buttons": [
+    {
+      "name": "Action button",
+      "side": "left",
+      "centre": 31.28,
+      "half": 3.77,
+      "width": 3.31,
+      "centreLine": 3.9
+    },
+    {
+      "name": "Volume up",
+      "side": "left",
+      "centre": 45.43,
+      "half": 5.92,
+      "width": 3.31,
+      "centreLine": 3.9
+    },
+    {
+      "name": "Volume down",
+      "side": "left",
+      "centre": 59.63,
+      "half": 5.92,
+      "width": 3.31,
+      "centreLine": 3.9
+    },
+    {
+      "name": "SIM tray",
+      "side": "left",
+      "centre": 110.04,
+      "half": 7.97,
+      "width": 2.56,
+      "centreLine": 3.9,
+      "kind": "sim"
+    },
+    {
+      "name": "Side button",
+      "side": "right",
+      "centre": 52.53,
+      "half": 9.17,
+      "width": 3.31,
+      "centreLine": 3.9
+    }
+  ],
+  "bottom": {
+    "from": 18.79,
+    "to": 57.24,
+    "datum": "0.00 at left of bottom view; view drawn with display up (camera bump at lower right)",
+    "connectorWidth": null
+  },
+  "notes": "TEXT-CHECK NOT POSSIBLE FOR SHEET 1: on this PDF the main dimensioned sheet's lettering is vector outlines, not text (get_text('words') returns only the footer), so sheet-1 numbers were read visually from zoomed renders (z=3.3 to 10) and cross-checked by arithmetic (connector/screw ordinates sum to the product width; button centres agree with drawn positions to ~0.2 mm); an independent macOS Vision OCR pass also found 20 of 31 distinct values verbatim and produced no conflicting reading for the rest. NO CAMERA PLATEAU: single rear camera with no raised plateau outline, so plateau is null; the raised part is the lens ring itself, dia 14.97 (outermost circle) centred 13.32/13.32, standing 1.68 (BACK GLASS TO CAMERA GLASS). Flash and rear mic sit flush on the back glass outside it; '3X -13.32' gives the shared y of lens, mic and flash. CORNER PROFILE IS NOT THE SAME LIST ON BOTH AXES on this sheet: the vertical-axis list (reported) is 0.00 0.07 0.95 3.40 7.20 11.63 16.14; the list along the top is 0.00 0.06 3.22 6.97 11.38 15.89 (6 values). They pair as points (x,y): (15.89,0.00) (11.38,0.07) (6.97,0.95) (3.22,3.40) (x not labelled, about 0.9 by scaling; 7.20) (0.06,11.63) (0.00,16.14). Buttons 0.45 proud. Connector width not dimensioned: bottom ordinates 30.97 and 40.55 are the connector opening edges; Detail C recommended connector keepout 12.45 x 6.60 (2X R3.25), centred 3.90 from face, 35.76 across width. Bottom ordinates: 18.79 24.83 28.84 30.97 40.55 42.69 46.69 57.24 (8X dia 1.53 ports, 2X dia 1.50 screws). No camera control on this model."
+}

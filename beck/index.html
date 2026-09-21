@@ -165,7 +165,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.9.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.10.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -304,6 +304,14 @@
     <button id="btnClose">Done</button>
   </header>
   <div class="body">
+
+    <section>
+      <h3>Phone</h3>
+      <div class="row">
+        <select id="phoneSel" aria-label="Phone" style="font:inherit;font-size:15px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);max-width:100%"></select>
+      </div>
+      <p id="phoneNote" style="margin-top:8px"></p>
+    </section>
 
     <section>
       <h3>Apps</h3>
@@ -468,7 +476,48 @@
     return [ring];
   }
   // Phone outline offset outward by o (negative = inset). Corner centres stay fixed; radius becomes R+o.
+  // A corner given as ordinates (Apple's "corner profile": the list p, used on both axes, point i = (p[i], p[n-1-i])
+  // from the corner of the bounding box) -> a dense, smooth quarter curve from the side edge to the top edge, as
+  // [x, y] from that box corner. Interpolated as distance from (E, E) against angle with a shape-preserving cubic
+  // (flat at both ends, where the curve meets the straight edges) and never allowed outside the bounding box.
+  const profileCache = new Map();
+  function cornerCurve(profile, segs, profileY) {   // profileY: the list down the side, when a sheet gives the two axes different lists
+    const key = profile.join(",") + "|" + (profileY || []).join(",") + "|" + segs; if (profileCache.has(key)) return profileCache.get(key);
+    const p = profile.slice().sort((a, b) => a - b), n = p.length, Ex = p[n - 1];
+    const py = Array.isArray(profileY) && profileY.length === n ? profileY.slice().sort((a, b) => a - b) : p, Ey = py[n - 1];
+    const box = a => Math.min(Ex / Math.max(1e-9, Math.cos(a)), Ey / Math.max(1e-9, Math.sin(a)));   // distance from (Ex, Ey) to the box at angle a
+    const T = [], F = [];
+    for (let i = 0; i < n; i++) { const dx = Ex - p[i], dy = Ey - py[n - 1 - i], a = Math.atan2(dy, dx); T.push(a); F.push(Math.hypot(dx, dy)); }
+    // Fritsch-Carlson monotone tangents; flat (0) at both ends, where the curve meets the straight edges
+    const h = [], d = []; for (let i = 0; i < n - 1; i++) { h.push(T[i + 1] - T[i]); d.push((F[i + 1] - F[i]) / h[i]); }
+    const m = new Array(n).fill(0);
+    for (let i = 1; i < n - 1; i++) if (d[i - 1] * d[i] > 0) { const w1 = 2 * h[i] + h[i - 1], w2 = h[i] + 2 * h[i - 1]; m[i] = (w1 + w2) / (w1 / d[i - 1] + w2 / d[i]); }
+    const out = [], N = Math.max(8, segs) * 3;
+    for (let k = 0; k <= N; k++) {
+      const a = (k / N) * Math.PI / 2; let i = 0; while (i < n - 2 && T[i + 1] < a) i++;
+      const t = (a - T[i]) / h[i], t2 = t * t, t3 = t2 * t;
+      const r = Math.min(box(a), (2 * t3 - 3 * t2 + 1) * F[i] + (t3 - 2 * t2 + t) * h[i] * m[i] + (-2 * t3 + 3 * t2) * F[i + 1] + (t3 - t2) * h[i] * m[i + 1]);
+      out.push([Math.max(0, Ex - r * Math.cos(a)), Math.max(0, Ey - r * Math.sin(a))]);
+    }
+    out[0] = [0, Ey]; out[N] = [Ex, 0];
+    profileCache.set(key, out); return out;
+  }
+  // Outline from a corner profile, offset outward by o along the curve's normals.
+  function profileOutline(spec, o, segs) {
+    const W = spec.width, L = spec.length, c = cornerCurve(spec.cornerProfile, segs, spec.cornerProfileY), N = c.length - 1;
+    const off = c.map((q, k) => {
+      const a = c[Math.max(0, k - 1)], b = c[Math.min(N, k + 1)];
+      let nx = b[1] - a[1], ny = -(b[0] - a[0]); const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;   // outward normal (towards the box corner)
+      if (k === 0) { nx = -1; ny = 0; } if (k === N) { nx = 0; ny = -1; }
+      return [q[0] + nx * o, q[1] + ny * o];
+    });
+    // top-left corner runs (0,E) -> (E,0); build the ring clockwise on screen: TL, TR, BR, BL
+    const tl = off, tr = off.map(q => [W - q[0], q[1]]).reverse(), br = off.map(q => [W - q[0], L - q[1]]), bl = off.map(q => [q[0], L - q[1]]).reverse();
+    const ring = [...tl, ...tr, ...br, ...bl]; ring.push(ring[0]);
+    return [ring];
+  }
   function phoneOutline(spec, o, segs) {
+    if (Array.isArray(spec.cornerProfile) && spec.cornerProfile.length >= 4) return profileOutline(spec, o, segs);
     const W = spec.width, L = spec.length;
     const R = Math.max(0.01, Math.min(spec.cornerRadius, W / 2, L / 2));
     const r = R + o;
@@ -692,12 +741,30 @@
     }
     return circle(c.x, c.y, c.d / 2 + k, 48);
   }
-  const cutRing = (spec, c, wall) => ops.difference(cutShape(spec, c, wall), cutShape(spec, c, 0));
+  // All the back cutouts as ONE region, grown by `grow`. Cutouts closer together than `minWeb` (default 1.6 mm:
+  // less would print as a fragile sliver, e.g. between an iPhone camera pill and its flash) are joined by a slot
+  // as wide as the smaller of the two.
+  function cutoutRegion(spec, grow) {
+    const cs = spec.cutouts || []; if (!cs.length) return [];
+    const k = (spec.cutoutClearance || 0) / 2 + (grow || 0), web = spec.minWeb != null ? spec.minWeb : 1.6;
+    const shapes = cs.map(c => cutShape(spec, c, grow)), base = cs.map(c => cutShape(spec, c, 0)), extra = [];
+    const half = c => (c.w ? Math.min(c.w, c.h) : c.d) / 2;
+    for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+      let gap = Infinity;
+      for (const p of base[i][0][0]) for (const q of base[j][0][0]) gap = Math.min(gap, Math.hypot(p[0] - q[0], p[1] - q[1]));
+      if (gap > web + 0.3) continue;   // (vertex spacing makes the measured gap up to ~0.3 too big)
+      const a = cs[i], b = cs[j], hw = Math.min(half(a), half(b)) + k, dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1, nx = -dy / l * hw, ny = dx / l * hw;
+      extra.push([[[[a.x + nx, a.y + ny], [b.x + nx, b.y + ny], [b.x - nx, b.y - ny], [a.x - nx, a.y - ny], [a.x + nx, a.y + ny]]]]);
+    }
+    return ops.union(...shapes, ...extra);
+  }
+  // the collar stops short of the side wall (a camera can sit closer to the edge than the collar is wide)
+  const cutRing = (spec, wall) => ops.intersection(ops.difference(cutoutRegion(spec, wall), cutoutRegion(spec, 0)), phoneOutline(spec, (spec.phoneClearance || 0) - (spec.collarClearance || 0.15), 16));
   function throughOn(design) { return design.caseStyle === "extrude"; }
   function collarOn(spec, design) { return spec.collars !== false && design.mode === "inlay" && spec.cutouts.length > 0; }
   function buildRegions(spec, design) {
     const off = plateOffsets(spec);
-    const holes = spec.cutouts.map(c => cutShape(spec, c, 0));
+    const holes = spec.cutouts.length ? [cutoutRegion(spec, 0)] : [];
     const region = (o, hs) => { const p = phoneOutline(spec, o, 16); return hs.length ? ops.difference(p, ...hs) : ops.union(p); };
     const plateRegion = region(off.narrow, holes);
     const plateWide = region(off.wide, holes);
@@ -705,7 +772,7 @@
     // "Through" style: inks run to the outer edge so the drawing carries on down the case sides.
     const m = spec.inkMargin || 0, edgeM = throughOn(design) ? 0 : m;
     const inkArea = m > 0
-      ? region(off.narrow - edgeM, spec.cutouts.map(c => cutShape(spec, c, m)))
+      ? region(off.narrow - edgeM, spec.cutouts.length ? [cutoutRegion(spec, m)] : [])
       : plateRegion;
 
     // Height field: the plate is partitioned into cells (region, ink) by the strokes in draw order, later
@@ -992,10 +1059,7 @@
       const bare = used.length ? clean(ops.difference(regions.plate, used)) : regions.plate;
       const m = new Mesh();
       if (bare.length) extrude(bare, 0, T, m, xf);
-      if (collars) for (const c of spec.cutouts) {
-        const ring = K(cutRing(spec, c, collarWall));
-        if (ring.length) extrude(ring, T - eps, T + collarH, m, xf);
-      }
+      if (collars) { const ring = K(cutRing(spec, collarWall)); if (ring.length) extrude(ring, T - eps, T + collarH, m, xf); }
       parts.push({ name: "Panel", color: design.plateColor, mesh: m });
       let maxTop = 0;
       design.inks.forEach((col, i) => {
@@ -1014,10 +1078,8 @@
       extrudePocketed(regions.plate, regions.allInk.length ? [regions.allInk] : [], d, lv.skinT, m, xf);
       if (collars) {
         // short collars round each camera hole key into the body's oversized cutouts
-        for (const c of spec.cutouts) {
-          const ring = K(cutRing(spec, c, collarWall));
-          if (ring.length) extrude(ring, lv.skinT - eps, lv.skinT + collarH, m, xf);
-        }
+        const ring = K(cutRing(spec, collarWall));
+        if (ring.length) extrude(ring, lv.skinT - eps, lv.skinT + collarH, m, xf);
       }
       parts.push({ name: "Panel", color: design.plateColor, mesh: m });
       inks.forEach(r => { const i = regions.inks.indexOf(r); const im = new Mesh(); extrude(r, 0, d, im, xf); parts.push({ name: `Ink ${i + 1}`, color: design.inks[i], mesh: im }); });
@@ -1114,7 +1176,7 @@
     const outer = phoneOutline(spec, c + wall, 16);
     const collars = collarOn(spec, design);
     const extra = collars ? (spec.collarWall || 0.8) + (spec.collarClearance || 0.15) : 0;
-    const holes = spec.cutouts.map(k => cutShape(spec, k, extra));
+    const holes = spec.cutouts.length ? [ops.intersection(cutoutRegion(spec, extra), phoneOutline(spec, c, 16))].filter(h => h.length) : [];
     const minusHoles = mp => holes.length ? ops.difference(mp, ...holes) : mp;
 
     // 2D colour layouts
@@ -1274,7 +1336,7 @@
       if (list && list.length) { drop.add(list.pop()); drop.add(i); }
       else { if (!seen.has(key)) seen.set(key, []); seen.get(key).push(i); }
     }
-    if (drop.size) { const kept = []; for (let i = 0; i < t.length; i += 3) if (!drop.has(i)) kept.push(t[i], t[i + 1], t[i + 2]); t.length = 0; t.push(...kept); }
+    if (drop.size) { const kept = []; for (let i = 0; i < t.length; i += 3) if (!drop.has(i)) kept.push(t[i], t[i + 1], t[i + 2]); t.length = 0; for (let i = 0; i < kept.length; i++) t.push(kept[i]); }   // (no spread: a big mesh overflows the call stack)
     const out = new Mesh(); out.v = v; out.t = t; return splitPinches(out);
   }
   // Where two patches of one part touch only at a point, their side walls share a vertical edge (four faces on
@@ -1463,7 +1525,7 @@ ${items} </build>
   }
 
 
-  return { ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
+  return { cutoutRegion, ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
 });
 
 </script>
@@ -2190,6 +2252,1853 @@ function marchingSquares(field, W, H, iso) {
 window.DrawnCodes = { GridModel, computeFill, buildInk, traceSilhouette, STROKE, UP, RIGHT, DOWN, LEFT, UR, DR, DL, UL, TOUCHED };
 })();
 </script>
+<script>/* phone presets: generated by tools/make_phones.py from Apple's dimensional drawings */
+window.PHONES = [
+ {
+  "id": "iphone-17-pro-max",
+  "name": "iPhone 17 Pro Max",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2025-09-09): size, corner curve, camera, buttons. Except: camera outline (r, x0, x1, y0, y1) measured from Apple's linework to about 0.2 mm, as the sheet does not dimension it.",
+  "spec": {
+   "phone": "iPhone 17 Pro Max",
+   "width": 77.98,
+   "length": 163.43,
+   "thickness": 8.75,
+   "cornerProfile": [
+    0.0,
+    0.04,
+    0.92,
+    3.8,
+    8.46,
+    13.9,
+    19.43
+   ],
+   "cornerRadius": 12.97,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 38.99,
+     "y": 24.25,
+     "w": 76.78,
+     "h": 47.3,
+     "r": 11.0
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 46.68,
+     "to": 64.38,
+     "fromScreen": 4.38,
+     "height": 5.26
+    },
+    {
+     "side": "left",
+     "name": "Camera control",
+     "from": 103.27,
+     "to": 120.37,
+     "fromScreen": 4.38,
+     "height": 5.73
+    },
+    {
+     "side": "right",
+     "name": "Action button",
+     "from": 30.83,
+     "to": 37.73,
+     "fromScreen": 4.38,
+     "height": 5.26
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 42.83,
+     "to": 68.23,
+     "fromScreen": 4.38,
+     "height": 5.26
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.41,
+     "to": 62.57
+    }
+   ],
+   "source": "Apple dimensional drawing, 2025-09-09"
+  }
+ },
+ {
+  "id": "iphone-17-pro",
+  "name": "iPhone 17 Pro",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2025-09-09): size, corner curve, camera, buttons. Except: camera outline (r, x0, x1, y0, y1) measured from Apple's linework to about 0.2 mm, as the sheet does not dimension it.",
+  "spec": {
+   "phone": "iPhone 17 Pro",
+   "width": 71.85,
+   "length": 150.01,
+   "thickness": 8.75,
+   "cornerProfile": [
+    0.0,
+    0.04,
+    0.92,
+    3.8,
+    8.46,
+    13.9,
+    19.43
+   ],
+   "cornerRadius": 12.97,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 35.93,
+     "y": 24.25,
+     "w": 70.65,
+     "h": 47.3,
+     "r": 11.0
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 46.68,
+     "to": 64.38,
+     "fromScreen": 4.38,
+     "height": 5.26
+    },
+    {
+     "side": "left",
+     "name": "Camera control",
+     "from": 89.85,
+     "to": 106.95,
+     "fromScreen": 4.38,
+     "height": 5.63
+    },
+    {
+     "side": "right",
+     "name": "Action button",
+     "from": 30.83,
+     "to": 37.73,
+     "fromScreen": 4.38,
+     "height": 5.26
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 42.83,
+     "to": 68.23,
+     "fromScreen": 4.38,
+     "height": 5.26
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.4,
+     "to": 56.45
+    }
+   ],
+   "source": "Apple dimensional drawing, 2025-09-09"
+  }
+ },
+ {
+  "id": "iphone-air",
+  "name": "iPhone Air",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2025-09-09): size, corner curve, camera, buttons. Except: corner table: the sheet draws a seventh point but does not label it; measured about 19.4 on the linework; camera outline (r, x0, x1, y0, y1) measured from Apple's linework to about 0.2 mm, as the sheet does not dimension it.",
+  "spec": {
+   "phone": "iPhone Air",
+   "width": 74.7,
+   "length": 156.18,
+   "thickness": 5.64,
+   "cornerProfile": [
+    0,
+    0.04,
+    0.91,
+    3.78,
+    8.43,
+    13.85,
+    19.4
+   ],
+   "cornerRadius": 12.91,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 37.35,
+     "y": 17.4,
+     "w": 73.5,
+     "h": 33.6,
+     "r": 8.0
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 46.43,
+     "to": 64.23,
+     "fromScreen": 2.82,
+     "height": 4.04
+    },
+    {
+     "side": "left",
+     "name": "Camera control",
+     "from": 96.22,
+     "to": 113.32,
+     "fromScreen": 2.82,
+     "height": 4.04
+    },
+    {
+     "side": "right",
+     "name": "Action button",
+     "from": 30.63,
+     "to": 37.53,
+     "fromScreen": 2.82,
+     "height": 4.04
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 42.63,
+     "to": 68.03,
+     "fromScreen": 2.82,
+     "height": 4.04
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 24.34,
+     "to": 50.36
+    }
+   ],
+   "source": "Apple dimensional drawing, 2025-09-09"
+  }
+ },
+ {
+  "id": "iphone-17",
+  "name": "iPhone 17",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2025-09-09): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 17",
+   "width": 71.45,
+   "length": 149.61,
+   "thickness": 7.95,
+   "cornerProfile": [
+    0.0,
+    0.02,
+    0.48,
+    2.26,
+    5.56,
+    9.87,
+    14.53,
+    19.23
+   ],
+   "cornerRadius": 13.35,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 13.62,
+     "y": 22.48,
+     "w": 24.88,
+     "h": 42.28,
+     "r": 12.44
+    },
+    {
+     "name": "Flash",
+     "x": 30.41,
+     "y": 22.48,
+     "d": 6.28
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 46.47,
+     "to": 64.17,
+     "fromScreen": 3.98,
+     "height": 5.26
+    },
+    {
+     "side": "left",
+     "name": "Camera control",
+     "from": 89.65,
+     "to": 106.75,
+     "fromScreen": 3.98,
+     "height": 5.63
+    },
+    {
+     "side": "right",
+     "name": "Action button",
+     "from": 30.63,
+     "to": 37.53,
+     "fromScreen": 3.98,
+     "height": 5.26
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 42.63,
+     "to": 68.03,
+     "fromScreen": 3.98,
+     "height": 5.26
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.2,
+     "to": 56.25
+    }
+   ],
+   "source": "Apple dimensional drawing, 2025-09-09"
+  }
+ },
+ {
+  "id": "iphone-17e",
+  "name": "iPhone 17e",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2026-03-09): size, corner curve, camera, buttons. Except: corner table: sheet lists the two axes separately and leaves the 0.86 ordinate unlabelled; it is the same table as iPhone 14, which labels it; camera plateau outline not read: lens circles only.",
+  "spec": {
+   "phone": "iPhone 17e",
+   "width": 71.52,
+   "length": 146.71,
+   "thickness": 7.8,
+   "cornerProfile": [
+    0,
+    0.06,
+    0.86,
+    3.22,
+    6.97,
+    11.38,
+    15.89
+   ],
+   "cornerProfileY": [
+    0,
+    0.07,
+    0.95,
+    3.4,
+    7.2,
+    11.63,
+    16.14
+   ],
+   "cornerRadius": 10.99,
+   "cutouts": [
+    {
+     "name": "Camera 1",
+     "x": 13.32,
+     "y": 13.32,
+     "d": 14.97
+    },
+    {
+     "name": "Rear mic",
+     "x": 24.3,
+     "y": 13.32,
+     "d": 2.0
+    },
+    {
+     "name": "Flash",
+     "x": 29.68,
+     "y": 13.32,
+     "d": 3.75
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 43.36,
+     "to": 61.7,
+     "fromScreen": 3.9,
+     "height": 5.91
+    },
+    {
+     "side": "right",
+     "name": "Action button",
+     "from": 27.51,
+     "to": 35.05,
+     "fromScreen": 3.9,
+     "height": 5.91
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 39.51,
+     "to": 65.55,
+     "fromScreen": 3.9,
+     "height": 5.91
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 14.28,
+     "to": 57.24
+    }
+   ],
+   "source": "Apple dimensional drawing, 2026-03-09"
+  }
+ },
+ {
+  "id": "iphone-16-pro-max",
+  "name": "iPhone 16 Pro Max",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2024-09-19): size, corner curve, camera, buttons. Except: corner table: the sheet draws a seventh point but does not label it; it measures 19.28 on the linework and the identical iPhone 16 Pro table prints 19.23.",
+  "spec": {
+   "phone": "iPhone 16 Pro Max",
+   "width": 77.58,
+   "length": 163.03,
+   "thickness": 8.25,
+   "cornerProfile": [
+    0,
+    0.04,
+    0.89,
+    3.74,
+    8.36,
+    13.75,
+    19.23
+   ],
+   "cornerRadius": 12.77,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 23.13,
+     "y": 23.79,
+     "w": 44.18,
+     "h": 45.5,
+     "r": 9.72
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 46.48,
+     "to": 64.18,
+     "fromScreen": 4.13,
+     "height": 5.26
+    },
+    {
+     "side": "left",
+     "name": "Camera control",
+     "from": 103.07,
+     "to": 120.17,
+     "fromScreen": 4.13,
+     "height": 5.63
+    },
+    {
+     "side": "right",
+     "name": "Action button",
+     "from": 30.63,
+     "to": 37.53,
+     "fromScreen": 4.13,
+     "height": 5.26
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 42.63,
+     "to": 68.03,
+     "fromScreen": 4.13,
+     "height": 5.26
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.61,
+     "to": 61.97
+    }
+   ],
+   "source": "Apple dimensional drawing, 2024-09-19"
+  }
+ },
+ {
+  "id": "iphone-16-pro",
+  "name": "iPhone 16 Pro",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2024-09-19): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 16 Pro",
+   "width": 71.45,
+   "length": 149.61,
+   "thickness": 8.25,
+   "cornerProfile": [
+    0.0,
+    0.04,
+    0.89,
+    3.74,
+    8.36,
+    13.75,
+    19.23
+   ],
+   "cornerRadius": 12.77,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 23.13,
+     "y": 23.79,
+     "w": 44.18,
+     "h": 45.5,
+     "r": 9.72
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 46.48,
+     "to": 64.18,
+     "fromScreen": 4.13,
+     "height": 5.26
+    },
+    {
+     "side": "left",
+     "name": "Camera control",
+     "from": 89.64,
+     "to": 106.74,
+     "fromScreen": 4.13,
+     "height": 5.63
+    },
+    {
+     "side": "right",
+     "name": "Action button",
+     "from": 30.63,
+     "to": 37.53,
+     "fromScreen": 4.13,
+     "height": 5.26
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 42.63,
+     "to": 68.03,
+     "fromScreen": 4.13,
+     "height": 5.26
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.2,
+     "to": 56.25
+    }
+   ],
+   "source": "Apple dimensional drawing, 2024-09-19"
+  }
+ },
+ {
+  "id": "iphone-16-plus",
+  "name": "iPhone 16 Plus",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2024-09-19): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 16 Plus",
+   "width": 77.76,
+   "length": 160.89,
+   "thickness": 7.81,
+   "cornerProfile": [
+    0,
+    0.04,
+    0.59,
+    2.29,
+    5.24,
+    9.06,
+    13.21,
+    17.4
+   ],
+   "cornerRadius": 12.85,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 13.63,
+     "y": 22.49,
+     "w": 25.07,
+     "h": 42.47,
+     "r": 12.54
+    },
+    {
+     "name": "Flash",
+     "x": 30.01,
+     "y": 22.48,
+     "d": 6.28
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 46.48,
+     "to": 64.18,
+     "fromScreen": 3.91,
+     "height": 5.26
+    },
+    {
+     "side": "left",
+     "name": "Camera control",
+     "from": 100.93,
+     "to": 118.03,
+     "fromScreen": 3.91,
+     "height": 5.63
+    },
+    {
+     "side": "right",
+     "name": "Action button",
+     "from": 30.63,
+     "to": 37.53,
+     "fromScreen": 3.91,
+     "height": 5.26
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 42.63,
+     "to": 68.03,
+     "fromScreen": 3.91,
+     "height": 5.26
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.65,
+     "to": 62.11
+    }
+   ],
+   "source": "Apple dimensional drawing, 2024-09-19"
+  }
+ },
+ {
+  "id": "iphone-16",
+  "name": "iPhone 16",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2024-09-19): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 16",
+   "width": 71.63,
+   "length": 147.64,
+   "thickness": 7.81,
+   "cornerProfile": [
+    0,
+    0.04,
+    0.59,
+    2.29,
+    5.24,
+    9.06,
+    13.21,
+    17.4
+   ],
+   "cornerRadius": 12.85,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 13.63,
+     "y": 22.49,
+     "w": 25.07,
+     "h": 42.47,
+     "r": 12.54
+    },
+    {
+     "name": "Flash",
+     "x": 30.01,
+     "y": 22.48,
+     "d": 6.28
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 46.48,
+     "to": 64.18,
+     "fromScreen": 3.91,
+     "height": 5.26
+    },
+    {
+     "side": "left",
+     "name": "Camera control",
+     "from": 87.68,
+     "to": 104.78,
+     "fromScreen": 3.91,
+     "height": 5.63
+    },
+    {
+     "side": "right",
+     "name": "Action button",
+     "from": 30.63,
+     "to": 37.53,
+     "fromScreen": 3.91,
+     "height": 5.26
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 42.63,
+     "to": 68.03,
+     "fromScreen": 3.91,
+     "height": 5.26
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.24,
+     "to": 56.39
+    }
+   ],
+   "source": "Apple dimensional drawing, 2024-09-19"
+  }
+ },
+ {
+  "id": "iphone-16e",
+  "name": "iPhone 16e",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2025-03-17): size, corner curve, camera, buttons. Except: corner table: sheet lists the two axes separately and leaves the 0.86 ordinate unlabelled; it is the same table as iPhone 14, which labels it; camera plateau outline not read: lens circles only.",
+  "spec": {
+   "phone": "iPhone 16e",
+   "width": 71.52,
+   "length": 146.71,
+   "thickness": 7.8,
+   "cornerProfile": [
+    0,
+    0.06,
+    0.86,
+    3.22,
+    6.97,
+    11.38,
+    15.89
+   ],
+   "cornerProfileY": [
+    0,
+    0.07,
+    0.95,
+    3.4,
+    7.2,
+    11.63,
+    16.14
+   ],
+   "cornerRadius": 10.99,
+   "cutouts": [
+    {
+     "name": "Camera 1",
+     "x": 13.32,
+     "y": 13.32,
+     "d": 14.97
+    },
+    {
+     "name": "Rear mic",
+     "x": 24.3,
+     "y": 13.32,
+     "d": 2.0
+    },
+    {
+     "name": "Flash",
+     "x": 29.68,
+     "y": 13.32,
+     "d": 3.75
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 43.36,
+     "to": 61.7,
+     "fromScreen": 3.9,
+     "height": 5.91
+    },
+    {
+     "side": "right",
+     "name": "Action button",
+     "from": 27.51,
+     "to": 35.05,
+     "fromScreen": 3.9,
+     "height": 5.91
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 39.51,
+     "to": 65.55,
+     "fromScreen": 3.9,
+     "height": 5.91
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 14.28,
+     "to": 57.24
+    }
+   ],
+   "source": "Apple dimensional drawing, 2025-03-17"
+  }
+ },
+ {
+  "id": "iphone-15-pro-max",
+  "name": "iPhone 15 Pro Max",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2023-10-10): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 15 Pro Max",
+   "width": 76.73,
+   "length": 159.86,
+   "thickness": 8.25,
+   "cornerProfile": [
+    0,
+    0.05,
+    0.9,
+    3.48,
+    7.58,
+    12.36,
+    17.24
+   ],
+   "cornerRadius": 11.88,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 23.13,
+     "y": 23.79,
+     "w": 44.18,
+     "h": 45.5,
+     "r": 9.72
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 47.32,
+     "to": 65.02,
+     "fromScreen": 4.13,
+     "height": 5.26
+    },
+    {
+     "side": "right",
+     "name": "Action button",
+     "from": 28.65,
+     "to": 34.69,
+     "fromScreen": 4.13,
+     "height": 5.26
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 39.62,
+     "to": 65.02,
+     "fromScreen": 4.13,
+     "height": 5.26
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.89,
+     "to": 60.84
+    }
+   ],
+   "source": "Apple dimensional drawing, 2023-10-10"
+  }
+ },
+ {
+  "id": "iphone-15-pro",
+  "name": "iPhone 15 Pro",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2023-10-10): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 15 Pro",
+   "width": 70.6,
+   "length": 146.61,
+   "thickness": 8.25,
+   "cornerProfile": [
+    0,
+    0.05,
+    0.9,
+    3.48,
+    7.58,
+    12.36,
+    17.24
+   ],
+   "cornerRadius": 11.88,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 23.13,
+     "y": 23.79,
+     "w": 44.18,
+     "h": 45.5,
+     "r": 9.72
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 47.32,
+     "to": 65.02,
+     "fromScreen": 4.13,
+     "height": 5.26
+    },
+    {
+     "side": "right",
+     "name": "Action button",
+     "from": 28.65,
+     "to": 34.69,
+     "fromScreen": 4.13,
+     "height": 5.26
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 39.62,
+     "to": 65.02,
+     "fromScreen": 4.13,
+     "height": 5.26
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.08,
+     "to": 55.52
+    }
+   ],
+   "source": "Apple dimensional drawing, 2023-10-10"
+  }
+ },
+ {
+  "id": "iphone-15-plus",
+  "name": "iPhone 15 Plus",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2023-10-10): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 15 Plus",
+   "width": 77.76,
+   "length": 160.89,
+   "thickness": 7.81,
+   "cornerProfile": [
+    0,
+    0.04,
+    0.59,
+    2.29,
+    5.24,
+    9.06,
+    13.21,
+    17.4
+   ],
+   "cornerRadius": 12.85,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 19.19,
+     "y": 19.19,
+     "w": 35.93,
+     "h": 35.93,
+     "r": 7.9
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 43.64,
+     "to": 61.34,
+     "fromScreen": 3.91,
+     "height": 5.26
+    },
+    {
+     "side": "right",
+     "name": "Ring/silent switch",
+     "from": 28.98,
+     "to": 34.9,
+     "fromScreen": 3.91,
+     "height": 4.95
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 39.79,
+     "to": 65.19,
+     "fromScreen": 3.91,
+     "height": 5.26
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.89,
+     "to": 61.87
+    }
+   ],
+   "source": "Apple dimensional drawing, 2023-10-10"
+  }
+ },
+ {
+  "id": "iphone-15",
+  "name": "iPhone 15",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2023-10-10): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 15",
+   "width": 71.63,
+   "length": 147.64,
+   "thickness": 7.81,
+   "cornerProfile": [
+    0,
+    0.04,
+    0.59,
+    2.29,
+    5.24,
+    9.06,
+    13.21,
+    17.4
+   ],
+   "cornerRadius": 12.85,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 19.19,
+     "y": 19.19,
+     "w": 35.93,
+     "h": 35.93,
+     "r": 7.9
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 44.52,
+     "to": 62.22,
+     "fromScreen": 3.91,
+     "height": 5.26
+    },
+    {
+     "side": "right",
+     "name": "Ring/silent switch",
+     "from": 29.87,
+     "to": 35.79,
+     "fromScreen": 3.91,
+     "height": 4.95
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 40.67,
+     "to": 66.07,
+     "fromScreen": 3.91,
+     "height": 5.26
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.08,
+     "to": 56.55
+    }
+   ],
+   "source": "Apple dimensional drawing, 2023-10-10"
+  }
+ },
+ {
+  "id": "iphone-14-pro-max",
+  "name": "iPhone 14 Pro Max",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2022-09-21): size, corner curve, camera, buttons. Except: corner table: sheet lists the two axes separately.",
+  "spec": {
+   "phone": "iPhone 14 Pro Max",
+   "width": 77.58,
+   "length": 160.71,
+   "thickness": 7.85,
+   "cornerProfile": [
+    0,
+    0.21,
+    1.47,
+    4.25,
+    8.23,
+    12.74,
+    17.32
+   ],
+   "cornerProfileY": [
+    0,
+    0.06,
+    0.81,
+    3.01,
+    6.6,
+    10.98,
+    15.55
+   ],
+   "cornerRadius": 14.51,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 23.16,
+     "y": 23.9,
+     "w": 41.93,
+     "h": 43.42,
+     "r": 9.22
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 46.39,
+     "to": 64.69,
+     "fromScreen": 3.93,
+     "height": 5.86
+    },
+    {
+     "side": "right",
+     "name": "Ring/silent switch",
+     "from": 28.18,
+     "to": 34.1,
+     "fromScreen": 3.93,
+     "height": 4.85
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 38.69,
+     "to": 64.69,
+     "fromScreen": 3.93,
+     "height": 5.86
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.41,
+     "to": 62.17
+    }
+   ],
+   "source": "Apple dimensional drawing, 2022-09-21"
+  }
+ },
+ {
+  "id": "iphone-14-pro",
+  "name": "iPhone 14 Pro",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2022-09-21): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 14 Pro",
+   "width": 71.45,
+   "length": 147.46,
+   "thickness": 7.85,
+   "cornerProfile": [
+    0,
+    0.08,
+    1.0,
+    3.61,
+    7.68,
+    12.45,
+    17.32
+   ],
+   "cornerRadius": 12.33,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 23.16,
+     "y": 23.9,
+     "w": 41.93,
+     "h": 43.42,
+     "r": 9.22
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 46.39,
+     "to": 64.69,
+     "fromScreen": 3.93,
+     "height": 5.86
+    },
+    {
+     "side": "right",
+     "name": "Ring/silent switch",
+     "from": 28.18,
+     "to": 34.1,
+     "fromScreen": 3.93,
+     "height": 4.95
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 38.69,
+     "to": 64.69,
+     "fromScreen": 3.93,
+     "height": 5.86
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 14.59,
+     "to": 56.86
+    }
+   ],
+   "source": "Apple dimensional drawing, 2022-09-21"
+  }
+ },
+ {
+  "id": "iphone-14-plus",
+  "name": "iPhone 14 Plus",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2022-09-21): size, corner curve, camera, buttons. Except: corner table: sheet lists the two axes separately.",
+  "spec": {
+   "phone": "iPhone 14 Plus",
+   "width": 78.07,
+   "length": 160.84,
+   "thickness": 7.8,
+   "cornerProfile": [
+    0,
+    0.17,
+    1.35,
+    4.1,
+    8.1,
+    12.67,
+    17.32
+   ],
+   "cornerProfileY": [
+    0,
+    0.07,
+    0.85,
+    3.14,
+    6.85,
+    11.32,
+    15.96
+   ],
+   "cornerRadius": 14.0,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 18.93,
+     "y": 18.93,
+     "w": 35.29,
+     "h": 35.29,
+     "r": 7.76
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 43.36,
+     "to": 61.7,
+     "fromScreen": 3.9,
+     "height": 5.91
+    },
+    {
+     "side": "right",
+     "name": "Ring/silent switch",
+     "from": 29.02,
+     "to": 34.94,
+     "fromScreen": 3.9,
+     "height": 4.95
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 39.51,
+     "to": 65.55,
+     "fromScreen": 3.9,
+     "height": 5.91
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.65,
+     "to": 62.42
+    }
+   ],
+   "source": "Apple dimensional drawing, 2022-09-21"
+  }
+ },
+ {
+  "id": "iphone-14",
+  "name": "iPhone 14",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2022-09-21): size, corner curve, camera, buttons. Except: corner table: sheet lists the two axes separately; camera outline (y0) measured from Apple's linework to about 0.2 mm, as the sheet does not dimension it.",
+  "spec": {
+   "phone": "iPhone 14",
+   "width": 71.52,
+   "length": 146.71,
+   "thickness": 7.8,
+   "cornerProfile": [
+    0,
+    0.06,
+    0.86,
+    3.22,
+    6.97,
+    11.38,
+    15.89
+   ],
+   "cornerProfileY": [
+    0,
+    0.07,
+    0.95,
+    3.4,
+    7.2,
+    11.63,
+    16.14
+   ],
+   "cornerRadius": 10.99,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 18.53,
+     "y": 18.53,
+     "w": 34.75,
+     "h": 34.75,
+     "r": 7.65
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 43.36,
+     "to": 61.7,
+     "fromScreen": 3.9,
+     "height": 5.91
+    },
+    {
+     "side": "right",
+     "name": "Ring/silent switch",
+     "from": 29.02,
+     "to": 34.94,
+     "fromScreen": 3.9,
+     "height": 4.95
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 39.51,
+     "to": 65.55,
+     "fromScreen": 3.9,
+     "height": 5.91
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 14.63,
+     "to": 56.89
+    }
+   ],
+   "source": "Apple dimensional drawing, 2022-09-21"
+  }
+ },
+ {
+  "id": "iphone-13-pro-max",
+  "name": "iPhone 13 Pro Max",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2021-09-28): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 13 Pro Max",
+   "width": 78.07,
+   "length": 160.84,
+   "thickness": 7.65,
+   "cornerProfile": [
+    0,
+    0.08,
+    1.0,
+    3.61,
+    7.67,
+    12.44,
+    17.32
+   ],
+   "cornerRadius": 12.33,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 21.77,
+     "y": 22.39,
+     "w": 41.24,
+     "h": 42.47,
+     "r": 9.07
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 43.48,
+     "to": 61.58,
+     "fromScreen": 3.83,
+     "height": 5.66
+    },
+    {
+     "side": "right",
+     "name": "Ring/silent switch",
+     "from": 29.32,
+     "to": 35.12,
+     "fromScreen": 3.83,
+     "height": 4.75
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 39.73,
+     "to": 65.33,
+     "fromScreen": 3.83,
+     "height": 5.66
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.65,
+     "to": 62.42
+    }
+   ],
+   "source": "Apple dimensional drawing, 2021-09-28"
+  }
+ },
+ {
+  "id": "iphone-13-pro",
+  "name": "iPhone 13 Pro",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2021-09-28): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 13 Pro",
+   "width": 71.52,
+   "length": 146.71,
+   "thickness": 7.65,
+   "cornerProfile": [
+    0,
+    0.07,
+    0.92,
+    3.31,
+    7.04,
+    11.43,
+    15.89
+   ],
+   "cornerRadius": 11.3,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 21.77,
+     "y": 22.39,
+     "w": 41.24,
+     "h": 42.47,
+     "r": 9.07
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 43.48,
+     "to": 61.58,
+     "fromScreen": 3.83,
+     "height": 5.66
+    },
+    {
+     "side": "right",
+     "name": "Ring/silent switch",
+     "from": 29.32,
+     "to": 35.12,
+     "fromScreen": 3.83,
+     "height": 4.75
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 39.73,
+     "to": 65.33,
+     "fromScreen": 3.83,
+     "height": 5.66
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 14.63,
+     "to": 56.89
+    }
+   ],
+   "source": "Apple dimensional drawing, 2021-09-28"
+  }
+ },
+ {
+  "id": "iphone-13",
+  "name": "iPhone 13",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2021-09-28): size, corner curve, camera, buttons. Except: camera outline (y1) measured from Apple's linework to about 0.2 mm, as the sheet does not dimension it.",
+  "spec": {
+   "phone": "iPhone 13",
+   "width": 71.52,
+   "length": 146.7,
+   "thickness": 7.65,
+   "cornerProfile": [
+    0,
+    0.07,
+    0.92,
+    3.31,
+    7.04,
+    11.43,
+    15.89
+   ],
+   "cornerRadius": 11.3,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 18.14,
+     "y": 18.14,
+     "w": 33.97,
+     "h": 33.97,
+     "r": 7.47
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 43.46,
+     "to": 61.6,
+     "fromScreen": 3.83,
+     "height": 5.71
+    },
+    {
+     "side": "right",
+     "name": "Ring/silent switch",
+     "from": 29.32,
+     "to": 35.12,
+     "fromScreen": 3.83,
+     "height": 4.75
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 39.71,
+     "to": 65.35,
+     "fromScreen": 3.83,
+     "height": 5.71
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 14.63,
+     "to": 56.89
+    }
+   ],
+   "source": "Apple dimensional drawing, 2021-09-28"
+  }
+ },
+ {
+  "id": "iphone-13-mini",
+  "name": "iPhone 13 mini",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2021-09-28): size, corner curve, camera, buttons. Except: camera outline (x0, x1, y0, y1) measured from Apple's linework to about 0.2 mm, as the sheet does not dimension it.",
+  "spec": {
+   "phone": "iPhone 13 mini",
+   "width": 64.21,
+   "length": 131.5,
+   "thickness": 7.65,
+   "cornerProfile": [
+    0,
+    0.06,
+    0.82,
+    2.93,
+    6.25,
+    10.12,
+    14.09
+   ],
+   "cornerRadius": 10.0,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 17.09,
+     "y": 17.04,
+     "w": 32.07,
+     "h": 31.97,
+     "r": 7.03
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 34.61,
+     "to": 52.75,
+     "fromScreen": 3.83,
+     "height": 5.71
+    },
+    {
+     "side": "right",
+     "name": "Ring/silent switch",
+     "from": 20.52,
+     "to": 26.22,
+     "fromScreen": 3.83,
+     "height": 4.75
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 30.86,
+     "to": 56.5,
+     "fromScreen": 3.83,
+     "height": 5.71
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 13.99,
+     "to": 50.22
+    }
+   ],
+   "source": "Apple dimensional drawing, 2021-09-28"
+  }
+ },
+ {
+  "id": "iphone-12-pro-max",
+  "name": "iPhone 12 Pro Max",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2020-10-16): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 12 Pro Max",
+   "width": 78.07,
+   "length": 160.84,
+   "thickness": 7.39,
+   "cornerProfile": [
+    0,
+    0.14,
+    1.16,
+    3.61,
+    7.26,
+    11.54,
+    15.96
+   ],
+   "cornerRadius": 12.33,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 20.94,
+     "y": 22.17,
+     "w": 38.48,
+     "h": 40.93,
+     "r": 8.47
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 44.75,
+     "to": 62.55,
+     "fromScreen": 3.7,
+     "height": 5.36
+    },
+    {
+     "side": "right",
+     "name": "Ring/silent switch",
+     "from": 30.49,
+     "to": 36.19,
+     "fromScreen": 3.7,
+     "height": 4.72
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 41.0,
+     "to": 66.3,
+     "fromScreen": 3.7,
+     "height": 5.36
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 15.69,
+     "to": 62.38
+    }
+   ],
+   "source": "Apple dimensional drawing, 2020-10-16"
+  }
+ },
+ {
+  "id": "iphone-12-pro",
+  "name": "iPhone 12 Pro",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2020-10-16): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 12 Pro",
+   "width": 71.52,
+   "length": 146.71,
+   "thickness": 7.39,
+   "cornerProfile": [
+    0,
+    0.13,
+    1.07,
+    3.31,
+    6.66,
+    10.59,
+    14.64
+   ],
+   "cornerRadius": 11.3,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 18.78,
+     "y": 19.87,
+     "w": 33.32,
+     "h": 35.5,
+     "r": 7.33
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 37.41,
+     "to": 55.21,
+     "fromScreen": 3.7,
+     "height": 5.36
+    },
+    {
+     "side": "right",
+     "name": "Ring/silent switch",
+     "from": 23.14,
+     "to": 28.84,
+     "fromScreen": 3.7,
+     "height": 4.72
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 33.66,
+     "to": 58.96,
+     "fromScreen": 3.7,
+     "height": 5.36
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 14.67,
+     "to": 56.85
+    }
+   ],
+   "source": "Apple dimensional drawing, 2020-10-16"
+  }
+ },
+ {
+  "id": "iphone-12",
+  "name": "iPhone 12",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2020-10-16): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 12",
+   "width": 71.52,
+   "length": 146.71,
+   "thickness": 7.39,
+   "cornerProfile": [
+    0,
+    0.13,
+    1.07,
+    3.31,
+    6.66,
+    10.59,
+    14.64
+   ],
+   "cornerRadius": 11.3,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 18.78,
+     "y": 19.87,
+     "w": 30.7,
+     "h": 32.87,
+     "r": 6.75
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 37.41,
+     "to": 55.21,
+     "fromScreen": 3.7,
+     "height": 5.36
+    },
+    {
+     "side": "right",
+     "name": "Ring/silent switch",
+     "from": 23.14,
+     "to": 28.84,
+     "fromScreen": 3.7,
+     "height": 4.72
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 33.66,
+     "to": 58.96,
+     "fromScreen": 3.7,
+     "height": 5.36
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 14.67,
+     "to": 56.85
+    }
+   ],
+   "source": "Apple dimensional drawing, 2020-10-16"
+  }
+ },
+ {
+  "id": "iphone-12-mini",
+  "name": "iPhone 12 mini",
+  "group": "iPhone",
+  "note": "From Apple's dimensional drawing (2020-10-16): size, corner curve, camera, buttons.",
+  "spec": {
+   "phone": "iPhone 12 mini",
+   "width": 64.21,
+   "length": 131.5,
+   "thickness": 7.39,
+   "cornerProfile": [
+    0,
+    0.11,
+    0.94,
+    2.93,
+    5.92,
+    9.42,
+    13.03
+   ],
+   "cornerRadius": 10.0,
+   "cutouts": [
+    {
+     "name": "Camera",
+     "x": 16.22,
+     "y": 17.81,
+     "w": 29.09,
+     "h": 32.28,
+     "r": 6.4
+    }
+   ],
+   "sideCutouts": [
+    {
+     "side": "left",
+     "name": "Side button",
+     "from": 34.78,
+     "to": 52.58,
+     "fromScreen": 3.7,
+     "height": 5.36
+    },
+    {
+     "side": "right",
+     "name": "Ring/silent switch",
+     "from": 20.52,
+     "to": 26.22,
+     "fromScreen": 3.7,
+     "height": 4.75
+    },
+    {
+     "side": "right",
+     "name": "Volume buttons",
+     "from": 31.03,
+     "to": 56.33,
+     "fromScreen": 3.7,
+     "height": 5.36
+    },
+    {
+     "side": "bottom",
+     "name": "Connector, speaker and microphones",
+     "from": 13.27,
+     "to": 50.94
+    }
+   ],
+   "source": "Apple dimensional drawing, 2020-10-16"
+  }
+ }
+];
+
+</script>
 <script>window.APP_MODE = "beck";</script>
 <script>
 (() => {
@@ -2198,7 +4107,7 @@ window.DrawnCodes = { GridModel, computeFill, buildInk, traceSilhouette, STROKE,
 // ---------- defaults ----------
 const DEFAULT_SPEC = {
   phone: "Nothing Phone (3)",
-  specVersion: 3,        // 2: measured outline and camera island; 3: measured thickness and buttons
+  specVersion: 4,        // 2: measured outline and camera island; 3: measured thickness and buttons; 4: roomier button holes
   width: 76.8,
   length: 163.8,
   thickness: 8.2,         // measured; the case adds phoneClearance under the phone as play
@@ -2215,13 +4124,13 @@ const DEFAULT_SPEC = {
   collarClearance: 0.15,
   cutoutClearance: 0.6,
   inkMargin: 0.6,
-  buttonClearance: 0.4,   // added to each end of every side opening
+  buttonClearance: 1.2,   // added to each end of every side opening
   // Back view: the phone's right side (screen towards you) is on the left here. Measured from the top edge;
   // fromScreen = button centre below the screen face, height = hole height (rounded ends).
   sideCutouts: [
-    { side: "left",   name: "Volume",        from: 45.8, to: 67.5, fromScreen: 2.8, height: 4 },
-    { side: "left",   name: "Power",         from: 75.3, to: 85.2, fromScreen: 2.8, height: 4 },
-    { side: "right",  name: "Essential key", from: 45.5, to: 56.8, fromScreen: 2.8, height: 4 },
+    { side: "left",   name: "Volume",        from: 45.8, to: 67.5, fromScreen: 2.8, height: 5.2 },
+    { side: "left",   name: "Power",         from: 75.3, to: 85.2, fromScreen: 2.8, height: 5.2 },
+    { side: "right",  name: "Essential key", from: 45.5, to: 56.8, fromScreen: 2.8, height: 5.2 },
     { side: "bottom", name: "USB-C + speakers", from: 18, to: 58, placeholder: true }
   ],
   cutouts: [
@@ -2273,6 +4182,10 @@ function load(){
     const s = JSON.parse(raw);
     if(s.spec && !(s.spec.specVersion >= 2)) for(const k of ["width", "length", "cornerRadius", "cutouts"]) s.spec[k] = clone(DEFAULT_SPEC[k]);
     if(s.spec && !(s.spec.specVersion >= 3)) for(const k of ["specVersion", "thickness", "sideCutouts", "buttonClearance"]) s.spec[k] = clone(DEFAULT_SPEC[k]);
+    if(s.spec && !(s.spec.specVersion >= 4)){   // roomier button holes on the Nothing Phone (3)
+      s.spec.specVersion = 4; s.spec.buttonClearance = Math.max(s.spec.buttonClearance || 0, DEFAULT_SPEC.buttonClearance);
+      for(const k of s.spec.sideCutouts || []) if(typeof k.fromScreen === "number" && (k.height || 4) < 5.2) k.height = 5.2;
+    }
     if(s.spec){ spec = Object.assign(clone(DEFAULT_SPEC), s.spec); for(const k of ["plateThickness", "ledge", "dovetail", "skinThickness", "tongueThickness", "tipHeight", "bumpHeight", "bumpRise", "bumpLength", "snapClearance", "snapBumps"]) delete spec[k]; }
     if(s.design) design = Object.assign(clone(DEFAULT_DESIGN), s.design);
     delete design.frameColor;   // the case is the panel colour now
@@ -2315,9 +4228,27 @@ function fitView(){
 function toMM(px, py){ return [(px - view.ox) / view.scale, (py - view.oy) / view.scale]; }
 
 function outlinePath(o){ // phone outline offset outward by o mm
-  const r = Math.min(spec.cornerRadius, spec.width / 2, spec.length / 2) + o;
   ctx.beginPath();
+  if(Array.isArray(spec.cornerProfile)){   // a measured corner curve (Apple's drawings), not a plain radius
+    const ring = CaseGeo.phoneOutline(spec, o, 16)[0];
+    ctx.moveTo(ring[0][0], ring[0][1]); for(let i = 1; i < ring.length; i++) ctx.lineTo(ring[i][0], ring[i][1]); ctx.closePath();
+    return;
+  }
+  const r = Math.min(spec.cornerRadius, spec.width / 2, spec.length / 2) + o;
   ctx.roundRect(-o, -o, spec.width + 2 * o, spec.length + 2 * o, Math.max(0, r));
+}
+// All the back cutouts as one outline (close ones are joined, as the geometry does), grown by `grow`.
+let cutPathCache = { key: null, path: null };
+function cutoutsPath(grow){
+  const key = JSON.stringify([spec.cutouts, spec.cutoutClearance, spec.minWeb, grow]);
+  if(cutPathCache.key !== key || !cutPathCache.map) cutPathCache = { key, map: cutPathCache.map || new Map() };
+  if(!cutPathCache.map.has(key)){
+    const path = new Path2D();
+    for(const poly of CaseGeo.cutoutRegion(spec, grow)) for(const ring of poly){ path.moveTo(ring[0][0], ring[0][1]); for(let i = 1; i < ring.length; i++) path.lineTo(ring[i][0], ring[i][1]); path.closePath(); }
+    if(cutPathCache.map.size > 8) cutPathCache.map.clear();
+    cutPathCache.map.set(key, path);
+  }
+  return cutPathCache.map.get(key);
 }
 function plateOff(){ return CaseGeo.plateOffsets(spec); }
 function frameOuter(){ return spec.phoneClearance + spec.frameWall; }
@@ -2383,17 +4314,14 @@ function render(){
   ctx.restore();
 
   // holes
-  for(const c of spec.cutouts){
-    ctx.beginPath(); cutSubpath(c, 0);
-    ctx.fillStyle = getCSS("--bed"); ctx.fill();
-  }
+  ctx.fillStyle = getCSS("--bed"); ctx.fill(cutoutsPath(0));
 
   // strokes clipped to the plate's outer face, kept inkMargin clear of the edge and the holes
   ctx.save();
   const im = spec.inkMargin || 0;
   outlinePath(plateOff().narrow - im);
-  for(const c of spec.cutouts) cutSubpath(c, im);
-  ctx.clip("evenodd");
+  ctx.clip();
+  { const keep = new Path2D(); keep.rect(-50, -50, spec.width + 100, spec.length + 100); keep.addPath(cutoutsPath(im)); ctx.clip(keep, "evenodd"); }
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   if(BECK) drawGridLines();
   for(const s of design.strokes) if(!s.top) drawStroke(s);
@@ -3360,7 +5288,7 @@ function syncCaseBtn(){ if(caseBtn) caseBtn.style.boxShadow = `inset 0 0 0 5px $
 
 // ---------- settings sheet ----------
 const sheet = document.getElementById("sheet"), scrim = document.getElementById("scrim");
-function openSheet(){ syncSpecText(); syncColorInputs(); syncMode(); syncInkDepth(); syncStyle(); sheet.classList.add("open"); scrim.classList.add("open"); }
+function openSheet(){ buildPhoneList(); syncSpecText(); syncColorInputs(); syncMode(); syncInkDepth(); syncStyle(); sheet.classList.add("open"); scrim.classList.add("open"); }
 function closeSheet(){ sheet.classList.remove("open"); scrim.classList.remove("open"); }
 btnSettings.onclick = openSheet; btnClose.onclick = closeSheet; scrim.onclick = closeSheet;
 
@@ -3521,7 +5449,9 @@ btnExportSvg.onclick = () => {
     const R = cutRadius(c);
     return `M ${c.x - R} ${c.y} a ${R} ${R} 0 1 0 ${2 * R} 0 a ${R} ${R} 0 1 0 ${-2 * R} 0`;
   }).join(" ");
-  const plate = `M ${r} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${l - r} A ${r} ${r} 0 0 1 ${w - r} ${l} H ${r} A ${r} ${r} 0 0 1 0 ${l - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
+  const plate = Array.isArray(spec.cornerProfile)
+    ? "M " + CaseGeo.phoneOutline(spec, 0, 16)[0].map(q => round2(q[0]) + " " + round2(q[1])).join(" L ") + " Z"
+    : `M ${r} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${l - r} A ${r} ${r} 0 0 1 ${w - r} ${l} H ${r} A ${r} ${r} 0 0 1 0 ${l - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
   const paths = CaseGeo.orderedStrokes(geoDesign().strokes).map(s => s.fill
     ? `<path d="${s.fill.map(poly => poly.map(r => "M " + r.map(q => q[0] + " " + q[1]).join(" L ") + " Z").join(" ")).join(" ")}" fill="${inkCol(s.c)}" stroke="none" fill-rule="evenodd"/>`
     : `<path d="${svgPathForStroke(s)}" stroke="${inkCol(s.c)}" stroke-width="${s.w}"/>`).join("\n    ");
@@ -3888,6 +5818,32 @@ window.addEventListener("keydown", e => {
   else if(e.key === "d") setTool("draw");
   else if(e.key === "e") setTool("erase");
   else if(e.key === "Escape"){ closeSheet(); viewer.classList.remove("open"); }
+});
+
+// ---------- phones ----------
+// Presets replace only what belongs to the phone; the case settings (wall, clearances...) stay as they are.
+const PHONE_KEYS = ["phone", "width", "length", "thickness", "cornerRadius", "cornerProfile", "cornerProfileY", "cutouts", "sideCutouts", "source"];
+const PHONES = [{ id: "nothing-3", name: "Nothing Phone (3)", group: "Nothing", note: "Measured by hand with calipers (the USB-C opening is still an estimate).", spec: Object.fromEntries(PHONE_KEYS.filter(k => k in DEFAULT_SPEC).map(k => [k, DEFAULT_SPEC[k]])) }].concat(window.PHONES || []);
+function buildPhoneList(){
+  phoneSel.innerHTML = "";
+  const groups = [...new Set(PHONES.map(p => p.group || "Other"))];
+  for(const g of groups){
+    const og = document.createElement("optgroup"); og.label = g;
+    for(const p of PHONES.filter(p => (p.group || "Other") === g)){ const o = document.createElement("option"); o.value = p.id; o.textContent = p.name; og.appendChild(o); }
+    phoneSel.appendChild(og);
+  }
+  const cur = PHONES.find(p => p.spec.phone === spec.phone);
+  if(cur) phoneSel.value = cur.id; else { const o = document.createElement("option"); o.value = ""; o.textContent = spec.phone || "Custom"; phoneSel.prepend(o); phoneSel.value = ""; }
+  phoneNote.textContent = cur ? (cur.note || "") : "Custom dimensions (edited below).";
+}
+phoneSel.addEventListener("change", () => {
+  const p = PHONES.find(x => x.id === phoneSel.value); if(!p) return;
+  for(const k of PHONE_KEYS) delete spec[k];
+  Object.assign(spec, clone(p.spec));
+  selCut = -1; syncSpecText(); specErr.textContent = "";
+  document.getElementById("subtitle").textContent = `${spec.phone}, back view`;
+  buildPhoneList(); fitView(); save(); render();
+  showHint(`${p.name}: ${spec.width} × ${spec.length} × ${spec.thickness} mm. Your drawing is kept; check it still fits.`);
 });
 
 appDraw.onclick = () => { if(BECK) location.href = "../"; else closeSheet(); };

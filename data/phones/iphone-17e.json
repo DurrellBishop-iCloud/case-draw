@@ -1,0 +1,20 @@
+{
+  "id": "iphone-17e", "name": "iPhone 17e", "drawingDate": "2026-03-09",
+  "width": 71.52, "length": 146.71, "thickness": 7.80,
+  "corner": { "profile": [0.00, 0.06, 3.22, 6.97, 11.38, 15.89], "profileY": [0.00, 0.07, 0.95, 3.40, 7.20, 11.63, 16.14], "radius": null },
+  "camera": {
+    "plateau": { "x0": null, "x1": null, "y0": null, "y1": null, "shape": null, "r": null },
+    "lenses": [ { "x": 13.32, "y": 13.32, "d": 14.97 } ],
+    "extras": [ { "name": "rear mic", "x": 24.30, "y": 13.32, "d": 1.30 }, { "name": "flash", "x": 29.68, "y": 13.32, "d": 3.75 } ],
+    "bump": 1.68, "plateauHeight": null
+  },
+  "buttons": [
+    { "name": "Action button", "side": "left", "centre": 31.28, "half": 3.77, "width": 3.31, "centreLine": 3.90 },
+    { "name": "Volume up", "side": "left", "centre": 45.43, "half": 5.92, "width": 3.31, "centreLine": 3.90 },
+    { "name": "Volume down", "side": "left", "centre": 59.63, "half": 5.92, "width": 3.31, "centreLine": 3.90 },
+    { "name": "SIM tray", "kind": "sim", "side": "left", "centre": 110.04, "half": 7.97, "width": 2.56, "centreLine": 3.90 },
+    { "name": "Side button", "side": "right", "centre": 52.53, "half": 9.17, "width": 3.31, "centreLine": 3.90 }
+  ],
+  "bottom": { "from": 18.79, "to": 57.24, "datum": "0.00 at left of bottom view; view drawn with display up (camera bump at the bottom of the view)", "connectorWidth": null },
+  "notes": "All values read from sheet 1 (page index 1) and confirmed against the PDF text layer. NON-STANDARD CORNER TABLE: unlike the other sheets the two axes carry DIFFERENT lists. 'profile' is the horizontal-axis list (0.00 0.06 3.22 6.97 11.38 15.89); the extra key 'profileY' is the vertical-axis list, which the drawing writes as negatives (-0.07 -0.95 -3.40 -7.20 -11.63 -16.14). Reading the crosses on the curve, the points appear to pair as (0,16.14) (0,11.63) (0.06,7.20) (3.22,3.40) (6.97,0.95) (11.38,0.07) (15.89,0): the pairing is my reading of the leader lines, the digits are certain. No camera plateau exists on this phone: a single lens ring of diameter 14.97 (reported as the lens) sits directly on the back glass, so plateau fields are null; a case opening must clear that 14.97 circle plus the mic and flash. The drawing writes the camera row y as '3X -13.32' (negative = downward); reported positive per the guide's y-down convention. Only 'BACK GLASS TO CAMERA GLASS' 1.68 is given. No Camera Control on this phone. Bottom ordinates: 18.79 24.83 28.84 30.97 40.55 42.69 46.69 57.24 (30.97 and 40.55 point at the two ends of the USB-C opening; width not dimensioned directly). Recommended connector keepout 12.45 wide x 6.60 high, 2X R3.30 ends, centred at 35.76."
+}

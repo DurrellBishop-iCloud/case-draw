@@ -1,0 +1,115 @@
+{
+  "id": "iphone-13-pro",
+  "name": "iPhone 13 Pro",
+  "drawingDate": "2021-09-28",
+  "width": 71.52,
+  "length": 146.71,
+  "thickness": 7.65,
+  "corner": {
+    "profile": [
+      0,
+      0.07,
+      0.92,
+      3.31,
+      7.04,
+      11.43,
+      15.89
+    ],
+    "radius": null
+  },
+  "camera": {
+    "plateau": {
+      "x0": 1.15,
+      "x1": 42.39,
+      "y0": 1.15,
+      "y1": 43.62,
+      "shape": "roundrect",
+      "r": null
+    },
+    "lenses": [
+      {
+        "x": 13.43,
+        "y": 13.43,
+        "d": null
+      },
+      {
+        "x": 13.43,
+        "y": 31.35,
+        "d": 15.53
+      },
+      {
+        "x": 30.08,
+        "y": 22.39,
+        "d": 15.8
+      }
+    ],
+    "extras": [
+      {
+        "name": "flash",
+        "x": 30.08,
+        "y": 9.42,
+        "d": null,
+        "inside": true
+      },
+      {
+        "name": "rear mic",
+        "x": null,
+        "y": null,
+        "d": 1.15,
+        "inside": true
+      }
+    ],
+    "bump": 3.6,
+    "plateauHeight": 1.68
+  },
+  "buttons": [
+    {
+      "name": "Ring/silent switch",
+      "side": "left",
+      "centre": 32.22,
+      "half": 2.9,
+      "width": 2.15,
+      "centreLine": 3.75
+    },
+    {
+      "name": "Volume up",
+      "side": "left",
+      "centre": 45.53,
+      "half": 5.8,
+      "width": 3.06,
+      "centreLine": 3.82
+    },
+    {
+      "name": "Volume down",
+      "side": "left",
+      "centre": 59.53,
+      "half": 5.8,
+      "width": 3.06,
+      "centreLine": 3.82
+    },
+    {
+      "name": "SIM tray",
+      "side": "left",
+      "centre": 83.69,
+      "half": 8.02,
+      "width": 2.66,
+      "centreLine": null,
+      "kind": "sim"
+    },
+    {
+      "name": "Side button",
+      "side": "right",
+      "centre": 52.53,
+      "half": 9.05,
+      "width": 3.06,
+      "centreLine": 3.82
+    }
+  ],
+  "bottom": {
+    "from": 19.14,
+    "to": 56.89,
+    "datum": "0.00 at left of bottom view; view drawn with display up and camera bump down, so 0.00 is the phone's left edge as seen from the front",
+    "connectorWidth": null
+  },
+  "notes": "Dimension numbers on this drawing are vector outlines, not PDF text: pg.get_text('words') returns only the title/footer, so the verbatim text check cannot confirm any value; every number was read visually from crops at 3.5x-12x zoom and cross-checked by symmetry about the centre ordinate and by an independent tesseract OCR pass over the rendered sheet (which found all but a handful of the values; those were re-read at higher zoom). centreLine values are measured across the thickness (about half of it); which face they are taken from was not determined. Lens diameters: 'dia 15.53' (no multiplier) points at rear camera 2 and 'dia 15.80' at rear camera 3; rear camera 1 has no diameter callout, so its d is null (it is drawn the same size as camera 2). Flash diameter is not dimensioned; rear mic position is not dimensioned (only dia 1.15; it is inside the plateau, lower right). LiDAR is not drawn or dimensioned. Plateau = outermost camera outline; inner outline at x 4.27-39.28, y 4.27-40.51. Plateau corner radius not dimensioned. Corner table differs between axes in one entry: across-width list has 11.43 (reported), down-length list has 11.42. SIM tray (centre 83.69, directly below the volume buttons): width 2.66 and a 1.33 tray-edge-to-centre dimension, but no centre-line distance from a face, so centreLine is null. The '2X 3.06' volume-width label on the left view is partly overprinted by an arrow; 3.06 is confirmed by the clean '3.06' on the right view. Ring/silent values are for the POCKET (32.22, 3.75 'POCKET CENTER', 2X 2.90, 2.15 width). Connector width not dimensioned (height 2.30; keepout 13.65 x 6.85; ordinates 31.74 and 39.79 straddle the 35.76 centre). Bottom ordinates: 19.14 25.18 29.37 31.74 39.79 42.16 46.34 56.89; Detail C gives 3.80 and the bottom view 3.75 for the port centre-line. Button protrusion: switch 0.60, volume 0.45, side 0.45."
+}

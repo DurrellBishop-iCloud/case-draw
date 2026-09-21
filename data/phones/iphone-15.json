@@ -1,0 +1,20 @@
+{
+  "id": "iphone-15", "name": "iPhone 15", "drawingDate": "2023-10-10",
+  "width": 71.63, "length": 147.64, "thickness": 7.81,
+  "corner": { "profile": [0, 0.04, 0.59, 2.29, 5.24, 9.06, 13.21, 17.40], "radius": null },
+  "camera": {
+    "plateau": { "x0": 1.22, "x1": 37.15, "y0": 1.22, "y1": 37.15, "shape": "roundrect", "r": null },
+    "lenses": [ { "x": 12.73, "y": 12.73, "d": 15.07 }, { "x": 25.64, "y": 25.64, "d": 15.07 } ],
+    "extras": [ { "name": "flash", "x": 27.32, "y": 11.06, "d": 6.28, "inside": true }, { "name": "rear mic", "x": 11.47, "y": 26.90, "d": 2.10, "inside": true } ],
+    "bump": 3.48, "plateauHeight": 1.85
+  },
+  "buttons": [
+    { "name": "Ring/silent switch", "side": "left", "centre": 32.83, "half": 2.96, "width": 2.35, "centreLine": 3.91 },
+    { "name": "Volume up", "side": "left", "centre": 46.27, "half": 5.60, "width": 2.66, "centreLine": 3.91 },
+    { "name": "Volume down", "side": "left", "centre": 60.47, "half": 5.60, "width": 2.66, "centreLine": 3.91 },
+    { "name": "SIM tray", "kind": "sim", "side": "left", "centre": 110.72, "half": 7.97, "width": 2.56, "centreLine": 3.91 },
+    { "name": "Side button", "side": "right", "centre": 53.37, "half": 8.85, "width": 2.66, "centreLine": 3.91 }
+  ],
+  "bottom": { "from": 19.59, "to": 56.55, "datum": "0.00 at left of bottom view; view drawn with display up (camera bump down)", "connectorWidth": null },
+  "notes": "Main sheet (page index 1) has NO text layer (dimensions are stroked vector glyphs), so pg.get_text('words') cannot verify its numbers (only sheets 2-3 have text); every number was instead checked against a decode of the vector stroke glyphs plus zoomed crops. Corner list is identical on both axes. CAMERA DETAIL A: outer outline 1.22..37.15 on both axes, inner (plateau top) outline 3.90..34.47; plateau corner radius not dimensioned. Flash and rear mic are inside the plateau. Ring/silent switch: 32.83 and 3.91 are labelled POCKET CENTER, 2.35 is pocket width. The side view labels 7.81 as 'PRODUCT WIDTH' but it is the thickness dimension. Bottom ordinates: 19.59 24.10 28.89 31.31 40.31 42.74 47.53 56.55 (8X dia 1.35 ports, 2X dia 1.60 screws). Connector width itself not dimensioned; recommended connector keepout is 12.45 wide x 6.60 high (4X R3.25), centred at 35.81."
+}

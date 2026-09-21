@@ -1,0 +1,21 @@
+{
+  "id": "iphone-16-pro", "name": "iPhone 16 Pro", "drawingDate": "2024-09-19",
+  "width": 71.45, "length": 149.61, "thickness": 8.25,
+  "corner": { "profile": [0.00, 0.04, 0.89, 3.74, 8.36, 13.75, 19.23], "radius": null },
+  "camera": {
+    "plateau": { "x0": 1.04, "x1": 45.22, "y0": 1.04, "y1": 46.54, "shape": "roundrect", "r": null },
+    "lenses": [ { "x": 14.17, "y": 14.17, "d": 16.20 }, { "x": 14.17, "y": 33.41, "d": 16.20 }, { "x": 32.16, "y": 23.79, "d": 16.20 } ],
+    "extras": [ { "name": "flash", "x": 32.16, "y": 10.22, "d": 6.92, "inside": true }, { "name": "rear mic", "x": 38.00, "y": 34.14, "d": 0.75, "inside": true } ],
+    "bump": 4.28, "plateauHeight": 2.05
+  },
+  "buttons": [
+    { "name": "Action button", "side": "left", "centre": 34.08, "half": 3.45, "width": 2.66, "centreLine": 4.12 },
+    { "name": "Volume up", "side": "left", "centre": 48.23, "half": 5.60, "width": 2.66, "centreLine": 4.12 },
+    { "name": "Volume down", "side": "left", "centre": 62.43, "half": 5.60, "width": 2.66, "centreLine": 4.12 },
+    { "name": "SIM tray", "kind": "sim", "side": "left", "centre": 90.17, "half": 8.17, "width": 2.76, "centreLine": 4.12 },
+    { "name": "Side button", "side": "right", "centre": 55.33, "half": 8.85, "width": 2.66, "centreLine": 4.12 },
+    { "name": "Camera control", "side": "right", "centre": 98.19, "half": 8.55, "width": 3.03, "centreLine": 4.12 }
+  ],
+  "bottom": { "from": 19.70, "to": 56.25, "datum": "0.00 at left of bottom view; view drawn with display up (camera bump at the bottom of the view)", "connectorWidth": null },
+  "notes": "All values read from sheet 1 (page index 1) and confirmed against the PDF text layer. Camera plateau: two concentric rounded-square outlines are dimensioned; outer (reported) 1.04..45.22 x 1.04..46.54, inner raised step 4.70..41.56 x 4.70..42.88; no corner radius is dimensioned. '2X 14.17' is the x of cameras 1 and 2, '2X 32.16' the x of camera 3 and the flash; flash and rear mic lie inside the plateau. LiDAR is not dimensioned on the drawing. Buttons: '4X 4.12' on the left view covers the three buttons and the SIM tray, '2X 4.12' on the right view covers side button and Camera Control. Camera Control is flush (0.00 proud); other buttons 0.45 proud. Bottom ordinates: 19.70 24.21 28.79 30.86 40.58 42.64 47.23 56.25 (30.86 and 40.58 point at the two ends of the USB-C opening; its width is not dimensioned directly). Recommended connector keepout is 12.45 wide x 6.60 high with 2X R3.25 ends, centred at 35.72."
+}

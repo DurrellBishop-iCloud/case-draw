@@ -33,7 +33,48 @@
     return [ring];
   }
   // Phone outline offset outward by o (negative = inset). Corner centres stay fixed; radius becomes R+o.
+  // A corner given as ordinates (Apple's "corner profile": the list p, used on both axes, point i = (p[i], p[n-1-i])
+  // from the corner of the bounding box) -> a dense, smooth quarter curve from the side edge to the top edge, as
+  // [x, y] from that box corner. Interpolated as distance from (E, E) against angle with a shape-preserving cubic
+  // (flat at both ends, where the curve meets the straight edges) and never allowed outside the bounding box.
+  const profileCache = new Map();
+  function cornerCurve(profile, segs, profileY) {   // profileY: the list down the side, when a sheet gives the two axes different lists
+    const key = profile.join(",") + "|" + (profileY || []).join(",") + "|" + segs; if (profileCache.has(key)) return profileCache.get(key);
+    const p = profile.slice().sort((a, b) => a - b), n = p.length, Ex = p[n - 1];
+    const py = Array.isArray(profileY) && profileY.length === n ? profileY.slice().sort((a, b) => a - b) : p, Ey = py[n - 1];
+    const box = a => Math.min(Ex / Math.max(1e-9, Math.cos(a)), Ey / Math.max(1e-9, Math.sin(a)));   // distance from (Ex, Ey) to the box at angle a
+    const T = [], F = [];
+    for (let i = 0; i < n; i++) { const dx = Ex - p[i], dy = Ey - py[n - 1 - i], a = Math.atan2(dy, dx); T.push(a); F.push(Math.hypot(dx, dy)); }
+    // Fritsch-Carlson monotone tangents; flat (0) at both ends, where the curve meets the straight edges
+    const h = [], d = []; for (let i = 0; i < n - 1; i++) { h.push(T[i + 1] - T[i]); d.push((F[i + 1] - F[i]) / h[i]); }
+    const m = new Array(n).fill(0);
+    for (let i = 1; i < n - 1; i++) if (d[i - 1] * d[i] > 0) { const w1 = 2 * h[i] + h[i - 1], w2 = h[i] + 2 * h[i - 1]; m[i] = (w1 + w2) / (w1 / d[i - 1] + w2 / d[i]); }
+    const out = [], N = Math.max(8, segs) * 3;
+    for (let k = 0; k <= N; k++) {
+      const a = (k / N) * Math.PI / 2; let i = 0; while (i < n - 2 && T[i + 1] < a) i++;
+      const t = (a - T[i]) / h[i], t2 = t * t, t3 = t2 * t;
+      const r = Math.min(box(a), (2 * t3 - 3 * t2 + 1) * F[i] + (t3 - 2 * t2 + t) * h[i] * m[i] + (-2 * t3 + 3 * t2) * F[i + 1] + (t3 - t2) * h[i] * m[i + 1]);
+      out.push([Math.max(0, Ex - r * Math.cos(a)), Math.max(0, Ey - r * Math.sin(a))]);
+    }
+    out[0] = [0, Ey]; out[N] = [Ex, 0];
+    profileCache.set(key, out); return out;
+  }
+  // Outline from a corner profile, offset outward by o along the curve's normals.
+  function profileOutline(spec, o, segs) {
+    const W = spec.width, L = spec.length, c = cornerCurve(spec.cornerProfile, segs, spec.cornerProfileY), N = c.length - 1;
+    const off = c.map((q, k) => {
+      const a = c[Math.max(0, k - 1)], b = c[Math.min(N, k + 1)];
+      let nx = b[1] - a[1], ny = -(b[0] - a[0]); const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;   // outward normal (towards the box corner)
+      if (k === 0) { nx = -1; ny = 0; } if (k === N) { nx = 0; ny = -1; }
+      return [q[0] + nx * o, q[1] + ny * o];
+    });
+    // top-left corner runs (0,E) -> (E,0); build the ring clockwise on screen: TL, TR, BR, BL
+    const tl = off, tr = off.map(q => [W - q[0], q[1]]).reverse(), br = off.map(q => [W - q[0], L - q[1]]), bl = off.map(q => [q[0], L - q[1]]).reverse();
+    const ring = [...tl, ...tr, ...br, ...bl]; ring.push(ring[0]);
+    return [ring];
+  }
   function phoneOutline(spec, o, segs) {
+    if (Array.isArray(spec.cornerProfile) && spec.cornerProfile.length >= 4) return profileOutline(spec, o, segs);
     const W = spec.width, L = spec.length;
     const R = Math.max(0.01, Math.min(spec.cornerRadius, W / 2, L / 2));
     const r = R + o;
@@ -257,12 +298,30 @@
     }
     return circle(c.x, c.y, c.d / 2 + k, 48);
   }
-  const cutRing = (spec, c, wall) => ops.difference(cutShape(spec, c, wall), cutShape(spec, c, 0));
+  // All the back cutouts as ONE region, grown by `grow`. Cutouts closer together than `minWeb` (default 1.6 mm:
+  // less would print as a fragile sliver, e.g. between an iPhone camera pill and its flash) are joined by a slot
+  // as wide as the smaller of the two.
+  function cutoutRegion(spec, grow) {
+    const cs = spec.cutouts || []; if (!cs.length) return [];
+    const k = (spec.cutoutClearance || 0) / 2 + (grow || 0), web = spec.minWeb != null ? spec.minWeb : 1.6;
+    const shapes = cs.map(c => cutShape(spec, c, grow)), base = cs.map(c => cutShape(spec, c, 0)), extra = [];
+    const half = c => (c.w ? Math.min(c.w, c.h) : c.d) / 2;
+    for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+      let gap = Infinity;
+      for (const p of base[i][0][0]) for (const q of base[j][0][0]) gap = Math.min(gap, Math.hypot(p[0] - q[0], p[1] - q[1]));
+      if (gap > web + 0.3) continue;   // (vertex spacing makes the measured gap up to ~0.3 too big)
+      const a = cs[i], b = cs[j], hw = Math.min(half(a), half(b)) + k, dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1, nx = -dy / l * hw, ny = dx / l * hw;
+      extra.push([[[[a.x + nx, a.y + ny], [b.x + nx, b.y + ny], [b.x - nx, b.y - ny], [a.x - nx, a.y - ny], [a.x + nx, a.y + ny]]]]);
+    }
+    return ops.union(...shapes, ...extra);
+  }
+  // the collar stops short of the side wall (a camera can sit closer to the edge than the collar is wide)
+  const cutRing = (spec, wall) => ops.intersection(ops.difference(cutoutRegion(spec, wall), cutoutRegion(spec, 0)), phoneOutline(spec, (spec.phoneClearance || 0) - (spec.collarClearance || 0.15), 16));
   function throughOn(design) { return design.caseStyle === "extrude"; }
   function collarOn(spec, design) { return spec.collars !== false && design.mode === "inlay" && spec.cutouts.length > 0; }
   function buildRegions(spec, design) {
     const off = plateOffsets(spec);
-    const holes = spec.cutouts.map(c => cutShape(spec, c, 0));
+    const holes = spec.cutouts.length ? [cutoutRegion(spec, 0)] : [];
     const region = (o, hs) => { const p = phoneOutline(spec, o, 16); return hs.length ? ops.difference(p, ...hs) : ops.union(p); };
     const plateRegion = region(off.narrow, holes);
     const plateWide = region(off.wide, holes);
@@ -270,7 +329,7 @@
     // "Through" style: inks run to the outer edge so the drawing carries on down the case sides.
     const m = spec.inkMargin || 0, edgeM = throughOn(design) ? 0 : m;
     const inkArea = m > 0
-      ? region(off.narrow - edgeM, spec.cutouts.map(c => cutShape(spec, c, m)))
+      ? region(off.narrow - edgeM, spec.cutouts.length ? [cutoutRegion(spec, m)] : [])
       : plateRegion;
 
     // Height field: the plate is partitioned into cells (region, ink) by the strokes in draw order, later
@@ -557,10 +616,7 @@
       const bare = used.length ? clean(ops.difference(regions.plate, used)) : regions.plate;
       const m = new Mesh();
       if (bare.length) extrude(bare, 0, T, m, xf);
-      if (collars) for (const c of spec.cutouts) {
-        const ring = K(cutRing(spec, c, collarWall));
-        if (ring.length) extrude(ring, T - eps, T + collarH, m, xf);
-      }
+      if (collars) { const ring = K(cutRing(spec, collarWall)); if (ring.length) extrude(ring, T - eps, T + collarH, m, xf); }
       parts.push({ name: "Panel", color: design.plateColor, mesh: m });
       let maxTop = 0;
       design.inks.forEach((col, i) => {
@@ -579,10 +635,8 @@
       extrudePocketed(regions.plate, regions.allInk.length ? [regions.allInk] : [], d, lv.skinT, m, xf);
       if (collars) {
         // short collars round each camera hole key into the body's oversized cutouts
-        for (const c of spec.cutouts) {
-          const ring = K(cutRing(spec, c, collarWall));
-          if (ring.length) extrude(ring, lv.skinT - eps, lv.skinT + collarH, m, xf);
-        }
+        const ring = K(cutRing(spec, collarWall));
+        if (ring.length) extrude(ring, lv.skinT - eps, lv.skinT + collarH, m, xf);
       }
       parts.push({ name: "Panel", color: design.plateColor, mesh: m });
       inks.forEach(r => { const i = regions.inks.indexOf(r); const im = new Mesh(); extrude(r, 0, d, im, xf); parts.push({ name: `Ink ${i + 1}`, color: design.inks[i], mesh: im }); });
@@ -679,7 +733,7 @@
     const outer = phoneOutline(spec, c + wall, 16);
     const collars = collarOn(spec, design);
     const extra = collars ? (spec.collarWall || 0.8) + (spec.collarClearance || 0.15) : 0;
-    const holes = spec.cutouts.map(k => cutShape(spec, k, extra));
+    const holes = spec.cutouts.length ? [ops.intersection(cutoutRegion(spec, extra), phoneOutline(spec, c, 16))].filter(h => h.length) : [];
     const minusHoles = mp => holes.length ? ops.difference(mp, ...holes) : mp;
 
     // 2D colour layouts
@@ -839,7 +893,7 @@
       if (list && list.length) { drop.add(list.pop()); drop.add(i); }
       else { if (!seen.has(key)) seen.set(key, []); seen.get(key).push(i); }
     }
-    if (drop.size) { const kept = []; for (let i = 0; i < t.length; i += 3) if (!drop.has(i)) kept.push(t[i], t[i + 1], t[i + 2]); t.length = 0; t.push(...kept); }
+    if (drop.size) { const kept = []; for (let i = 0; i < t.length; i += 3) if (!drop.has(i)) kept.push(t[i], t[i + 1], t[i + 2]); t.length = 0; for (let i = 0; i < kept.length; i++) t.push(kept[i]); }   // (no spread: a big mesh overflows the call stack)
     const out = new Mesh(); out.v = v; out.t = t; return splitPinches(out);
   }
   // Where two patches of one part touch only at a point, their side walls share a vertical edge (four faces on
@@ -1028,5 +1082,5 @@ ${items} </build>
   }
 
 
-  return { ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
+  return { cutoutRegion, ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
 });
