@@ -39,6 +39,12 @@ main multi-colour target) and a Bambu with AMS. Filament: PLA to start.
   majority pass removes specks. `strokeRegion` accepts `fill`, so layering, 3D, through-mode and export just work.
   Erase removes a whole fill (one colour of a photo) at a time.
 
+## Four drawing colours (v1.6.0)
+All four swatches draw. Ink index -1 = the panel/case colour: geometry treats a -1 stroke as a cut through the inks
+under it (paintCells keeps the cells; buildRegions/inkPlanRegions drop them; allInkRegion folds strokes in order).
+Long-press a circle = makeCaseColour(k): swaps that ink with the panel colour and rewrites stroke indices (once per
+shared object, since undo snapshots share stroke objects) so nothing drawn changes colour.
+
 ## Code layout
 - `index.html` — GENERATED. Do not edit by hand. It's what Pages serves.
 - `src/index.src.html` — the app: canvas drawing (vector strokes in mm), settings JSON, 3D preview (three.js r128

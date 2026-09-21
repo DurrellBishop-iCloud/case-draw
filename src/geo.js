@@ -152,7 +152,7 @@
     if (cellCache.ref === strokes && cellCache.len === strokes.length && cellCache.inks === inkCount) return cellCache.cells;
     let cells = []; // { ink, chain, region, bbox }
     for (const st of strokes) {
-      if (!(st.c >= 0 && st.c < inkCount)) continue;
+      if (!(st.c === -1 || (st.c >= 0 && st.c < inkCount))) continue;   // -1 = drawn in the panel colour: covers inks
       const S = strokeRegion(st), sb = bbox(S);
       let remaining = S;
       const next = [];
@@ -178,8 +178,13 @@
   let allCache = {};
   function allInkRegion(strokes, inkCount) {
     if (allCache.ref === strokes && allCache.len === strokes.length && allCache.inks === inkCount) return allCache.region;
-    const rs = strokes.filter(st => st.c >= 0 && st.c < inkCount).map(strokeRegion);
-    const region = rs.length ? ops.union(...rs) : [];
+    const ok = strokes.filter(st => st.c === -1 || (st.c >= 0 && st.c < inkCount));
+    let region;
+    if (!ok.some(st => st.c === -1)) { const rs = ok.map(strokeRegion); region = rs.length ? ops.union(...rs) : []; }
+    else {   // panel-colour strokes cut what was drawn before them: fold the strokes in order
+      region = [];
+      for (const st of ok) { const R = strokeRegion(st); region = st.c === -1 ? ops.difference(region, R) : ops.union(region, R); }
+    }
     allCache = { ref: strokes, len: strokes.length, inks: inkCount, region };
     return region;
   }
@@ -266,7 +271,7 @@
     // has one height above the plate, independent of the others; 0 = pocketed flush into the skin.
     const heights = design.mode === "relief" ? design.inks.map((_, i) => Math.max(0, (design.inkHeights && design.inkHeights[i]) || 0)) : design.inks.map(() => 0);
     const r2 = v => Math.round(v * 100) / 100;
-    const cells = paintCells(design.strokes, design.inks.length).map(C => ({ ink: C.ink, top: r2(heights[C.ink]), region: C.region }));
+    const cells = paintCells(design.strokes, design.inks.length).filter(C => C.ink >= 0).map(C => ({ ink: C.ink, top: r2(heights[C.ink]), region: C.region }));
     // groups: one region per (ink, top), clipped to the ink area
     const groupMap = new Map();
     for (const C of cells) {
@@ -636,7 +641,7 @@
   // Drawn area per ink in plan (not clipped to the panel), later strokes covering earlier ones.
   function inkPlanRegions(design) {
     const n = (design.inks || []).length, lists = Array.from({ length: n }, () => []);
-    for (const C of paintCells(design.strokes || [], n)) lists[C.ink].push(C.region);
+    for (const C of paintCells(design.strokes || [], n)) if (C.ink >= 0) lists[C.ink].push(C.region);
     return lists.map(l => !l.length ? [] : l.length === 1 ? l[0] : ops.union(...l));
   }
   function stripeKeys(design) {

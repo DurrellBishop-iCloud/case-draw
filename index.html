@@ -159,7 +159,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.5.2</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.6.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -554,7 +554,7 @@
     if (cellCache.ref === strokes && cellCache.len === strokes.length && cellCache.inks === inkCount) return cellCache.cells;
     let cells = []; // { ink, chain, region, bbox }
     for (const st of strokes) {
-      if (!(st.c >= 0 && st.c < inkCount)) continue;
+      if (!(st.c === -1 || (st.c >= 0 && st.c < inkCount))) continue;   // -1 = drawn in the panel colour: covers inks
       const S = strokeRegion(st), sb = bbox(S);
       let remaining = S;
       const next = [];
@@ -580,8 +580,13 @@
   let allCache = {};
   function allInkRegion(strokes, inkCount) {
     if (allCache.ref === strokes && allCache.len === strokes.length && allCache.inks === inkCount) return allCache.region;
-    const rs = strokes.filter(st => st.c >= 0 && st.c < inkCount).map(strokeRegion);
-    const region = rs.length ? ops.union(...rs) : [];
+    const ok = strokes.filter(st => st.c === -1 || (st.c >= 0 && st.c < inkCount));
+    let region;
+    if (!ok.some(st => st.c === -1)) { const rs = ok.map(strokeRegion); region = rs.length ? ops.union(...rs) : []; }
+    else {   // panel-colour strokes cut what was drawn before them: fold the strokes in order
+      region = [];
+      for (const st of ok) { const R = strokeRegion(st); region = st.c === -1 ? ops.difference(region, R) : ops.union(region, R); }
+    }
     allCache = { ref: strokes, len: strokes.length, inks: inkCount, region };
     return region;
   }
@@ -668,7 +673,7 @@
     // has one height above the plate, independent of the others; 0 = pocketed flush into the skin.
     const heights = design.mode === "relief" ? design.inks.map((_, i) => Math.max(0, (design.inkHeights && design.inkHeights[i]) || 0)) : design.inks.map(() => 0);
     const r2 = v => Math.round(v * 100) / 100;
-    const cells = paintCells(design.strokes, design.inks.length).map(C => ({ ink: C.ink, top: r2(heights[C.ink]), region: C.region }));
+    const cells = paintCells(design.strokes, design.inks.length).filter(C => C.ink >= 0).map(C => ({ ink: C.ink, top: r2(heights[C.ink]), region: C.region }));
     // groups: one region per (ink, top), clipped to the ink area
     const groupMap = new Map();
     for (const C of cells) {
@@ -1038,7 +1043,7 @@
   // Drawn area per ink in plan (not clipped to the panel), later strokes covering earlier ones.
   function inkPlanRegions(design) {
     const n = (design.inks || []).length, lists = Array.from({ length: n }, () => []);
-    for (const C of paintCells(design.strokes || [], n)) lists[C.ink].push(C.region);
+    for (const C of paintCells(design.strokes || [], n)) if (C.ink >= 0) lists[C.ink].push(C.region);
     return lists.map(l => !l.length ? [] : l.length === 1 ? l[0] : ops.union(...l));
   }
   function stripeKeys(design) {
@@ -1676,16 +1681,18 @@ function render(){
   ctx.restore();
 }
 
+// Ink index -> colour; -1 is the panel and case colour, which can be drawn with too (it covers other inks).
+function inkCol(c){ return c === -1 ? design.plateColor : (design.inks[c] || "#000"); }
 function drawStroke(s){
   if(s.fill){
-    ctx.fillStyle = design.inks[s.c] || "#000";
+    ctx.fillStyle = inkCol(s.c);
     ctx.beginPath();
     for(const poly of s.fill) for(const ring of poly){ ctx.moveTo(ring[0][0], ring[0][1]); for(let i = 1; i < ring.length; i++) ctx.lineTo(ring[i][0], ring[i][1]); ctx.closePath(); }
     ctx.fill("evenodd");
     return;
   }
   const p = s.pts;
-  ctx.strokeStyle = design.inks[s.c] || "#000";
+  ctx.strokeStyle = inkCol(s.c);
   ctx.fillStyle = ctx.strokeStyle;
   ctx.lineWidth = s.w;
   if(p.length < 2){
@@ -1995,7 +2002,7 @@ function photoPalette(src){
   return cent.map((q, k) => [q, count[k]]).sort((a, b) => b[1] - a[1]).map(x => x[0]);
 }
 function currentPal(){ return placing.pal === "photo" ? placing.photoPal : [design.plateColor, ...design.inks].map(hexToRgb); }
-// Preview: the photo reduced to the four colours (panel colour see-through, as it will be), or the text in the ink.
+// Preview: the photo reduced to the four colours (panel-colour areas paint the panel colour), or the text in the ink.
 function makePreview(){
   const P = placing;
   if(P.kind === "text"){
@@ -2007,7 +2014,7 @@ function makePreview(){
     const lineW = ln => trk ? [...ln].reduce((t, ch) => t + m.measureText(ch).width, 0) + trk * Math.max(0, [...ln].length - 1) : m.measureText(ln).width;
     const widths = lines.map(lineW), maxW = Math.max(EM * 0.3, ...widths);
     const c = document.createElement("canvas"); c.width = Math.ceil(maxW + 2 * pad); c.height = Math.ceil(lines.length * lineH + 2 * pad);
-    const x = c.getContext("2d"); x.font = f; x.textBaseline = "middle"; x.fillStyle = design.inks[ink];
+    const x = c.getContext("2d"); x.font = f; x.textBaseline = "middle"; x.fillStyle = inkCol(ink);
     lines.forEach((ln, k) => {
       let px = pad + (st.align === "center" ? (maxW - widths[k]) / 2 : st.align === "right" ? maxW - widths[k] : 0);
       const py = pad + (k + 0.5) * lineH;
@@ -2025,8 +2032,7 @@ function makePreview(){
   for(let i = 0; i < d.length; i += 4){
     if(d[i + 3] < 128){ d[i + 3] = 0; continue; }
     const q = nearestIdx(d[i], d[i + 1], d[i + 2], pal);
-    if(q === 0){ d[i + 3] = 0; continue; }
-    const col = placing.pal === "photo" ? pal[q] : hexToRgb(design.inks[q - 1]);
+    const col = placing.pal === "photo" ? pal[q] : hexToRgb(inkCol(q - 1));
     d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
   }
   x.putImageData(im, 0, 0); P.prev = c;
@@ -2226,7 +2232,7 @@ placeApply.onclick = () => {
       const x0 = -2, y0 = -2, nx = Math.ceil((W + 4) / g), ny = Math.ceil((L + 4) / g);
       const sd = P.src.getContext("2d").getImageData(0, 0, P.src.width, P.src.height).data, sw = P.src.width, sh = P.src.height;
       const pal = P.kind === "photo" ? currentPal() : null, cos = Math.cos(-P.rot), sin = Math.sin(-P.rot);
-      let idx = new Int8Array(nx * ny).fill(-1);
+      const NONE = -9; let idx = new Int8Array(nx * ny).fill(NONE);   // -1 = panel colour, 0..2 = inks
       for(let j = 0; j < ny; j++) for(let i = 0; i < nx; i++){
         const dx = x0 + (i + 0.5) * g - P.cx, dy = y0 + (j + 0.5) * g - P.cy;
         const u = (dx * cos - dy * sin) / P.w + 0.5, v = (dx * sin + dy * cos) / h + 0.5;
@@ -2234,20 +2240,21 @@ placeApply.onclick = () => {
         const k = 4 * (Math.floor(v * sh) * sw + Math.floor(u * sw));
         if(sd[k + 3] < 128) continue;
         if(P.kind === "text") idx[j * nx + i] = ink;
-        else { const q = nearestIdx(sd[k], sd[k + 1], sd[k + 2], pal); if(q > 0) idx[j * nx + i] = q - 1; }
+        else idx[j * nx + i] = nearestIdx(sd[k], sd[k + 1], sd[k + 2], pal) - 1;
       }
       if(P.kind === "photo"){
-        const f = new Int8Array(idx.length), cnt = new Int8Array(5);
+        // buckets: 0 = nothing, 1 = panel colour, 2..4 = inks
+        const B = v => v === NONE ? 0 : v + 2, f = new Int8Array(idx.length), cnt = new Int8Array(6);
         for(let j = 0; j < ny; j++) for(let i = 0; i < nx; i++){
           cnt.fill(0);
-          for(let b = -1; b <= 1; b++) for(let a = -1; a <= 1; a++){ const ii = i + a, jj = j + b; cnt[(ii < 0 || jj < 0 || ii >= nx || jj >= ny) ? 4 : idx[jj * nx + ii] + 1]++; }
-          let best = idx[j * nx + i] + 1; for(let q = 0; q < 4; q++) if(cnt[q] > cnt[best] && cnt[q] >= 5) best = q;
-          f[j * nx + i] = best - 1;
+          for(let b = -1; b <= 1; b++) for(let a = -1; a <= 1; a++){ const ii = i + a, jj = j + b; cnt[(ii < 0 || jj < 0 || ii >= nx || jj >= ny) ? 5 : B(idx[jj * nx + ii])]++; }
+          let best = B(idx[j * nx + i]); for(let q = 0; q < 5; q++) if(cnt[q] > cnt[best] && cnt[q] >= 5) best = q;
+          f[j * nx + i] = best === 0 ? NONE : best - 2;
         }
         idx = f;
       }
       const shapes = [];
-      for(let c = 0; c < design.inks.length; c++){
+      for(let c = -1; c < design.inks.length; c++){   // panel colour first, so the inks sit on it
         const mask = new Uint8Array(nx * ny); let any = false;
         for(let q = 0; q < mask.length; q++) if(idx[q] === c){ mask[q] = 1; any = true; }
         if(!any) continue;
@@ -2309,30 +2316,50 @@ const widthIn = document.getElementById("width"), widthOut = document.getElement
 widthIn.addEventListener("input", () => { width = parseFloat(widthIn.value); widthOut.textContent = width.toFixed(1) + " mm"; });
 
 const inksEl = document.getElementById("inks");
+// Four drawing colours: three circles and the rectangle, which is also the panel and case colour. Tap to draw with
+// one, tap it again to change it; long-press a circle to make it the panel/case colour (it swaps with the rectangle).
 function buildInks(){
   inksEl.innerHTML = "";
-  design.inks.forEach((col, i) => {
-    const b = document.createElement("button");
-    b.className = "ink" + (i === ink ? " on" : "");
-    b.style.background = col;
-    b.setAttribute("aria-label", "Ink " + (i + 1));
-    const inp = document.createElement("input");
-    inp.type = "color"; inp.value = col; inp.tabIndex = -1;
-    inp.addEventListener("input", () => { design.inks[i] = inp.value; b.style.background = inp.value; syncColorInputs(); save(); render(); });
+  const swatch = (i, cls, label) => {
+    const b = document.createElement("button"), inp = document.createElement("input");
+    b.className = cls + (i === ink ? " on" : ""); b.style.background = inkCol(i); b.setAttribute("aria-label", label); b.title = label;
+    inp.type = "color"; inp.value = inkCol(i); inp.tabIndex = -1;
+    inp.addEventListener("input", () => {
+      if(i === -1) design.plateColor = inp.value; else design.inks[i] = inp.value;
+      b.style.background = inp.value; syncColorInputs(); syncStripeChips(); save(); render();
+    });
     b.appendChild(inp);
+    let pressT = null, pressed = false;
+    b.addEventListener("pointerdown", () => {
+      pressed = false; clearTimeout(pressT);
+      if(i >= 0) pressT = setTimeout(() => { pressed = true; makeCaseColour(i); }, 550);
+    });
+    for(const ev of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(ev, () => clearTimeout(pressT));
+    b.addEventListener("contextmenu", e => e.preventDefault());
     b.onclick = () => {
+      if(pressed){ pressed = false; return; }
       if(ink === i){ inp.click(); return; }
       ink = i; if(tool !== "draw") setTool("draw"); buildInks();
+      if(i === -1) showHint("Drawing in the panel and case colour: it covers the other inks. Long-press a circle to make that the case colour.");
       if(placing && placing.kind === "text"){ makePreview(); render(); }
     };
     inksEl.appendChild(b);
-  });
-  const pl = document.createElement("button");
-  pl.className = "ink plate"; pl.style.background = design.plateColor; pl.setAttribute("aria-label", "Panel and case colour"); pl.title = "Panel and case colour";
-  const pin = document.createElement("input"); pin.type = "color"; pin.value = design.plateColor; pin.tabIndex = -1;
-  pin.addEventListener("input", () => { design.plateColor = pin.value; pl.style.background = pin.value; syncColorInputs(); save(); render(); });
-  pl.appendChild(pin); pl.onclick = () => pin.click();
-  inksEl.appendChild(pl);
+  };
+  design.inks.forEach((col, i) => swatch(i, "ink", "Ink " + (i + 1)));
+  swatch(-1, "ink plate", "Panel and case colour");
+}
+// Ink k becomes the panel/case colour and the old one takes ink k's place; everything drawn keeps its colour.
+function makeCaseColour(k){
+  const old = design.plateColor;
+  design.plateColor = design.inks[k]; design.inks[k] = old;
+  // strokes are shared with the undo/redo snapshots: swap each object once
+  const all = new Set(design.strokes); for(const arr of [undoStack, redoStack]) for(const snap of arr) for(const st of snap) all.add(st);
+  for(const st of all) st.c = st.c === k ? -1 : st.c === -1 ? k : st.c;
+  design.stripeColors = (design.stripeColors || []).map(x => x === "plate" ? "ink" + k : x === "ink" + k ? "plate" : x);
+  if(ink === k) ink = -1; else if(ink === -1) ink = k;
+  design.strokes = design.strokes.slice();   // new array: the geometry's stroke cache is keyed on it
+  buildInks(); syncColorInputs(); syncStripeChips(); save(); render();
+  showHint("That colour is now the panel and case colour.");
 }
 
 // ---------- settings sheet ----------
@@ -2498,12 +2525,10 @@ btnExportSvg.onclick = () => {
     return `M ${c.x - R} ${c.y} a ${R} ${R} 0 1 0 ${2 * R} 0 a ${R} ${R} 0 1 0 ${-2 * R} 0`;
   }).join(" ");
   const plate = `M ${r} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${l - r} A ${r} ${r} 0 0 1 ${w - r} ${l} H ${r} A ${r} ${r} 0 0 1 0 ${l - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
-  const inks = design.inks.map((col, i) => {
-    const paths = design.strokes.filter(s => s.c === i).map(s => s.fill
-      ? `<path d="${s.fill.map(poly => poly.map(r => "M " + r.map(q => q[0] + " " + q[1]).join(" L ") + " Z").join(" ")).join(" ")}" fill="${col}" stroke="none" fill-rule="evenodd"/>`
-      : `<path d="${svgPathForStroke(s)}" stroke-width="${s.w}"/>`).join("\n    ");
-    return `  <g id="ink-${i + 1}" fill="none" stroke="${col}" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#plate-clip)">\n    ${paths}\n  </g>`;
-  }).join("\n");
+  const paths = design.strokes.map(s => s.fill
+    ? `<path d="${s.fill.map(poly => poly.map(r => "M " + r.map(q => q[0] + " " + q[1]).join(" L ") + " Z").join(" ")).join(" ")}" fill="${inkCol(s.c)}" stroke="none" fill-rule="evenodd"/>`
+    : `<path d="${svgPathForStroke(s)}" stroke="${inkCol(s.c)}" stroke-width="${s.w}"/>`).join("\n    ");
+  const inks = `  <g id="drawing" fill="none" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#plate-clip)">\n    ${paths}\n  </g>`;
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${l}mm" viewBox="0 0 ${w} ${l}">
   <!-- ${spec.phone}, back view, millimetres. mode: ${design.mode} -->
