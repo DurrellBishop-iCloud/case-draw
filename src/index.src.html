@@ -181,7 +181,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.15.2</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.15.3</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnNew" aria-label="New design">New</button>
   <button id="btnSave" aria-label="Save">Save</button>
@@ -611,7 +611,7 @@ function outlinePath(o){ // phone outline offset outward by o mm
 // All the back cutouts as one outline (close ones are joined, as the geometry does), grown by `grow`.
 let cutPathCache = { key: null, path: null };
 function cutoutsPath(grow){
-  const key = JSON.stringify([spec.cutouts, spec.cutoutClearance, spec.minWeb, grow]);
+  const key = JSON.stringify([spec.cutouts, spec.cutoutClearance, spec.minWeb, spec.cutoutEdge, spec.cutoutInset, spec.width, spec.length, grow]);
   if(cutPathCache.key !== key || !cutPathCache.map) cutPathCache = { key, map: cutPathCache.map || new Map() };
   if(!cutPathCache.map.has(key)){
     const path = new Path2D();
@@ -624,23 +624,6 @@ function cutoutsPath(grow){
 function plateOff(){ return CaseGeo.plateOffsets(spec); }
 function frameOuter(){ return spec.phoneClearance + spec.frameWall; }
 function platePath(){ outlinePath(plateOff().wide); }
-// Cutouts are circles { x, y, d } or rounded rectangles { x, y, w, h, r } (x, y = centre); grow is added past the clearance.
-function cutRadius(c){ return (c.d + (spec.cutoutClearance || 0)) / 2; }
-function cutBox(c, grow){
-  const k = (spec.cutoutClearance || 0) / 2 + (grow || 0);
-  return { x: c.x - c.w / 2 - k, y: c.y - c.h / 2 - k, w: c.w + 2 * k, h: c.h + 2 * k, r: Math.max(0, Math.min((c.r || 0) + k, (c.w + 2 * k) / 2, (c.h + 2 * k) / 2)) };
-}
-function cutSubpath(c, grow){
-  if(c.w){ const b = cutBox(c, grow); ctx.roundRect(b.x, b.y, b.w, b.h, b.r); }
-  else{ const r = cutRadius(c) + (grow || 0); ctx.moveTo(c.x + r, c.y); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); }
-}
-function inCut(c, x, y, grow){
-  if(!c.w) return Math.hypot(x - c.x, y - c.y) <= cutRadius(c) + grow;
-  const b = cutBox(c, grow);
-  const qx = Math.max(b.x + b.r, Math.min(b.x + b.w - b.r, x)), qy = Math.max(b.y + b.r, Math.min(b.y + b.h - b.r, y));
-  return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h && Math.hypot(x - qx, y - qy) <= b.r;
-}
-
 function render(){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = getCSS("--bed");
@@ -743,15 +726,8 @@ function render(){
   outlinePath(0);
   ctx.setLineDash([1.5, 1.5]); ctx.strokeStyle = "rgba(0,0,0,.3)"; ctx.stroke(); ctx.setLineDash([]);
 
-  // cutout rings and labels
-  spec.cutouts.forEach((c, i) => {
-    ctx.beginPath(); cutSubpath(c, 0);
-    ctx.lineWidth = 1 / view.scale;
-    ctx.strokeStyle = "rgba(0,0,0,.45)";
-    ctx.setLineDash(c.placeholder ? [2, 1.5] : []);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  });
+  // cutout outlines, as the geometry makes them (joined, inset, kept off the edge)
+  ctx.lineWidth = 1 / view.scale; ctx.strokeStyle = "rgba(0,0,0,.45)"; ctx.stroke(cutoutsPath(0));
 
   // orientation marks
   const fs2 = Math.max(2.6, 12 / view.scale);
@@ -1758,7 +1734,7 @@ fileIn.addEventListener("change", async () => {
   const f = fileIn.files[0]; if(!f) return;
   try{
     const o = JSON.parse(await f.text());
-    if(o.spec){ if(o.spec.specVersion == null) o.spec.specVersion = 4; migrateButtons(o.spec); spec = validateSpec(o.spec); }
+    if(o.spec){ if(o.spec.specVersion == null) o.spec.specVersion = 4; migrateButtons(o.spec); spec = validateSpec(o.spec); adoptPresetKeys(); }
     if(o.design) design = Object.assign(clone(DEFAULT_DESIGN), o.design);
     undoStack = []; redoStack = []; ink = 0;
     beckInit(); syncSurface();
@@ -1781,14 +1757,7 @@ function svgPathForStroke(s){
 }
 btnExportSvg.onclick = () => {
   const w = spec.width, l = spec.length, r = Math.min(spec.cornerRadius, w / 2, l / 2);
-  let holes = spec.cutouts.map(c => {
-    if(c.w){
-      const b = cutBox(c, 0), q = b.r;
-      return `M ${b.x + q} ${b.y} H ${b.x + b.w - q} A ${q} ${q} 0 0 1 ${b.x + b.w} ${b.y + q} V ${b.y + b.h - q} A ${q} ${q} 0 0 1 ${b.x + b.w - q} ${b.y + b.h} H ${b.x + q} A ${q} ${q} 0 0 1 ${b.x} ${b.y + b.h - q} V ${b.y + q} A ${q} ${q} 0 0 1 ${b.x + q} ${b.y} Z`;
-    }
-    const R = cutRadius(c);
-    return `M ${c.x - R} ${c.y} a ${R} ${R} 0 1 0 ${2 * R} 0 a ${R} ${R} 0 1 0 ${-2 * R} 0`;
-  }).join(" ");
+  const holes = CaseGeo.cutoutRegion(spec, 0).map(poly => poly.map(ring => "M " + ring.map(q => round2(q[0]) + " " + round2(q[1])).join(" L ") + " Z").join(" ")).join(" ");
   const plate = Array.isArray(spec.cornerProfile)
     ? "M " + CaseGeo.phoneOutline(spec, 0, 16)[0].map(q => round2(q[0]) + " " + round2(q[1])).join(" L ") + " Z"
     : `M ${r} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${l - r} A ${r} ${r} 0 0 1 ${w - r} ${l} H ${r} A ${r} ${r} 0 0 1 0 ${l - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
@@ -2204,6 +2173,14 @@ window.addEventListener("keydown", e => {
 // Presets replace only what belongs to the phone; the case settings (wall, clearances...) stay as they are.
 const PHONE_KEYS = ["phone", "width", "length", "thickness", "lipDrop", "lipRaise", "cutoutEdge", "cutoutInset", "cornerRadius", "cornerProfile", "cornerProfileY", "cutouts", "sideCutouts", "source"];
 const PHONES = [{ id: "nothing-3", name: "Nothing Phone (3)", group: "Nothing", note: "Measured by hand with calipers (the USB-C opening is still an estimate).", spec: Object.fromEntries(PHONE_KEYS.filter(k => k in DEFAULT_SPEC).map(k => [k, DEFAULT_SPEC[k]])) }].concat(window.PHONES || []);
+// A design saved before its phone's preset gained a per-phone setting (lip drop and raise, camera inset) takes it
+// from the preset. Runs at load and when a design is opened.
+function adoptPresetKeys(){
+  const cur = PHONES.find(p => p.spec.phone === spec.phone); if(!cur) return false;
+  let ch = false;
+  for(const k of ["lipDrop", "lipRaise", "cutoutInset"]) if(cur.spec[k] != null && spec[k] == null){ spec[k] = cur.spec[k]; ch = true; }
+  return ch;
+}
 function buildPhoneList(){
   phoneSel.innerHTML = "";
   const groups = [...new Set(PHONES.map(p => p.group || "Other"))];
@@ -2213,7 +2190,6 @@ function buildPhoneList(){
     phoneSel.appendChild(og);
   }
   const cur = PHONES.find(p => p.spec.phone === spec.phone);
-  if(cur){ let ch = false; for(const k of ["lipDrop", "lipRaise", "cutoutInset"]) if(cur.spec[k] != null && spec[k] == null){ spec[k] = cur.spec[k]; ch = true; } if(ch) save(); }   // designs saved before the preset had these
   if(cur) phoneSel.value = cur.id; else { const o = document.createElement("option"); o.value = ""; o.textContent = spec.phone || "Custom"; phoneSel.prepend(o); phoneSel.value = ""; }
   phoneNote.textContent = cur ? (cur.note || "") : "Custom dimensions (edited below).";
 }
@@ -2246,6 +2222,7 @@ for(const b of surfSeg.querySelectorAll("button")) b.onclick = () => {
 
 // ---------- boot ----------
 load();
+if(adoptPresetKeys()) mergeSave = true;
 mergeOldBeck();
 if(window.APP_MODE === "beck") design.surface = "grid";   // /beck/ opens on the grid
 beckInit();
