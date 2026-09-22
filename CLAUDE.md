@@ -24,7 +24,7 @@ main multi-colour target) and a Bambu with AMS. Filament: PLA to start.
   island one rounded rectangle 68 x 50.5 R11.8, 4 mm from the top and 4.4 mm from each side. Cutouts are circles
   `{x,y,d}` or rounded rects `{x,y,w,h,r}` (centre). Measured too (`specVersion: 3`): thickness 8.2; phone's
   right side (back-view left) volume 45.8-67.5 and power 75.3-85.2, left side (back-view right) Essential key
-  45.5-56.8, all centred 2.8 below the screen face. Button holes are 4 mm rounded slots (`fromScreen`, `height`)
+  45.5-56.8, all centred 4.3 below the screen face (2.8 until v1.11.2; a test print showed them too close to the screen). Button holes are 4 mm rounded slots (`fromScreen`, `height`)
   plus `buttonClearance` 0.4 per end; vertical play = `phoneClearance` (0.25). USB-C/bottom is still a placeholder.
   Saved specs older than v2/v3 get the measured values on load.
 - A **test coupon** export (top-left 32 mm corner of case + panel) exists to dial in fit before a full print.
