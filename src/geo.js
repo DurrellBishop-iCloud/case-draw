@@ -313,7 +313,10 @@
       const a = cs[i], b = cs[j], hw = Math.min(half(a), half(b)) + k, dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1, nx = -dy / l * hw, ny = dx / l * hw;
       extra.push([[[[a.x + nx, a.y + ny], [b.x + nx, b.y + ny], [b.x - nx, b.y - ny], [a.x - nx, a.y - ny], [a.x + nx, a.y + ny]]]]);
     }
-    return ops.union(...shapes, ...extra);
+    const all = ops.union(...shapes, ...extra);
+    // `cutoutEdge`: the opening (with its clearance) stays this far in from the phone's edge; a grown region moves out
+    // with it, so collars keep their width
+    return spec.cutoutEdge ? ops.intersection(all, phoneOutline(spec, (grow || 0) - spec.cutoutEdge, 16)) : all;
   }
   // the collar stops short of the side wall (a camera can sit closer to the edge than the collar is wide)
   const cutRing = (spec, wall) => ops.intersection(ops.difference(cutoutRegion(spec, wall), cutoutRegion(spec, 0)), phoneOutline(spec, (spec.phoneClearance || 0) - (spec.collarClearance || 0.15), 16));
@@ -679,24 +682,46 @@
   // hole: a rounded slot `height` tall (default 4) centred that far below the screen face, with `radius` ends
   // (default: fully round). Without it the opening runs the whole wall height with `windowRadius` corners.
   // `buttonClearance` is added to each end along the edge.
+  // Button holes get a 45-degree chamfer `buttonChamfer` deep on the outside face (default 0), so a finger finds the
+  // button: at depth d into the wall the slot is grown by (chamfer - d). The chamfer stops 0.4 mm short of the lip
+  // and of the case floor, so it never eats into them.
   function windowRects(spec, z) {
-    const c = spec.phoneClearance || 0, wall = spec.frameWall, W = spec.width, L = spec.length, m = c + wall + 1;
+    const c = spec.phoneClearance || 0, wall = spec.frameWall, W = spec.width, L = spec.length, m = c + wall + 1, t = c + wall;
     const { zPhone, zScreen, zLip } = frameLevels(spec), gap = spec.buttonClearance || 0;
     const out = [];
+    // along-edge interval of a rounded slot grown by g, at height z; null where it doesn't reach
+    const span = (k, h, r, zc, g) => {
+      const H = h / 2 + g, R = r + g, dz = Math.abs(z - zc); if (dz >= H) return null;
+      const e = dz - (H - R), inset = e > 0 ? R - Math.sqrt(Math.max(0, R * R - e * e)) : 0;
+      const a = Math.min(k.from, k.to) - gap - g + inset, b = Math.max(k.from, k.to) + gap + g - inset;
+      return b - a < 0.2 ? null : [a, b];
+    };
+    // plan point at depth d into the wall (d < 0 outside it) and position u along the edge
+    const at = (side, d, u) => side === "left" ? [-t + d, u] : side === "right" ? [W + t - d, u] : side === "top" ? [u, -t + d] : [u, L + t - d];
     for (const k of spec.sideCutouts || []) {
-      let zc, h, r;
-      if (typeof k.fromScreen === "number") { h = k.height || 4; zc = zScreen - k.fromScreen; r = Math.min(k.radius != null ? k.radius : h / 2, h / 2); }
+      let zc, h, r, ch = 0;
+      if (typeof k.fromScreen === "number") {
+        h = k.height || 4; zc = zScreen - k.fromScreen; r = Math.min(k.radius != null ? k.radius : h / 2, h / 2);
+        if (z > zPhone + 0.4 && z < zLip - 0.4) ch = Math.min(spec.buttonChamfer || 0, wall - 0.3);
+      }
       else { h = zLip - zPhone; zc = (zPhone + zLip) / 2; r = Math.min(spec.windowRadius || 0, h / 2); }
-      const dz = Math.abs(z - zc); if (dz >= h / 2) continue;
-      const e = dz - (h / 2 - r), inset = e > 0 ? r - Math.sqrt(Math.max(0, r * r - e * e)) : 0;
-      const a = Math.min(k.from, k.to) - gap + inset, b = Math.max(k.from, k.to) + gap - inset;
-      if (b - a < 0.2) continue;
-      let x0, y0, x1, y1;
-      if (k.side === "left") { x0 = -m; x1 = 1; y0 = a; y1 = b; }
-      else if (k.side === "right") { x0 = W - 1; x1 = W + m; y0 = a; y1 = b; }
-      else if (k.side === "top") { y0 = -m; y1 = 1; x0 = a; x1 = b; }
-      else { y0 = L - 1; y1 = L + m; x0 = a; x1 = b; }
-      out.push([[[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]]]);   // MultiPolygon, like every region (bbox relies on it)
+      const through = span(k, h, r, zc, 0);
+      const rows = [];   // [depth, a, b], outside to inside
+      if (ch > 0) {
+        const n = Math.max(2, Math.ceil(ch / 0.1));
+        for (let i = 0; i <= n; i++) {
+          const d = ch * i / n, s = span(k, h, r, zc, ch - d);
+          if (!s) break;
+          rows.push([i === 0 ? -1 : d, s[0], s[1]]);
+        }
+        if (!rows.length) continue;
+        if (through) rows.push([t + 1, through[0], through[1]]);
+      } else if (through) rows.push([-1, through[0], through[1]], [t + 1, through[0], through[1]]);
+      else continue;
+      if (rows.length < 2) continue;
+      const ring = rows.map(([d, a]) => at(k.side, d, a)).concat(rows.slice().reverse().map(([d, , b]) => at(k.side, d, b)));
+      ring.push(ring[0].slice());
+      out.push(ops.union([[ring]]));   // MultiPolygon, like every region (bbox relies on it); union fixes the winding
     }
     return out;
   }
@@ -1083,5 +1108,5 @@ ${items} </build>
   }
 
 
-  return { cutoutRegion, ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
+  return { cutoutRegion, windowRects, ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
 });

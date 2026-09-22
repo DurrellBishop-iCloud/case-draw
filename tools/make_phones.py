@@ -18,7 +18,9 @@ r2 = lambda v: round(v + 1e-9, 2)
 
 
 # the case lip can sit this far below the screen face, where the phone's edge has already curved in (checked on the phone)
-LIP_DROP = {"iphone-17": 0.7}
+LIP_DROP = {"iphone-17": 0.7, "iphone-17-pro": 1.0}
+# the camera opening stays this far in from the edge of the phone (the plateau base slopes, leaving room; checked on the phone)
+CUTOUT_EDGE = {"iphone-17-pro": 3.0}
 MEASURED = json.loads((root / "data/phones/_measured.json").read_text())
 
 
@@ -34,6 +36,7 @@ def preset(d):
         notes.append("camera outline (" + ", ".join(sorted(m["plateau"])) + ") measured from Apple's linework to about 0.2 mm, as the sheet does not dimension it")
     spec = {"phone": d["name"], "width": W, "length": L, "thickness": T}
     if d["id"] in LIP_DROP: spec["lipDrop"] = LIP_DROP[d["id"]]
+    if d["id"] in CUTOUT_EDGE: spec["cutoutEdge"] = CUTOUT_EDGE[d["id"]]
     prof = (d.get("corner") or {}).get("profile")
     if prof and len(prof) >= 4:
         prof = sorted(prof); spec["cornerProfile"] = prof
