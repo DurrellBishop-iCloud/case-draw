@@ -166,7 +166,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.11.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.11.1</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -4105,7 +4105,7 @@ window.PHONES = [
 // ---------- defaults ----------
 const DEFAULT_SPEC = {
   phone: "Nothing Phone (3)",
-  specVersion: 4,        // 2: measured outline and camera island; 3: measured thickness and buttons; 4: roomier button holes
+  specVersion: 5,        // 2: measured outline and camera island; 3: measured thickness and buttons; 4: roomier button holes; 5: buttons 1.5 mm lower
   width: 76.8,
   length: 163.8,
   thickness: 8.2,         // measured; the case adds phoneClearance under the phone as play
@@ -4126,9 +4126,9 @@ const DEFAULT_SPEC = {
   // Back view: the phone's right side (screen towards you) is on the left here. Measured from the top edge;
   // fromScreen = button centre below the screen face, height = hole height (rounded ends).
   sideCutouts: [
-    { side: "left",   name: "Volume",        from: 45.8, to: 67.5, fromScreen: 2.8, height: 5.2 },
-    { side: "left",   name: "Power",         from: 75.3, to: 85.2, fromScreen: 2.8, height: 5.2 },
-    { side: "right",  name: "Essential key", from: 45.5, to: 56.8, fromScreen: 2.8, height: 5.2 },
+    { side: "left",   name: "Volume",        from: 47.3, to: 69.0, fromScreen: 2.8, height: 5.2 },
+    { side: "left",   name: "Power",         from: 76.8, to: 86.7, fromScreen: 2.8, height: 5.2 },
+    { side: "right",  name: "Essential key", from: 47.0, to: 58.3, fromScreen: 2.8, height: 5.2 },
     { side: "bottom", name: "USB-C + speakers", from: 18, to: 58, placeholder: true }
   ],
   cutouts: [
@@ -4186,11 +4186,19 @@ function load(){
       s.spec.specVersion = 4; s.spec.buttonClearance = Math.max(s.spec.buttonClearance || 0, DEFAULT_SPEC.buttonClearance);
       for(const k of s.spec.sideCutouts || []) if(typeof k.fromScreen === "number" && (k.height || 4) < 5.2) k.height = 5.2;
     }
+    if(s.spec) migrateButtons(s.spec);
     if(s.spec){ spec = Object.assign(clone(DEFAULT_SPEC), s.spec); for(const k of ["plateThickness", "ledge", "dovetail", "skinThickness", "tongueThickness", "tipHeight", "bumpHeight", "bumpRise", "bumpLength", "snapClearance", "snapBumps"]) delete spec[k]; }
     if(s.design) design = Object.assign(clone(DEFAULT_DESIGN), s.design);
     delete design.frameColor;   // the case is the panel colour now
     if(Array.isArray(design.stripeColors)) design.stripeColors = [...new Set(design.stripeColors.map(k => k === "case" ? "plate" : k))];
   }catch(e){ /* storage unavailable; run in memory */ }
+}
+// v5: a test print showed the Nothing Phone (3)'s button holes sat 1.5 mm too high (towards the top edge).
+function migrateButtons(sp){
+  if(sp.specVersion >= 5) return;
+  sp.specVersion = 5;
+  if(!/nothing/i.test(sp.phone || "")) return;
+  for(const k of sp.sideCutouts || []) if(k.side !== "bottom" && k.side !== "top"){ k.from = +(k.from + 1.5).toFixed(2); k.to = +(k.to + 1.5).toFixed(2); }
 }
 // Beck used to keep its own design. The first time the joined app loads, bring that drawing in: its grids, its
 // photos and text. Colours: whichever of the two had a drawing keeps its palette (the freehand one if both did).
@@ -5440,7 +5448,7 @@ fileIn.addEventListener("change", async () => {
   const f = fileIn.files[0]; if(!f) return;
   try{
     const o = JSON.parse(await f.text());
-    if(o.spec) spec = validateSpec(o.spec);
+    if(o.spec){ if(o.spec.specVersion == null) o.spec.specVersion = 4; migrateButtons(o.spec); spec = validateSpec(o.spec); }
     if(o.design) design = Object.assign(clone(DEFAULT_DESIGN), o.design);
     undoStack = []; redoStack = []; ink = 0;
     beckInit(); syncSurface();
