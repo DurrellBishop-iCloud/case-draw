@@ -84,6 +84,10 @@ mode with its own drawing surface. Tag `draw-v1.7.0` = Case Draw before Beck exi
 - Tests: `node test/manifold.js` covers shared geometry; Beck tracing needs a browser (Playwright WebKit was used:
   draw by mouse drags, call `window.__beckExport()` for the Save bytes, count non-manifold edges, then the Orca CLI).
 
+## New design (v1.14.0)
+
+- Header "New" opens the `#askNew` dialog: Save, then start new (the usual `download()` .json; a cancelled share sheet clears nothing) / Start new without saving / Cancel. `startNew()` clears strokes and grids via `commit`, so Undo restores until reload. Phone, colours, case settings stay. Under 440 px the header drops the title and subtitle to fit four buttons (the version tag stays).
+
 ## Drawing beyond the edge (v1.13.0)
 
 - Pen strokes only (v1.13.1): photo/text/Beck fills are sampled over the phone + 2 mm, so past the outline they would be a sliver; `beyondRegions` runs paintCells on the non-fill strokes and restores `cellCache`.
