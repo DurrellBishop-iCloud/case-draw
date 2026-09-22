@@ -84,6 +84,11 @@ mode with its own drawing surface. Tag `draw-v1.7.0` = Case Draw before Beck exi
 - Tests: `node test/manifold.js` covers shared geometry; Beck tracing needs a browser (Playwright WebKit was used:
   draw by mouse drags, call `window.__beckExport()` for the Save bytes, count non-manifold edges, then the Orca CLI).
 
+## Holes (v1.15.0)
+
+- The old Cutouts tool (drag the phone's camera cutouts) is gone; cutouts are edited in the Settings JSON. The **Holes** tool draws pen strokes with `c: HOLE` (-2): windows through the back. geo: `withHoles(spec, design)` puts the hole strokes on a spec copy (`_holes`) at buildRegions/buildParts/buildFrame; `cutoutRegion` unions `drawnHoles(spec, grow)` (strokes drawn `w + 2*grow`, clipped to `phoneOutline(spec, grow - 2)`), so holes get panel holes, collars and oversized case holes exactly like the camera. `hasCuts(spec)` replaces `spec.cutouts.length` checks. paintCells/allInkRegion ignore c = -2. 2D draws holes last in bed colour, clipped 2 mm inside the phone.
+- The Beyond toggle is also in the main UI (row with Photo and Text) and at the end of Settings > Drawing sits.
+
 ## New design (v1.14.0)
 
 - Header "New" opens the `#askNew` dialog: Save, then start new (the usual `download()` .json; a cancelled share sheet clears nothing) / Start new without saving / Cancel. `startNew()` clears strokes and grids via `commit`, so Undo restores until reload. Phone, colours, case settings stay. Under 440 px the header drops the title and subtitle to fit four buttons (the version tag stays).

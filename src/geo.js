@@ -310,7 +310,8 @@
   // less would print as a fragile sliver, e.g. between an iPhone camera pill and its flash) are joined by a slot
   // as wide as the smaller of the two.
   function cutoutRegion(spec, grow) {
-    const cs = spec.cutouts || []; if (!cs.length) return [];
+    const drawn = drawnHoles(spec, grow);
+    const cs = spec.cutouts || []; if (!cs.length) return drawn;
     const k = (spec.cutoutClearance || 0) / 2 + (grow || 0), web = spec.minWeb != null ? spec.minWeb : 1.6;
     const shapes = cs.map(c => cutShape(spec, c, grow)), base = cs.map(c => cutShape(spec, c, 0)), extra = [];
     const half = c => (c.w ? Math.min(c.w, c.h) : c.d) / 2;
@@ -321,12 +322,33 @@
       const a = cs[i], b = cs[j], hw = Math.min(half(a), half(b)) + k, dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1, nx = -dy / l * hw, ny = dx / l * hw;
       extra.push([[[[a.x + nx, a.y + ny], [b.x + nx, b.y + ny], [b.x - nx, b.y - ny], [a.x - nx, a.y - ny], [a.x + nx, a.y + ny]]]]);
     }
-    return ops.union(...shapes, ...extra);
+    return ops.union(...shapes, ...extra, ...(drawn.length ? [drawn] : []));
   }
+  // Holes drawn with the Holes tool (strokes with c === HOLE): windows through the back, treated like the camera
+  // cutouts (collars, oversized case hole). A grown hole is the stroke drawn wider, clipped 2 mm (less the growth)
+  // in from the phone's edge so the wall and lip stay whole. The design's hole strokes ride on the spec (withHoles).
+  const HOLE = -2, HOLE_EDGE = 2;
+  let holeCache = { ref: null, map: new Map() };
+  function drawnHoles(spec, grow) {
+    const list = spec._holes; if (!list || !list.length) return [];
+    if (holeCache.ref !== list || holeCache.sig !== spec.width + "x" + spec.length) holeCache = { ref: list, sig: spec.width + "x" + spec.length, map: new Map() };
+    const key = (grow || 0).toFixed(3);
+    if (!holeCache.map.has(key)) {
+      const g = grow || 0, u = ops.union(...list.map(st => strokeRegion({ ...st, w: st.w + 2 * g })));
+      holeCache.map.set(key, clean(ops.intersection(u, phoneOutline(spec, g - HOLE_EDGE, 16))));
+    }
+    return holeCache.map.get(key);
+  }
+  function withHoles(spec, design) {
+    if (!design || spec._holes) return spec;
+    const list = (design.strokes || []).filter(st => st.c === HOLE && st.pts);
+    return list.length ? { ...spec, _holes: list } : spec;
+  }
+  const hasCuts = spec => (spec.cutouts || []).length > 0 || !!(spec._holes && spec._holes.length);
   // the collar stops short of the side wall (a camera can sit closer to the edge than the collar is wide)
   const cutRing = (spec, wall) => ops.intersection(ops.difference(cutoutRegion(spec, wall), cutoutRegion(spec, 0)), phoneOutline(spec, (spec.phoneClearance || 0) - (spec.collarClearance || 0.15), 16));
   function throughOn(design) { return design.caseStyle === "extrude"; }
-  function collarOn(spec, design) { return spec.collars !== false && design.mode === "inlay" && spec.cutouts.length > 0; }
+  function collarOn(spec, design) { return spec.collars !== false && design.mode === "inlay" && hasCuts(spec); }
   // Drawing beyond the edge (design.beyond): what is drawn outside the case outline, per ink, becomes solid pieces
   // that carry on from the back towards the screen, design.beyondDepth mm deep measured from the panel's face.
   // Only pieces that touch the case outline are kept (a loose island would fall off). Cached on the strokes.
@@ -354,8 +376,9 @@
     return out;
   }
   function buildRegions(spec, design) {
+    spec = withHoles(spec, design);
     const off = plateOffsets(spec);
-    const holes = spec.cutouts.length ? [cutoutRegion(spec, 0)] : [];
+    const holes = hasCuts(spec) ? [cutoutRegion(spec, 0)] : [];
     const region = (o, hs) => { const p = phoneOutline(spec, o, 16); return hs.length ? ops.difference(p, ...hs) : ops.union(p); };
     const plateRegion = region(off.narrow, holes);
     const plateWide = region(off.wide, holes);
@@ -363,7 +386,7 @@
     // "Through" style: inks run to the outer edge so the drawing carries on down the case sides.
     const m = spec.inkMargin || 0, edgeM = throughOn(design) ? 0 : m;
     const inkArea = m > 0
-      ? region(off.narrow - edgeM, spec.cutouts.length ? [cutoutRegion(spec, m)] : [])
+      ? region(off.narrow - edgeM, hasCuts(spec) ? [cutoutRegion(spec, m)] : [])
       : plateRegion;
 
     // Height field: the plate is partitioned into cells (region, ink) by the strokes in draw order, later
@@ -625,6 +648,7 @@
   // ---------- parts ----------
   // Returns { parts: [{ name, color, mesh }], mode, notes }
   function buildParts(spec, design, clip) {
+    spec = withHoles(spec, design);
     const res = buildPanelParts(spec, design, clip), ext = beyondRegions(spec, design);
     if (!ext) return res;
     // beyond pieces in the panel: the panel's full thickness (plus the ink's height in relief), same orientation
@@ -800,6 +824,7 @@
   // One-piece case body. Returns { parts:[{key,name,color,mesh}], H, ... }. Styles: plain | extrude | stripes.
   function buildFrame(spec, design, clip) {
     design = design || { mode: "inlay", inks: [], strokes: [] };
+    spec = withHoles(spec, design);
     const K = mp => (clip && mp.length) ? ops.intersection(mp, clip) : mp;
     const style = design.caseStyle || "plain";
     const c = spec.phoneClearance || 0, wall = spec.frameWall, lipDepth = spec.lipDepth || 0;
@@ -807,7 +832,7 @@
     const outer = phoneOutline(spec, c + wall, 16);
     const collars = collarOn(spec, design);
     const extra = collars ? (spec.collarWall || 0.8) + (spec.collarClearance || 0.15) : 0;
-    const holes = spec.cutouts.length ? [ops.intersection(cutoutRegion(spec, extra), phoneOutline(spec, c, 16))].filter(h => h.length) : [];
+    const holes = hasCuts(spec) ? [ops.intersection(cutoutRegion(spec, extra), phoneOutline(spec, c, 16))].filter(h => h.length) : [];
     const minusHoles = mp => holes.length ? ops.difference(mp, ...holes) : mp;
 
     // 2D colour layouts

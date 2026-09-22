@@ -181,7 +181,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.14.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.15.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnNew" aria-label="New design">New</button>
   <button id="btnSave" aria-label="Save">Save</button>
@@ -191,13 +191,6 @@
 
 <main>
   <canvas id="c"></canvas>
-  <div class="chip" id="chip">
-    <span id="chipName">Cutout</span>
-    <span>x <b id="chipX">0</b></span>
-    <span>y <b id="chipY">0</b></span>
-    <span>⌀ <b id="chipD">0</b></span>
-    <input type="range" id="chipDia" min="3" max="40" step="0.5" aria-label="Cutout diameter">
-  </div>
   <div class="hint" id="hint" style="display:none" role="status"></div>
   <div class="stack" id="stack" style="display:none" aria-label="Colour stacking: top dot is on top. Tap to pick, drag to reorder"></div>
 </main>
@@ -228,6 +221,7 @@
     <span class="sep"></span>
     <button id="btnPhoto">Photo</button>
     <button id="btnText">Text</button>
+    <button id="btnBeyond" title="Drawing outside the case outline becomes solid pieces">Beyond</button>
     <button id="btnMove" style="display:none" title="Move or turn the whole grid drawing">Move</button>
     <button id="btnFromCodes" style="display:none" title="Bring in the drawing saved in Drawn Codes on this device">Import</button>
     <input type="file" id="photoIn" accept="image/*" hidden>
@@ -273,7 +267,7 @@
     <div class="seg" role="group" aria-label="Tool">
       <button id="toolDraw" class="on">Draw</button>
       <button id="toolErase">Erase</button>
-      <button id="toolCut">Cutouts</button>
+      <button id="toolHole">Holes</button>
     </div>
     <div class="spacer"></div>
     <button id="btnFit" aria-label="Fit to screen">Fit</button>
@@ -362,6 +356,8 @@
         <input type="range" id="inkDepth" min="0.2" max="1.2" step="0.2" value="0.6" aria-label="Ink depth">
         <output id="inkDepthOut" style="font:700 15px var(--dot)">0.6 mm</output>
       </label>
+      <label class="field" style="margin-top:10px"><input type="checkbox" id="beyondChk"> Drawing beyond the edge</label>
+      <p style="margin-top:4px">Anything drawn outside the case outline, and touching it, becomes a solid piece in that colour: flush with the back and going towards the screen as deep as the <b>Beyond</b> slider in the 3D view says (from 1 mm, the panel alone, to the whole depth of the case). Pen strokes only: photos, text and Beck drawings stay inside the case. Loose shapes that don't touch the case are left out. Button holes and ports are cut through the pieces.</p>
     </section>
 
     <section>
@@ -372,8 +368,6 @@
         <button id="styStripes">Stripes</button>
       </div>
       <p id="styHelp"></p>
-      <label class="field"><input type="checkbox" id="beyondChk"> Drawing beyond the edge</label>
-      <p style="margin-top:4px">Anything drawn outside the case outline, and touching it, becomes a solid piece in that colour: flush with the back and going towards the screen as deep as the <b>Beyond</b> slider in the 3D view says (from 1 mm, the panel alone, to the whole depth of the case). Pen strokes only: photos, text and Beck drawings stay inside the case. Loose shapes that don't touch the case are left out. Button holes and ports are cut through the pieces.</p>
       <div id="stripeOpts" class="row" style="display:none">
         <label class="field">Stripe height
           <input type="number" id="stripeHeight" min="0.2" max="10" step="0.1" style="width:64px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm
@@ -781,7 +775,8 @@
   // less would print as a fragile sliver, e.g. between an iPhone camera pill and its flash) are joined by a slot
   // as wide as the smaller of the two.
   function cutoutRegion(spec, grow) {
-    const cs = spec.cutouts || []; if (!cs.length) return [];
+    const drawn = drawnHoles(spec, grow);
+    const cs = spec.cutouts || []; if (!cs.length) return drawn;
     const k = (spec.cutoutClearance || 0) / 2 + (grow || 0), web = spec.minWeb != null ? spec.minWeb : 1.6;
     const shapes = cs.map(c => cutShape(spec, c, grow)), base = cs.map(c => cutShape(spec, c, 0)), extra = [];
     const half = c => (c.w ? Math.min(c.w, c.h) : c.d) / 2;
@@ -792,12 +787,33 @@
       const a = cs[i], b = cs[j], hw = Math.min(half(a), half(b)) + k, dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1, nx = -dy / l * hw, ny = dx / l * hw;
       extra.push([[[[a.x + nx, a.y + ny], [b.x + nx, b.y + ny], [b.x - nx, b.y - ny], [a.x - nx, a.y - ny], [a.x + nx, a.y + ny]]]]);
     }
-    return ops.union(...shapes, ...extra);
+    return ops.union(...shapes, ...extra, ...(drawn.length ? [drawn] : []));
   }
+  // Holes drawn with the Holes tool (strokes with c === HOLE): windows through the back, treated like the camera
+  // cutouts (collars, oversized case hole). A grown hole is the stroke drawn wider, clipped 2 mm (less the growth)
+  // in from the phone's edge so the wall and lip stay whole. The design's hole strokes ride on the spec (withHoles).
+  const HOLE = -2, HOLE_EDGE = 2;
+  let holeCache = { ref: null, map: new Map() };
+  function drawnHoles(spec, grow) {
+    const list = spec._holes; if (!list || !list.length) return [];
+    if (holeCache.ref !== list || holeCache.sig !== spec.width + "x" + spec.length) holeCache = { ref: list, sig: spec.width + "x" + spec.length, map: new Map() };
+    const key = (grow || 0).toFixed(3);
+    if (!holeCache.map.has(key)) {
+      const g = grow || 0, u = ops.union(...list.map(st => strokeRegion({ ...st, w: st.w + 2 * g })));
+      holeCache.map.set(key, clean(ops.intersection(u, phoneOutline(spec, g - HOLE_EDGE, 16))));
+    }
+    return holeCache.map.get(key);
+  }
+  function withHoles(spec, design) {
+    if (!design || spec._holes) return spec;
+    const list = (design.strokes || []).filter(st => st.c === HOLE && st.pts);
+    return list.length ? { ...spec, _holes: list } : spec;
+  }
+  const hasCuts = spec => (spec.cutouts || []).length > 0 || !!(spec._holes && spec._holes.length);
   // the collar stops short of the side wall (a camera can sit closer to the edge than the collar is wide)
   const cutRing = (spec, wall) => ops.intersection(ops.difference(cutoutRegion(spec, wall), cutoutRegion(spec, 0)), phoneOutline(spec, (spec.phoneClearance || 0) - (spec.collarClearance || 0.15), 16));
   function throughOn(design) { return design.caseStyle === "extrude"; }
-  function collarOn(spec, design) { return spec.collars !== false && design.mode === "inlay" && spec.cutouts.length > 0; }
+  function collarOn(spec, design) { return spec.collars !== false && design.mode === "inlay" && hasCuts(spec); }
   // Drawing beyond the edge (design.beyond): what is drawn outside the case outline, per ink, becomes solid pieces
   // that carry on from the back towards the screen, design.beyondDepth mm deep measured from the panel's face.
   // Only pieces that touch the case outline are kept (a loose island would fall off). Cached on the strokes.
@@ -825,8 +841,9 @@
     return out;
   }
   function buildRegions(spec, design) {
+    spec = withHoles(spec, design);
     const off = plateOffsets(spec);
-    const holes = spec.cutouts.length ? [cutoutRegion(spec, 0)] : [];
+    const holes = hasCuts(spec) ? [cutoutRegion(spec, 0)] : [];
     const region = (o, hs) => { const p = phoneOutline(spec, o, 16); return hs.length ? ops.difference(p, ...hs) : ops.union(p); };
     const plateRegion = region(off.narrow, holes);
     const plateWide = region(off.wide, holes);
@@ -834,7 +851,7 @@
     // "Through" style: inks run to the outer edge so the drawing carries on down the case sides.
     const m = spec.inkMargin || 0, edgeM = throughOn(design) ? 0 : m;
     const inkArea = m > 0
-      ? region(off.narrow - edgeM, spec.cutouts.length ? [cutoutRegion(spec, m)] : [])
+      ? region(off.narrow - edgeM, hasCuts(spec) ? [cutoutRegion(spec, m)] : [])
       : plateRegion;
 
     // Height field: the plate is partitioned into cells (region, ink) by the strokes in draw order, later
@@ -1096,6 +1113,7 @@
   // ---------- parts ----------
   // Returns { parts: [{ name, color, mesh }], mode, notes }
   function buildParts(spec, design, clip) {
+    spec = withHoles(spec, design);
     const res = buildPanelParts(spec, design, clip), ext = beyondRegions(spec, design);
     if (!ext) return res;
     // beyond pieces in the panel: the panel's full thickness (plus the ink's height in relief), same orientation
@@ -1271,6 +1289,7 @@
   // One-piece case body. Returns { parts:[{key,name,color,mesh}], H, ... }. Styles: plain | extrude | stripes.
   function buildFrame(spec, design, clip) {
     design = design || { mode: "inlay", inks: [], strokes: [] };
+    spec = withHoles(spec, design);
     const K = mp => (clip && mp.length) ? ops.intersection(mp, clip) : mp;
     const style = design.caseStyle || "plain";
     const c = spec.phoneClearance || 0, wall = spec.frameWall, lipDepth = spec.lipDepth || 0;
@@ -1278,7 +1297,7 @@
     const outer = phoneOutline(spec, c + wall, 16);
     const collars = collarOn(spec, design);
     const extra = collars ? (spec.collarWall || 0.8) + (spec.collarClearance || 0.15) : 0;
-    const holes = spec.cutouts.length ? [ops.intersection(cutoutRegion(spec, extra), phoneOutline(spec, c, 16))].filter(h => h.length) : [];
+    const holes = hasCuts(spec) ? [ops.intersection(cutoutRegion(spec, extra), phoneOutline(spec, c, 16))].filter(h => h.length) : [];
     const minusHoles = mp => holes.length ? ops.difference(mp, ...holes) : mp;
 
     // 2D colour layouts
@@ -4294,7 +4313,6 @@ let ink = 0;
 let width = 2.5;
 let undoStack = [], redoStack = [];
 let live = null;                 // stroke being drawn
-let selCut = -1, dragCut = null; // cutout editing
 let view = { scale: 4, ox: 0, oy: 0 };
 
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
@@ -4485,12 +4503,19 @@ function render(){
   { const keep = new Path2D(); keep.rect(-50, -50, spec.width + 100, spec.length + 100); keep.addPath(cutoutsPath(im)); ctx.clip(keep, "evenodd"); }
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   if(GRID()) drawGridLines();
-  for(const s of design.strokes) if(!s.top) drawStroke(s);   // freehand under the grid drawing, text on top of both
+  for(const s of design.strokes) if(!s.top && s.c !== HOLE) drawStroke(s);   // freehand under the grid drawing, text on top of both
   drawGridLayers();
-  if(live) for(const m of mirrored(live)) drawStroke(m);
-  for(const s of design.strokes) if(s.top) drawStroke(s);
+  if(live && live.c !== HOLE) for(const m of mirrored(live)) drawStroke(m);
+  for(const s of design.strokes) if(s.top && s.c !== HOLE) drawStroke(s);
   if(placing) drawPlacing();
   ctx.restore();
+  // drawn holes go through everything, and stop 2 mm in from the phone's edge (as the geometry does)
+  if(design.strokes.some(s => s.c === HOLE) || (live && live.c === HOLE)){
+    ctx.save(); outlinePath(-2); ctx.clip(); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    for(const s of design.strokes) if(s.c === HOLE) drawStroke(s);
+    if(live && live.c === HOLE) for(const m of mirrored(live)) drawStroke(m);
+    ctx.restore();
+  }
   if(design.beyond){
     // drawing beyond the edge: the pen strokes again, outside the case outline (photos, text and Beck stay inside)
     ctx.save();
@@ -4498,8 +4523,8 @@ function render(){
     const ring = CaseGeo.phoneOutline(spec, frameOuter(), 16)[0]; out.moveTo(ring[0][0], ring[0][1]); for(let i = 1; i < ring.length; i++) out.lineTo(ring[i][0], ring[i][1]); out.closePath();
     ctx.clip(out, "evenodd");
     ctx.lineCap = "round"; ctx.lineJoin = "round";
-    for(const s of design.strokes) if(!s.fill) drawStroke(s);
-    if(live) for(const m of mirrored(live)) drawStroke(m);
+    for(const s of design.strokes) if(!s.fill && s.c !== HOLE) drawStroke(s);
+    if(live && live.c !== HOLE) for(const m of mirrored(live)) drawStroke(m);
     ctx.restore();
   }
   // mirror lines
@@ -4529,17 +4554,11 @@ function render(){
   // cutout rings and labels
   spec.cutouts.forEach((c, i) => {
     ctx.beginPath(); cutSubpath(c, 0);
-    ctx.lineWidth = (i === selCut && tool === "cutouts" ? 2 : 1) / view.scale;
-    ctx.strokeStyle = i === selCut && tool === "cutouts" ? "#000" : "rgba(0,0,0,.45)";
+    ctx.lineWidth = 1 / view.scale;
+    ctx.strokeStyle = "rgba(0,0,0,.45)";
     ctx.setLineDash(c.placeholder ? [2, 1.5] : []);
     ctx.stroke();
     ctx.setLineDash([]);
-    if(tool === "cutouts"){
-      ctx.beginPath();
-      ctx.moveTo(c.x - 2, c.y); ctx.lineTo(c.x + 2, c.y);
-      ctx.moveTo(c.x, c.y - 2); ctx.lineTo(c.x, c.y + 2);
-      ctx.lineWidth = 1 / view.scale; ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.stroke();
-    }
   });
 
   // orientation marks
@@ -4554,7 +4573,8 @@ function render(){
 }
 
 // Ink index -> colour; -1 is the panel and case colour, which can be drawn with too (it covers other inks).
-function inkCol(c){ return c === -1 ? design.plateColor : (design.inks[c] || "#000"); }
+const HOLE = -2;   // a stroke drawn with the Holes tool: a window through the back, not a colour
+function inkCol(c){ return c === HOLE ? getCSS("--bed") : c === -1 ? design.plateColor : (design.inks[c] || "#000"); }
 function drawStroke(s){
   if(s.fill){
     ctx.fillStyle = inkCol(s.c);
@@ -4593,7 +4613,7 @@ canvas.addEventListener("pointerdown", e => {
   canvas.setPointerCapture(e.pointerId);
   if(touches.size === 2){
     // second finger: abandon any stroke in progress and start a pinch
-    live = null; dragCut = null; activeId = null; placeDrag = null; moveDrag = null; gridCancel();
+    live = null; activeId = null; placeDrag = null; moveDrag = null; gridCancel();
     const [a, b] = [...touches.values()];
     pinch = { d0: Math.max(10, Math.hypot(a[0] - b[0], a[1] - b[1])), mid0: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], scale0: view.scale, ox0: view.ox, oy0: view.oy,
               a0: Math.atan2(b[1] - a[1], b[0] - a[0]), stamp: placing ? { w: placing.w, rot: placing.rot } : null };
@@ -4603,7 +4623,7 @@ canvas.addEventListener("pointerdown", e => {
   if(activeId !== null) return;          // one drawing finger at a time
   activeId = e.pointerId;
   const [x, y] = toMM(e.offsetX, e.offsetY);
-  const mh = !placing && !moving && tool !== "cutouts" && hitMirrorHandle(x, y);
+  const mh = !placing && !moving && hitMirrorHandle(x, y);
   if(mh){
     const now = performance.now();
     if(mirTap.kind === mh.kind && now - mirTap.t < 400){   // double-tap a handle: back to the middle
@@ -4619,16 +4639,11 @@ canvas.addEventListener("pointerdown", e => {
     placeDrag = { dx: placing.cx - x, dy: placing.cy - y };
   }else if(GRID() && (tool === "draw" || tool === "erase")){
     gridBegin(x, y, tool === "erase");
-  }else if(tool === "draw"){
+  }else if(tool === "draw" || tool === "holes"){
     liveStart = [round2(x), round2(y)];
-    live = { c: ink, w: width, pts: rulePts(liveStart, liveStart) };
+    live = { c: tool === "holes" ? HOLE : ink, w: width, pts: rulePts(liveStart, liveStart) };
   }else if(tool === "erase"){
     eraseAt(x, y);
-  }else if(tool === "cutouts"){
-    const i = hitCutout(x, y);
-    selCut = i;
-    dragCut = i >= 0 ? { dx: spec.cutouts[i].x - x, dy: spec.cutouts[i].y - y } : null;
-    updateChip();
   }
   render();
 });
@@ -4661,18 +4676,13 @@ canvas.addEventListener("pointermove", e => {
       if(placeDrag){ placing.cx = x + placeDrag.dx; placing.cy = y + placeDrag.dy; }
     }else if(gridStroke){
       gridTo(x, y);
-    }else if(tool === "draw" && live){
+    }else if((tool === "draw" || tool === "holes") && live){
       if(design.rule === "free"){
         const last = live.pts[live.pts.length - 1];
         if(Math.hypot(x - last[0], y - last[1]) >= 0.35) live.pts.push([round2(x), round2(y)]);
       }else live.pts = rulePts(liveStart, [round2(x), round2(y)]);
     }else if(tool === "erase"){
       eraseAt(x, y);
-    }else if(tool === "cutouts" && dragCut && selCut >= 0){
-      const c = spec.cutouts[selCut];
-      c.x = round1(clamp(x + dragCut.dx, 0, spec.width));
-      c.y = round1(clamp(y + dragCut.dy, 0, spec.length));
-      updateChip();
     }
   }
   render();
@@ -4684,12 +4694,11 @@ function endPointer(e){
   activeId = null; placeDrag = null; moveDrag = null;
   if(mirDrag){ mirDrag = null; save(); setTimeout(() => showHint(""), 1500); render(); return; }
   if(gridStroke){ gridEnd(); render(); return; }
-  if(tool === "draw" && live && !placing){
+  if((tool === "draw" || tool === "holes") && live && !placing){
     const add = mirrored(live);
     commit(() => design.strokes.push(...add));
     live = null;
   }
-  if(tool === "cutouts" && dragCut){ dragCut = null; syncSpecText(); save(); }
   render();
 }
 canvas.addEventListener("pointerup", endPointer);
@@ -4772,37 +4781,6 @@ function eraseAt(x, y){
 }
 canvas.addEventListener("pointerup", () => { eraseBatchOpen = false; });
 canvas.addEventListener("pointercancel", () => { eraseBatchOpen = false; });
-
-// ---------- cutout editing ----------
-function hitCutout(x, y){
-  let best = -1, bd = Infinity;
-  spec.cutouts.forEach((c, i) => {
-    const d = Math.hypot(x - c.x, y - c.y);
-    if(inCut(c, x, y, 3) && d < bd){ bd = d; best = i; }
-  });
-  return best;
-}
-const chip = document.getElementById("chip");
-const chipDia = document.getElementById("chipDia");
-function updateChip(){
-  if(tool !== "cutouts" || selCut < 0){ chip.classList.remove("show"); return; }
-  const c = spec.cutouts[selCut];
-  document.getElementById("chipName").textContent = c.name;
-  document.getElementById("chipX").textContent = c.x.toFixed(1);
-  document.getElementById("chipY").textContent = c.y.toFixed(1);
-  // rounded rectangles show their size; edit it in Settings
-  document.getElementById("chipD").textContent = c.w ? `${c.w.toFixed(1)}×${c.h.toFixed(1)}` : c.d.toFixed(1);
-  chipDia.style.display = c.w ? "none" : "";
-  if(!c.w) chipDia.value = c.d;
-  chip.classList.add("show");
-}
-chipDia.addEventListener("input", () => {
-  if(selCut < 0) return;
-  if(spec.cutouts[selCut].w) return;
-  spec.cutouts[selCut].d = parseFloat(chipDia.value);
-  updateChip(); render();
-});
-chipDia.addEventListener("change", () => { syncSpecText(); save(); });
 
 // ---------- Beck: drawing on the Drawn Codes grid ----------
 // Four grids, one per colour (layer 0-2 = inks 1-3, layer 3 = colour 4, the panel colour, which knocks out what is
@@ -5389,17 +5367,16 @@ const btnUndo = document.getElementById("btnUndo");
 const btnRedo = document.getElementById("btnRedo");
 btnUndo.onclick = undo; btnRedo.onclick = redo;
 btnFit.onclick = () => { fitView(); render(); };
-const toolBtns = { draw: toolDraw, erase: toolErase, cutouts: toolCut };
+const toolBtns = { draw: toolDraw, erase: toolErase, holes: toolHole };
 const hints = {
   draw: "Draw with your finger. Strokes are clipped to the plate.",
   erase: "Tap or drag over a stroke (or, in Beck, over grid cells) to remove it.",
-  cutouts: "Drag a cutout to move it. Use the slider for a round one's diameter."
+  holes: "Draw holes through the back: windows where the phone shows through. They stay 2 mm in from the phone's edge. Erase removes them."
 };
 function setTool(t){
-  tool = t; selCut = -1; dragCut = null;
+  tool = t;
   for(const k in toolBtns) toolBtns[k].classList.toggle("on", k === t);
-  canvas.style.cursor = t === "cutouts" ? "move" : "crosshair";
-  updateChip(); render();
+  render();
 }
 toolDraw.onclick = () => setTool("draw");
 // Erase: tap to pick the tool; double-tap to clear the whole drawing (undoable). Timed by hand, since iOS
@@ -5413,7 +5390,7 @@ toolErase.onclick = () => {
   commit(() => { design.strokes = []; gridLayers.forEach(m => m.clear()); });
   render(); showHint("Cleared. Undo brings it back.");
 };
-toolCut.onclick = () => setTool("cutouts");
+toolHole.onclick = () => { setTool("holes"); showHint(hints.holes); };
 
 const widthIn = document.getElementById("width"), widthOut = document.getElementById("widthOut");
 widthIn.addEventListener("input", () => { width = parseFloat(widthIn.value); widthOut.textContent = width.toFixed(1) + " mm"; });
@@ -5728,7 +5705,7 @@ function syncStripeChips(){
 }
 function syncStyle(){
   const st = design.caseStyle || "plain";
-  beyondChk.checked = !!design.beyond;
+  beyondChk.checked = !!design.beyond; btnBeyond.classList.toggle("on", !!design.beyond);
   for(const k in styBtns) styBtns[k].classList.toggle("on", k === st);
   for(const k in vStyBtns) vStyBtns[k].classList.toggle("on", k === st);
   syncStripeChips();
@@ -5942,11 +5919,11 @@ function syncVDepth(){
 // deepest the beyond-the-edge pieces can go: the panel plus the whole case, to the top of the lip
 function beyondMax(){ return Math.round((CaseGeo.plateLevels(spec).skinT + CaseGeo.frameLevels(spec).H) * 10) / 10; }
 function setBeyond(on){
-  design.beyond = on; beyondChk.checked = on; save(); fitView(); render();
+  design.beyond = on; beyondChk.checked = on; btnBeyond.classList.toggle("on", on); save(); fitView(); render();
   if(viewer.classList.contains("open")){ syncVDepth(); if(on){ showFrame = true; btnFrame.classList.add("on"); } scheduleRebuild(); }
   if(on) showHint("Drawing beyond the edge: draw outside the case, touching it. Set the depth with the Beyond slider in 3D.");
 }
-vBeyond.onclick = () => setBeyond(!design.beyond);
+vBeyond.onclick = btnBeyond.onclick = () => setBeyond(!design.beyond);
 beyondChk.addEventListener("change", () => setBeyond(beyondChk.checked));
 function scheduleRebuild(){
   clearTimeout(rebuildT);
@@ -6052,7 +6029,7 @@ phoneSel.addEventListener("change", () => {
   const p = PHONES.find(x => x.id === phoneSel.value); if(!p) return;
   for(const k of PHONE_KEYS) delete spec[k];
   Object.assign(spec, clone(p.spec));
-  selCut = -1; syncSpecText(); specErr.textContent = "";
+  syncSpecText(); specErr.textContent = "";
   document.getElementById("subtitle").textContent = `${spec.phone}, back view`;
   buildPhoneList(); fitView(); save(); render();
   showHint(`${p.name}: ${spec.width} × ${spec.length} × ${spec.thickness} mm. Your drawing is kept; check it still fits.`);
@@ -6071,7 +6048,6 @@ for(const b of surfSeg.querySelectorAll("button")) b.onclick = () => {
   if(moving) endMove(true);
   gridCancel(); live = null;
   design.surface = g ? "grid" : "free";
-  if(tool === "cutouts") setTool("draw");
   syncSurface(); syncBeck(); save(); render();
   showHint(g ? "Beck: drawing on the grid. Your freehand drawing stays underneath." : "Freehand. Your Beck drawing stays on top of it.");
 };
