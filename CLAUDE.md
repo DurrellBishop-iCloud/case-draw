@@ -46,6 +46,17 @@ allInkRegion folds strokes in order). The CASE is not a colour of its own: `desi
 of the four it is made of (fifth toolbar control, tap to cycle; geo keyColor("case") reads it). Text can be flagged
 `top: true` (Text option "Stays on top", default on): `orderedStrokes` draws those last, in canvas, SVG and geometry.
 
+## One app, two drawing surfaces (v1.11.0) — supersedes "two apps" below
+Freehand and Beck are no longer separate apps: ONE design (`casedraw.v1`) holds freehand strokes AND the four Beck
+grids; `design.surface` ("free" | "grid") picks which surface the finger draws on (switch at the left of the rule
+row). `const BECK` is gone: grid DATA is always present (engine inlined in both pages, `beckInit()` always, undo
+snapshots, clear, save and `geoDesign()` always include grids); the SURFACE (`GRID()`) only decides pointer routing,
+which controls show, grid lines, and half-cell snapping of mirror lines. Draw order everywhere: freehand strokes,
+then the grid drawing (in `design.beck.order`), then text flagged `top`. `/beck/` is the same app opening on the
+grid. `mergeOldBeck()` folds Beck's old separate save (`casedraw.beck.v1`, left untouched as a backup) in once
+(`design.beckMerged`): grids + its photo/text; its palette wins only if the freehand design was empty.
+Ken / Margaret = more surfaces on the same switch, not more apps.
+
 ## Two apps from one source: Case Draw and Beck (v1.8.0)
 `build.py` builds `index.html` (Case Draw, freehand) and `beck/index.html` (Beck, named after Harry Beck's tube map)
 from the SAME `src/index.src.html`; the page sets `window.APP_MODE`, the app reads `const BECK`. Everything except

@@ -88,6 +88,7 @@
   .stack{position:absolute; right:10px; bottom:54px; display:flex; flex-direction:column; gap:8px; align-items:center}
   .stack .dot{width:32px; height:32px; border-radius:50%; box-shadow:0 0 0 1px rgba(0,0,0,.3); border:2px solid var(--panel); cursor:grab; touch-action:none}
   .stack .dot.on{box-shadow:0 0 0 3px var(--text)}
+  #surfSeg button.on{background:var(--text); color:var(--panel)}
   .rules .num, .placebar > .num{display:inline-flex; align-items:center; gap:4px; font-size:13px}
   .rules .num input, .placebar > .num input{width:54px; font:inherit; font-size:15px; padding:6px; border:1px solid var(--line); border-radius:8px}
   .rules .sep{width:1px; align-self:stretch; background:var(--line); margin:4px 2px}
@@ -165,7 +166,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.10.1</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.11.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -187,8 +188,13 @@
 
 <footer>
   <div class="row rules" id="rules">
+    <div class="seg" id="surfSeg" role="group" aria-label="Drawing surface">
+      <button data-surf="free" title="Draw freely">Freehand</button>
+      <button data-surf="grid" title="Draw on the grid, in 90 and 45 degree lines (Drawn Codes)">Beck</button>
+    </div>
+    <span class="sep"></span>
     <div class="seg" id="ruleSeg" role="group" aria-label="Drawing rule">
-      <button data-rule="free" class="on">Free</button>
+      <button data-rule="free" class="on">Pen</button>
       <button data-rule="line">Line</button>
       <button data-rule="vstripe">V stripes</button>
       <button data-rule="hstripe">H stripes</button>
@@ -313,14 +319,6 @@
       <p id="phoneNote" style="margin-top:8px"></p>
     </section>
 
-    <section>
-      <h3>Apps</h3>
-      <div class="row">
-        <button id="appDraw">Case Draw</button>
-        <button id="appBeck">Beck</button>
-      </div>
-      <p style="margin-top:8px">Case Draw is freehand. Beck draws on a grid, in 90° and 45° lines. Each keeps its own design.</p>
-    </section>
 
     <section>
       <h3>Drawing sits</h3>
@@ -1528,6 +1526,729 @@ ${items} </build>
   return { cutoutRegion, ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
 });
 
+</script>
+<script>/* Drawn Codes engine (vendored, see src/vendor/drawncodes/README.txt) */
+(() => {
+// Drawn Codes web — engine: sparse grid model, enclosure fill, path tracing.
+// A 1:1 port of the Android app's GridModel / FillEngine / PathInk.
+// Cells hold 8 connection bits (4 orthogonal + 4 diagonal) plus TOUCHED;
+// coordinates are signed — the canvas is unbounded.
+
+const UP = 8, RIGHT = 4, DOWN = 2, LEFT = 1;
+const TOUCHED = 16;
+const UR = 32, DR = 64, DL = 128, UL = 256;
+const ORTHO_MASK = 15;
+const DIAG_MASK = UR | DR | DL | UL;
+const SHAPE_MASK = ORTHO_MASK | DIAG_MASK;
+
+const key = (r, c) => r + ',' + c;
+
+class GridModel {
+  constructor() {
+    this.cells = new Map();     // "r,c" -> code
+    this.undoStack = [];
+    this.version = 0;
+  }
+  get(r, c) { return this.cells.get(key(r, c)) || 0; }
+  get isEmpty() { return this.cells.size === 0; }
+  put(r, c, code) {
+    if (code === 0) this.cells.delete(key(r, c));
+    else this.cells.set(key(r, c), code);
+    this.version++;
+  }
+  forEach(fn) {
+    for (const [k, code] of this.cells) {
+      const i = k.indexOf(',');
+      fn(parseInt(k.slice(0, i)), parseInt(k.slice(i + 1)), code);
+    }
+  }
+  bounds() {
+    if (this.cells.size === 0) return null;
+    let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity;
+    this.forEach((r, c) => {
+      if (r < minR) minR = r; if (r > maxR) maxR = r;
+      if (c < minC) minC = c; if (c > maxC) maxC = c;
+    });
+    return { minR, maxR, minC, maxC };
+  }
+  touch(r, c) { this.put(r, c, this.get(r, c) | TOUCHED); }
+  connect(r0, c0, r1, c1) {
+    let a, b;
+    if (r1 === r0 - 1 && c1 === c0) { a = UP; b = DOWN; }
+    else if (r1 === r0 + 1 && c1 === c0) { a = DOWN; b = UP; }
+    else if (c1 === c0 + 1 && r1 === r0) { a = RIGHT; b = LEFT; }
+    else if (c1 === c0 - 1 && r1 === r0) { a = LEFT; b = RIGHT; }
+    else return;
+    this.put(r0, c0, this.get(r0, c0) | a | TOUCHED);
+    this.put(r1, c1, this.get(r1, c1) | b | TOUCHED);
+  }
+  connectDiagonal(r0, c0, r1, c1) {
+    let a, b;
+    if (r1 === r0 - 1 && c1 === c0 + 1) { a = UR; b = DL; }
+    else if (r1 === r0 + 1 && c1 === c0 + 1) { a = DR; b = UL; }
+    else if (r1 === r0 + 1 && c1 === c0 - 1) { a = DL; b = UR; }
+    else if (r1 === r0 - 1 && c1 === c0 - 1) { a = UL; b = DR; }
+    else return;
+    this.put(r0, c0, this.get(r0, c0) | a | TOUCHED);
+    this.put(r1, c1, this.get(r1, c1) | b | TOUCHED);
+  }
+  erase(r, c) {
+    this.put(r, c, 0);
+    this.put(r - 1, c, this.get(r - 1, c) & ~DOWN);
+    this.put(r + 1, c, this.get(r + 1, c) & ~UP);
+    this.put(r, c - 1, this.get(r, c - 1) & ~RIGHT);
+    this.put(r, c + 1, this.get(r, c + 1) & ~LEFT);
+    this.put(r - 1, c + 1, this.get(r - 1, c + 1) & ~DL);
+    this.put(r + 1, c + 1, this.get(r + 1, c + 1) & ~UL);
+    this.put(r + 1, c - 1, this.get(r + 1, c - 1) & ~UR);
+    this.put(r - 1, c - 1, this.get(r - 1, c - 1) & ~DR);
+  }
+  clear() { this.cells.clear(); this.version++; }
+  pushUndo() {
+    this.undoStack.push(new Map(this.cells));
+    if (this.undoStack.length > 60) this.undoStack.shift();
+  }
+  undo() {
+    const prev = this.undoStack.pop();
+    if (!prev) return false;
+    this.cells = prev;
+    this.version++;
+    return true;
+  }
+  serialize() {
+    const out = [];
+    this.forEach((r, c, code) => out.push([r, c, code]));
+    return out;
+  }
+  restore(list) {
+    this.cells.clear();
+    for (const [r, c, code] of list) this.cells.set(key(r, c), code);
+    this.version++;
+  }
+}
+
+// ---- enclosure fill --------------------------------------------------
+// Orthogonal stroke arms block a half-cell lattice; 45° strokes cut one
+// half-cell per linked cell into two triangle nodes. Flood regions, walk
+// nesting depth from the outside, fill odd depths; absorb white pockets
+// smaller than a one-cell hole. Result: per half-cell state
+// 0 none, 1 full, 2 triangle t0, 3 triangle t1.
+
+function computeFill(model) {
+  const b = model.bounds();
+  if (!b) return null;
+  const originR = b.minR - 1, originC = b.minC - 1;
+  const hw = (b.maxC - b.minC + 3) * 2, hh = (b.maxR - b.minR + 3) * 2;
+  const n = hw * hh;
+
+  const code = (y, x) => model.get(originR + (y >> 1), originC + (x >> 1));
+  const cutBit = (y, x) => {
+    const top = (y & 1) === 0, left = (x & 1) === 0;
+    return top && left ? UL : top ? UR : left ? DL : DR;
+  };
+  const isCut = (y, x) => (code(y, x) & cutBit(y, x)) !== 0;
+  const nodeAt = (y, x, border) => {   // border: 0=N 1=E 2=S 3=W
+    const i = y * hw + x;
+    if (!isCut(y, x)) return 2 * i;
+    const t0 = (x & 1) === (y & 1) ? (border === 0 || border === 1)
+                                   : (border === 0 || border === 3);
+    return t0 ? 2 * i : 2 * i + 1;
+  };
+  const blockedDown = (y, x) =>
+    (y & 1) === 0 && (code(y, x) & ((x & 1) === 0 ? LEFT : RIGHT)) !== 0;
+  const blockedRight = (y, x) =>
+    (x & 1) === 0 && (code(y, x) & ((y & 1) === 0 ? UP : DOWN)) !== 0;
+
+  const parent = new Int32Array(2 * n);
+  for (let i = 0; i < 2 * n; i++) parent[i] = i;
+  const find = (a) => {
+    while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; }
+    return a;
+  };
+  const union = (a, b) => {
+    const ra = find(a), rb = find(b);
+    if (ra !== rb) parent[ra] = rb;
+  };
+
+  const crossings = [];
+  for (let y = 0; y < hh; y++) for (let x = 0; x < hw; x++) {
+    if (x < hw - 1) {
+      const a = nodeAt(y, x, 1), bb = nodeAt(y, x + 1, 3);
+      if (blockedRight(y, x)) crossings.push(a, bb); else union(a, bb);
+    }
+    if (y < hh - 1) {
+      const a = nodeAt(y, x, 2), bb = nodeAt(y + 1, x, 0);
+      if (blockedDown(y, x)) crossings.push(a, bb); else union(a, bb);
+    }
+    if (isCut(y, x)) {
+      const i = y * hw + x;
+      crossings.push(2 * i, 2 * i + 1);
+    }
+  }
+
+  const regionIds = new Map();
+  const area = [];
+  const rid = (root) => {
+    let id = regionIds.get(root);
+    if (id === undefined) { id = area.length; area.push(0); regionIds.set(root, id); }
+    return id;
+  };
+  const nodeRegion = new Int32Array(2 * n).fill(-1);
+  for (let y = 0; y < hh; y++) for (let x = 0; x < hw; x++) {
+    const i = y * hw + x;
+    const r0 = rid(find(2 * i));
+    nodeRegion[2 * i] = r0; area[r0]++;
+    if (isCut(y, x)) {
+      const r1 = rid(find(2 * i + 1));
+      nodeRegion[2 * i + 1] = r1; area[r1]++;
+    }
+  }
+
+  const adj = area.map(() => new Set());
+  for (let k = 0; k < crossings.length; k += 2) {
+    const a = nodeRegion[crossings[k]], bb = nodeRegion[crossings[k + 1]];
+    if (a !== bb) { adj[a].add(bb); adj[bb].add(a); }
+  }
+
+  const depth = new Int32Array(area.length).fill(-1);
+  const outside = nodeRegion[0];
+  depth[outside] = 0;
+  const queue = [outside];
+  for (let qi = 0; qi < queue.length; qi++) {
+    const a = queue[qi];
+    for (const bb of adj[a]) if (depth[bb] === -1) {
+      depth[bb] = depth[a] + 1;
+      queue.push(bb);
+    }
+  }
+  const filled = (rg) => {
+    const d = depth[rg];
+    return d > 0 && (d % 2 === 1 || area[rg] <= 3);
+  };
+
+  const state = new Uint8Array(n);
+  for (let y = 0; y < hh; y++) for (let x = 0; x < hw; x++) {
+    const i = y * hw + x;
+    const f0 = filled(nodeRegion[2 * i]);
+    if (!isCut(y, x)) state[i] = f0 ? 1 : 0;
+    else {
+      const f1 = filled(nodeRegion[2 * i + 1]);
+      state[i] = f0 && f1 ? 1 : f0 ? 2 : f1 ? 3 : 0;
+    }
+  }
+  return { originHalfR: originR * 2, originHalfC: originC * 2, hw, hh, state };
+}
+
+// ---- skeleton-stroke path tracing ------------------------------------
+// The model graph (cell centres = nodes, bits = edges) is traced into
+// routes: edge-ends pair at each node by straightest continuation, every
+// route corner is rounded with a half-cell arc, and routes are stroked
+// with a thick round pen. Junction crooks get tile-language fillets.
+// Coordinates: cell units, cell centres on integers (x=col, y=row).
+
+const STROKE = 0.5;
+const CORNER_RADIUS = 0.5;
+const DIAMOND = 0.36;
+const V = STROKE / 2;
+
+function buildInk(model) {
+  const ax = [], ay = [], bx = [], by = [];
+  model.forEach((r, c, code) => {
+    if (code & RIGHT) { ax.push(c); ay.push(r); bx.push(c + 1); by.push(r); }
+    if (code & DOWN) { ax.push(c); ay.push(r); bx.push(c); by.push(r + 1); }
+    if (code & DR) { ax.push(c); ay.push(r); bx.push(c + 1); by.push(r + 1); }
+    if (code & DL) { ax.push(c); ay.push(r); bx.push(c - 1); by.push(r + 1); }
+  });
+  const n = ax.length;
+  const nodeX = (e, s) => s === 0 ? ax[e] : bx[e];
+  const nodeY = (e, s) => s === 0 ? ay[e] : by[e];
+  const endId = (e, s) => e * 2 + s;
+
+  const incident = new Map();   // "x,y" -> [endId...]
+  for (let e = 0; e < n; e++) {
+    for (const s of [0, 1]) {
+      const k = nodeX(e, s) + ',' + nodeY(e, s);
+      let list = incident.get(k);
+      if (!list) incident.set(k, list = []);
+      list.push(endId(e, s));
+    }
+  }
+  const angleOf = (id) => {
+    const e = id >> 1, s = id & 1;
+    const dx = nodeX(e, 1 - s) - nodeX(e, s);
+    const dy = nodeY(e, 1 - s) - nodeY(e, s);
+    return Math.atan2(dy, dx) * 180 / Math.PI;
+  };
+
+  const partner = new Map();
+  for (const ends of incident.values()) {
+    if (ends.length < 2) continue;
+    const cands = [];
+    for (let i = 0; i < ends.length; i++) for (let j = i + 1; j < ends.length; j++) {
+      let d = Math.abs(angleOf(ends[i]) - angleOf(ends[j])) % 360;
+      if (d > 180) d = 360 - d;
+      const dev = 180 - d;
+      if (dev <= 90.5) cands.push([dev, ends[i], ends[j]]);
+    }
+    cands.sort((a, b) => a[0] - b[0]);
+    const used = new Set();
+    for (const [, e1, e2] of cands) {
+      if (used.has(e1) || used.has(e2)) continue;
+      used.add(e1); used.add(e2);
+      partner.set(e1, e2); partner.set(e2, e1);
+    }
+  }
+
+  const visited = new Uint8Array(n);
+  const strokes = new Path2D();
+  const walk = (startEdge, startSide) => {
+    const pts = [[nodeX(startEdge, startSide), nodeY(startEdge, startSide)]];
+    let e = startEdge, s = startSide;
+    for (;;) {
+      visited[e] = 1;
+      pts.push([nodeX(e, 1 - s), nodeY(e, 1 - s)]);
+      const next = partner.get(endId(e, 1 - s));
+      if (next === undefined) break;
+      const ne = next >> 1;
+      if (visited[ne]) break;
+      e = ne; s = next & 1;
+    }
+    return pts;
+  };
+  const gapAbs = (a, b) => {
+    let d = Math.abs(a - b) % 360;
+    return d > 180 ? 360 - d : d;
+  };
+  // Tangent merge: a branch meeting other ink at a shallow angle doesn't
+  // stop at the node — it continues one edge ALONG the neighbour (a 45°
+  // deviation), and the corner arc turns that into a railway-switch merge
+  // whose outer sweep fills what would otherwise be a sharp 45° crook.
+  const mergePoint = (endEdge, endSide) => {
+    const id = endId(endEdge, endSide);
+    const k = nodeX(endEdge, endSide) + ',' + nodeY(endEdge, endSide);
+    const ends = incident.get(k) || [];
+    const aB = (angleOf(id) + 360) % 360;
+    let best = null;
+    for (const m of ends) {
+      if (m === id) continue;
+      if (Math.round(gapAbs((angleOf(m) + 360) % 360, aB)) !== 135) continue;
+      if (best === null || (partner.has(m) && !partner.has(best))) best = m;
+    }
+    if (best === null) return null;
+    const me = best >> 1, ms = best & 1;
+    return [nodeX(me, 1 - ms), nodeY(me, 1 - ms)];
+  };
+  for (let e = 0; e < n; e++) {
+    if (visited[e]) continue;
+    let startSide = -1;
+    if (partner.get(endId(e, 0)) === undefined) startSide = 0;
+    else if (partner.get(endId(e, 1)) === undefined) startSide = 1;
+    if (startSide < 0) continue;
+    const pts = walk(e, startSide);
+    const head = mergePoint(e, startSide);
+    if (head) pts.unshift(head);
+    // the walk's far end: find the arriving edge-end without a partner
+    // (last edge in the traversal) and extend past it too
+    let le = e, ls = startSide;
+    {
+      let ce = e, cs = startSide;
+      for (;;) {
+        const next = partner.get(endId(ce, 1 - cs));
+        if (next === undefined) { le = ce; ls = 1 - cs; break; }
+        const ne = next >> 1;
+        if (ne === ce || !visited[ne]) { le = ce; ls = 1 - cs; break; }
+        const cont = next;
+        const contE = cont >> 1, contS = cont & 1;
+        if (contE === e && contS === startSide) { le = ce; ls = 1 - cs; break; }
+        ce = contE; cs = contS;
+        if (partner.get(endId(ce, 1 - cs)) === undefined) { le = ce; ls = 1 - cs; break; }
+      }
+    }
+    const tail = mergePoint(le, ls);
+    if (tail && (pts.length < 2 ||
+        tail[0] !== pts[pts.length - 2][0] || tail[1] !== pts[pts.length - 2][1])) {
+      pts.push(tail);
+    }
+    appendRounded(strokes, pts, false);
+  }
+  for (let e = 0; e < n; e++) {
+    if (!visited[e]) appendRounded(strokes, walk(e, 0), true);
+  }
+
+  // fills: junction fillets, diamonds, dots
+  const fills = new Path2D();
+  for (const [k, ends] of incident) {
+    if (ends.length < 2) continue;
+    const ci = k.indexOf(',');
+    const nx = parseInt(k.slice(0, ci)), ny = parseInt(k.slice(ci + 1));
+    const sorted = [...ends].sort((a, b) =>
+      ((angleOf(a) + 360) % 360) - ((angleOf(b) + 360) % 360));
+    for (let i = 0; i < sorted.length; i++) {
+      const e1 = sorted[i], e2 = sorted[(i + 1) % sorted.length];
+      if (partner.get(e1) === e2) continue;
+      const a1 = (angleOf(e1) + 360) % 360;
+      let a2 = (angleOf(e2) + 360) % 360;
+      if (i + 1 === sorted.length) a2 += 360;
+      const gap = Math.round(a2 - a1);
+      let rf;
+      if (gap === 90 || gap === 135) rf = 0.25;
+      else if (gap === 45) {
+        // a 45° lens reaches ~0.97 along its flanks; if either flank's
+        // route TURNS at its far node, the turn's arc eats that edge and
+        // the lens would poke out from under the sweep — leave the crook
+        // open instead (a clean V), which is what a pen would do
+        const far1 = partner.has(endId(e1 >> 1, 1 - (e1 & 1)));
+        const far2 = partner.has(endId(e2 >> 1, 1 - (e2 & 1)));
+        if (far1 || far2) continue;
+        rf = 0.15;
+      }
+      else continue;
+      addSectorFillet(fills, nx, ny, a1, gap, V, rf);
+      // strip length: to the fillet's tangent foot normally; when the
+      // member turns at THIS node its arc pulls away from the sector,
+      // so run the strip past the arc foot (0.5) to keep the flank straight
+      const foot = (V + rf) / Math.tan(gap * Math.PI / 360) + 0.06;
+      addHalfStrip(fills, nx, ny, a1, +90, V, partner.has(e1) ? 0.56 : foot);
+      addHalfStrip(fills, nx, ny, a2, -90, V, partner.has(e2) ? 0.56 : foot);
+    }
+  }
+  model.forEach((r, c, code) => {
+    if ((code & SHAPE_MASK) === 0 && (code & TOUCHED)) {
+      fills.moveTo(c + V, r);
+      fills.arc(c, r, V, 0, Math.PI * 2);
+    }
+    for (const [bit, dc] of [[DR, 1], [DL, -1]]) {
+      if (code & bit) {
+        const cx = c + dc / 2, cy = r + 0.5;
+        fills.moveTo(cx - DIAMOND, cy);
+        fills.lineTo(cx, cy - DIAMOND);
+        fills.lineTo(cx + DIAMOND, cy);
+        fills.lineTo(cx, cy + DIAMOND);
+        fills.closePath();
+      }
+    }
+  });
+  return { strokes, fills };
+}
+
+function appendRounded(path, pts, closed) {
+  if (pts.length < 2) return;
+  if (closed && (pts[0][0] !== pts[pts.length - 1][0] ||
+                 pts[0][1] !== pts[pts.length - 1][1])) {
+    pts.push([pts[0][0], pts[0][1]]);
+  }
+  const out = [];
+  const last = pts.length - 1;
+  if (!closed) out.push(pts[0]);
+  for (let k = closed ? 0 : 1; k <= last - 1; k++) {
+    if (!closed && k === 0) continue;
+    const p0 = closed && k === 0 ? pts[last - 1] : pts[k - 1];
+    const p1 = pts[k], p2 = pts[k + 1];
+    let ux = p1[0] - p0[0], uy = p1[1] - p0[1];
+    let wx = p2[0] - p1[0], wy = p2[1] - p1[1];
+    const lu = Math.hypot(ux, uy), lw = Math.hypot(wx, wy);
+    ux /= lu; uy /= lu; wx /= lw; wy /= lw;
+    const cross = ux * wy - uy * wx;
+    const dot = ux * wx + uy * wy;
+    const dev = Math.atan2(Math.abs(cross), dot);
+    if (dev < 1e-3) { out.push(p1); continue; }
+    let r = CORNER_RADIUS;
+    let t = r * Math.tan(dev / 2);
+    const tMax = Math.min(lu, lw) / 2 - 1e-4;
+    if (t > tMax) { t = tMax; r = t / Math.tan(dev / 2); }
+    const side = cross > 0 ? 1 : -1;
+    const f1x = p1[0] - ux * t, f1y = p1[1] - uy * t;
+    const cx = f1x - uy * side * r, cy = f1y + ux * side * r;
+    const a1 = Math.atan2(f1y - cy, f1x - cx);
+    const steps = Math.max(4, Math.round(dev * 10));
+    for (let kk = 0; kk <= steps; kk++) {
+      const a = a1 + side * dev * kk / steps;
+      out.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+    }
+  }
+  if (!closed) out.push(pts[last]);
+  path.moveTo(out[0][0], out[0][1]);
+  for (let i = 1; i < out.length; i++) path.lineTo(out[i][0], out[i][1]);
+  if (closed) path.closePath();
+}
+
+function addSectorFillet(path, cx, cy, a1, gap, v, rf) {
+  const half = gap * Math.PI / 360;
+  const bis = (a1 + gap / 2) * Math.PI / 180;
+  const pDist = v / Math.sin(half);
+  const cDist = (v + rf) / Math.sin(half);
+  const ax = cx + cDist * Math.cos(bis), ay = cy + cDist * Math.sin(bis);
+  path.moveTo(cx + pDist * Math.cos(bis), cy + pDist * Math.sin(bis));
+  const start = (a1 - 90) * Math.PI / 180;
+  const sweep = (gap - 180) * Math.PI / 180;
+  for (let k = 0; k <= 12; k++) {
+    const a = start + sweep * k / 12;
+    path.lineTo(ax + rf * Math.cos(a), ay + rf * Math.sin(a));
+  }
+  path.closePath();
+}
+
+function addHalfStrip(path, cx, cy, angleDeg, sideDeg, v, len) {
+  const a = angleDeg * Math.PI / 180;
+  const nrm = (angleDeg + sideDeg) * Math.PI / 180;
+  const dx = Math.cos(a), dy = Math.sin(a);
+  const nx = Math.cos(nrm) * v, ny = Math.sin(nrm) * v;
+  path.moveTo(cx, cy);
+  path.lineTo(cx + dx * len, cy + dy * len);
+  path.lineTo(cx + dx * len + nx, cy + dy * len + ny);
+  path.lineTo(cx + nx, cy + ny);
+  path.closePath();
+}
+
+// Drawn Codes web — silhouette: the model is the real geometry; this
+// module derives a watertight vector outline from it at any precision.
+//
+// Pipeline: rasterize the layer's ink sources into a coverage field
+// (samples per cell = the precision parameter), blur it slightly (a
+// morphological closing — seals sub-stroke gaps, rounds concave nicks),
+// then trace the 50% iso-contour with marching squares. The result is
+// closed vector loops (outer boundaries and holes) in cell units —
+// drawable with even-odd fill, exportable to SVG, extrudable to 3D.
+// Slivers and staircase artifacts are unrepresentable: there is one
+// continuous field and one contour, not pieces with seams.
+
+
+const BLUR_CELLS = 0.09;
+
+/**
+ * Trace a model's silhouette. Returns { loops, path } where loops is an
+ * array of closed [x,y] rings in cell units (cell centres on integers)
+ * and path is a ready Path2D (even-odd). Null for an empty model.
+ */
+function traceSilhouette(model, fill, samplesPerCell = 16, iso = 127.5) {
+  const b = model.bounds();
+  if (!b) return null;
+  const S = samplesPerCell;
+  const margin = 1.5;   // room for caps, diamonds and the blur
+  const x0 = b.minC - margin, y0 = b.minR - margin;
+  const W = Math.round((b.maxC - b.minC + 2 * margin + 1) * S);
+  const H = Math.round((b.maxR - b.minR + 2 * margin + 1) * S);
+
+  // ---- rasterize ink sources into a coverage field -------------------
+  const off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  const ctx = off.getContext('2d', { willReadFrequently: true });
+  ctx.setTransform(S, 0, 0, S, (-x0 + 0.5) * S, (-y0 + 0.5) * S);
+  ctx.fillStyle = '#000';
+  ctx.strokeStyle = '#000';
+  if (fill) drawFillField(ctx, fill);
+  const ink = buildInk(model);
+  ctx.lineWidth = STROKE;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke(ink.strokes);
+  ctx.fill(ink.fills);
+
+  const img = ctx.getImageData(0, 0, W, H).data;
+  let field = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) field[i] = img[i * 4 + 3];   // alpha
+
+  // ---- closing: 3× box blur ≈ gaussian --------------------------------
+  const r = Math.max(1, Math.round(BLUR_CELLS * S / 1.7));
+  for (let pass = 0; pass < 3; pass++) {
+    field = boxBlurH(field, W, H, r);
+    field = boxBlurV(field, W, H, r);
+  }
+
+  // ---- marching squares at iso = 127.5 --------------------------------
+  const loops = marchingSquares(field, W, H, iso).map(chaikin);
+
+  const path = new Path2D();
+  for (const loop of loops) {
+    // convert sample coords → cell units
+    path.moveTo(loop[0][0] / S + x0 - 0.5, loop[0][1] / S + y0 - 0.5);
+    for (let i = 1; i < loop.length; i++) {
+      path.lineTo(loop[i][0] / S + x0 - 0.5, loop[i][1] / S + y0 - 0.5);
+    }
+    path.closePath();
+  }
+  const cellLoops = loops.map((loop) =>
+    loop.map(([px, py]) => [px / S + x0 - 0.5, py / S + y0 - 0.5]));
+  return { loops: cellLoops, path };
+}
+
+/** One round of Chaikin corner-cutting: halves sampling facets. */
+function chaikin(loop) {
+  const out = [];
+  for (let i = 0; i < loop.length; i++) {
+    const [ax, ay] = loop[i];
+    const [bx, by] = loop[(i + 1) % loop.length];
+    out.push([ax * 0.75 + bx * 0.25, ay * 0.75 + by * 0.25]);
+    out.push([ax * 0.25 + bx * 0.75, ay * 0.25 + by * 0.75]);
+  }
+  return out;
+}
+
+function drawFillField(ctx, fill) {
+  const hs = 0.5;
+  for (let y = 0; y < fill.hh; y++) {
+    for (let x = 0; x < fill.hw; x++) {
+      const st = fill.state[y * fill.hw + x];
+      if (st === 0) continue;
+      const left = (fill.originHalfC + x) * hs - 0.5;
+      const top = (fill.originHalfR + y) * hs - 0.5;
+      if (st === 1) {
+        ctx.fillRect(left, top, hs, hs);
+      } else {
+        ctx.beginPath();
+        const rgt = left + hs, bot = top + hs;
+        if ((x & 1) === (y & 1)) {
+          if (st === 2) { ctx.moveTo(left, top); ctx.lineTo(rgt, top); ctx.lineTo(rgt, bot); }
+          else { ctx.moveTo(left, top); ctx.lineTo(left, bot); ctx.lineTo(rgt, bot); }
+        } else {
+          if (st === 2) { ctx.moveTo(left, top); ctx.lineTo(rgt, top); ctx.lineTo(left, bot); }
+          else { ctx.moveTo(rgt, top); ctx.lineTo(rgt, bot); ctx.lineTo(left, bot); }
+        }
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  }
+}
+
+function boxBlurH(src, w, h, r) {
+  const out = new Float32Array(w * h);
+  const div = 2 * r + 1;
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    let sum = 0;
+    for (let x = -r; x <= r; x++) sum += src[row + Math.min(w - 1, Math.max(0, x))];
+    for (let x = 0; x < w; x++) {
+      out[row + x] = sum / div;
+      sum += src[row + Math.min(w - 1, x + r + 1)];
+      sum -= src[row + Math.max(0, x - r)];
+    }
+  }
+  return out;
+}
+
+function boxBlurV(src, w, h, r) {
+  const out = new Float32Array(w * h);
+  const div = 2 * r + 1;
+  for (let x = 0; x < w; x++) {
+    let sum = 0;
+    for (let y = -r; y <= r; y++) sum += src[Math.min(h - 1, Math.max(0, y)) * w + x];
+    for (let y = 0; y < h; y++) {
+      out[y * w + x] = sum / div;
+      sum += src[Math.min(h - 1, y + r + 1) * w + x];
+      sum -= src[Math.max(0, y - r) * w + x];
+    }
+  }
+  return out;
+}
+
+// Marching squares with edge-id stitching: each iso crossing lives on a
+// lattice edge; per-cell segments join crossings, and loops are stitched
+// by following shared edge ids — exact, no floating-point matching.
+function marchingSquares(field, W, H, iso) {
+  const val = (x, y) => field[y * W + x];
+  // edge ids: horizontal edge (between (x,y)-(x+1,y)): 'h' + index;
+  // vertical edge (between (x,y)-(x,y+1)): 'v' + index
+  const hId = (x, y) => 2 * (y * W + x);
+  const vId = (x, y) => 2 * (y * W + x) + 1;
+
+  const points = new Map();   // edge id -> [px, py]
+  const crossH = (x, y) => {
+    const id = hId(x, y);
+    let p = points.get(id);
+    if (!p) {
+      const a = val(x, y), b = val(x + 1, y);
+      p = [x + (iso - a) / (b - a), y];
+      points.set(id, p);
+    }
+    return id;
+  };
+  const crossV = (x, y) => {
+    const id = vId(x, y);
+    let p = points.get(id);
+    if (!p) {
+      const a = val(x, y), b = val(x, y + 1);
+      p = [x, y + (iso - a) / (b - a)];
+      points.set(id, p);
+    }
+    return id;
+  };
+
+  // adjacency: edge id -> list of connected edge ids (each cell adds one
+  // or two crossing-pair segments)
+  const links = new Map();
+  const link = (a, b) => {
+    let la = links.get(a); if (!la) links.set(a, la = []);
+    let lb = links.get(b); if (!lb) links.set(b, lb = []);
+    la.push(b); lb.push(a);
+  };
+
+  for (let y = 0; y < H - 1; y++) {
+    for (let x = 0; x < W - 1; x++) {
+      const tl = val(x, y) >= iso ? 8 : 0;
+      const tr = val(x + 1, y) >= iso ? 4 : 0;
+      const br = val(x + 1, y + 1) >= iso ? 2 : 0;
+      const bl = val(x, y + 1) >= iso ? 1 : 0;
+      const c = tl | tr | br | bl;
+      if (c === 0 || c === 15) continue;
+      const top = () => crossH(x, y);
+      const bottom = () => crossH(x, y + 1);
+      const left = () => crossV(x, y);
+      const right = () => crossV(x + 1, y);
+      switch (c) {
+        case 1: case 14: link(left(), bottom()); break;
+        case 2: case 13: link(bottom(), right()); break;
+        case 3: case 12: link(left(), right()); break;
+        case 4: case 11: link(top(), right()); break;
+        case 6: case 9: link(top(), bottom()); break;
+        case 7: case 8: link(top(), left()); break;
+        case 5:   // ambiguous saddles: resolve by the centre sample
+        case 10: {
+          const centre = (val(x, y) + val(x + 1, y) + val(x, y + 1) + val(x + 1, y + 1)) / 4;
+          const centreIn = centre >= iso;
+          // c=5: inside corners are TR+BL; c=10: TL+BR. If the centre is
+          // inside, the inside diagonal is connected and the two contour
+          // arcs hug the OUTSIDE corners — and vice versa.
+          const hugTLBR = (c === 5) === centreIn;
+          if (hugTLBR) { link(top(), left()); link(bottom(), right()); }
+          else { link(top(), right()); link(bottom(), left()); }
+          break;
+        }
+      }
+    }
+  }
+
+  // stitch loops
+  const loops = [];
+  const usedPairs = new Set();
+  const pairKey = (a, b) => a < b ? a + ':' + b : b + ':' + a;
+  for (const [start, nbrs] of links) {
+    for (const first of nbrs) {
+      if (usedPairs.has(pairKey(start, first))) continue;
+      const loop = [points.get(start)];
+      let prev = start, cur = first;
+      usedPairs.add(pairKey(prev, cur));
+      let guard = 0;
+      while (cur !== start && guard++ < 1e6) {
+        loop.push(points.get(cur));
+        const nexts = links.get(cur) || [];
+        let next = -1;
+        for (const cand of nexts) {
+          if (cand !== prev && !usedPairs.has(pairKey(cur, cand))) { next = cand; break; }
+        }
+        if (next < 0) break;
+        usedPairs.add(pairKey(cur, next));
+        prev = cur; cur = next;
+      }
+      // only closed walks count — a partial would close across a chord
+      if (cur === start && loop.length >= 3) loops.push(loop);
+    }
+  }
+  return loops;
+}
+
+window.DrawnCodes = { GridModel, computeFill, buildInk, traceSilhouette, STROKE, UP, RIGHT, DOWN, LEFT, UR, DR, DL, UL, TOUCHED };
+})();
 </script>
 <script>/* phone presets: generated by tools/make_phones.py from Apple's dimensional drawings */
 window.PHONES = [
@@ -3425,6 +4146,7 @@ const DEFAULT_DESIGN = {
   inkDepth: 0.6,          // inlay: how deep every ink is pocketed
   inkHeights: [0.8, 0.8, 0.8], // relief: how far each ink stands proud; 0 = flush
   maxInkHeight: 5,        // top of the height sliders in the 3D view
+  surface: "free",        // drawing surface: free (Freehand) | grid (Beck)
   rule: "free",           // drawing rule: free | line | vstripe | hstripe
   mirrorX: false,         // mirror left-right
   mirrorY: false,         // mirror top-bottom
@@ -3434,9 +4156,10 @@ const DEFAULT_DESIGN = {
   textStyle: { family: "system-ui, -apple-system, Helvetica, Arial, sans-serif", weight: 700, size: 8, lead: 120, track: 0, align: "center" },
   strokes: []            // { c: inkIndex, w: mm, pts: [[x,y],...] } or a filled shape { c, fill: MultiPolygon mm }
 };
-// One source, two apps (build.py sets APP_MODE): Case Draw draws freehand; Beck draws on the Drawn Codes grid.
-const BECK = window.APP_MODE === "beck";
-const STORE_KEY = BECK ? "casedraw.beck.v1" : "casedraw.v1";
+// One design, two drawing surfaces: Freehand and Beck (the Drawn Codes grid). design.surface says which one the
+// finger is using; both drawings always show and always print. /beck/ opens with the grid selected.
+const GRID = () => design.surface === "grid";
+const STORE_KEY = "casedraw.v1", BECK_KEY = "casedraw.beck.v1";   // BECK_KEY: Beck's old separate save, merged once
 
 // ---------- state ----------
 let spec = clone(DEFAULT_SPEC);
@@ -3469,8 +4192,31 @@ function load(){
     if(Array.isArray(design.stripeColors)) design.stripeColors = [...new Set(design.stripeColors.map(k => k === "case" ? "plate" : k))];
   }catch(e){ /* storage unavailable; run in memory */ }
 }
+// Beck used to keep its own design. The first time the joined app loads, bring that drawing in: its grids, its
+// photos and text. Colours: whichever of the two had a drawing keeps its palette (the freehand one if both did).
+function mergeOldBeck(){
+  try{
+    if(design.beckMerged) return;
+    const raw = localStorage.getItem(BECK_KEY); design.beckMerged = true;
+    if(!raw) return;
+    const o = JSON.parse(raw), bd = o.design || {}, bb = bd.beck || {};
+    const hasGrid = Array.isArray(bb.layers) && bb.layers.some(l => l && l.length);
+    if(!hasGrid && !(bd.strokes || []).length) return;
+    const freeEmpty = !design.strokes.length;
+    if(freeEmpty){
+      for(const k of ["plateColor", "inks", "caseInk", "stripeColors", "inkHeights", "mode", "caseStyle"]) if(bd[k] !== undefined) design[k] = clone(bd[k]);
+      if(o.spec && !localStorage.getItem(STORE_KEY)) spec = Object.assign(clone(DEFAULT_SPEC), o.spec);
+    }
+    design.beck = clone(bb);
+    design.strokes = [...design.strokes, ...(bd.strokes || [])];
+    mergeSave = true;
+    if(hasGrid && !freeEmpty) mergeNote = "Your Beck drawing has joined this design (in these colours).";
+    else if(hasGrid) mergeNote = "Your Beck drawing is here. Freehand and Beck are now one design: switch with the buttons at the left of the row.";
+  }catch(e){}
+}
+let mergeNote = "", mergeSave = false;
 // what gets saved: in Beck the grids are written back into the design first
-function designForSave(){ if(BECK) design.beck.layers = gridLayers.map(m => m.serialize()); return design; }
+function designForSave(){ design.beck.layers = gridLayers.map(m => m.serialize()); return design; }
 let saveT = null;
 function save(){
   clearTimeout(saveT);
@@ -3600,9 +4346,9 @@ function render(){
   ctx.clip();
   { const keep = new Path2D(); keep.rect(-50, -50, spec.width + 100, spec.length + 100); keep.addPath(cutoutsPath(im)); ctx.clip(keep, "evenodd"); }
   ctx.lineCap = "round"; ctx.lineJoin = "round";
-  if(BECK) drawGridLines();
-  for(const s of design.strokes) if(!s.top) drawStroke(s);
-  if(BECK) drawGridLayers();
+  if(GRID()) drawGridLines();
+  for(const s of design.strokes) if(!s.top) drawStroke(s);   // freehand under the grid drawing, text on top of both
+  drawGridLayers();
   if(live) for(const m of mirrored(live)) drawStroke(m);
   for(const s of design.strokes) if(s.top) drawStroke(s);
   if(placing) drawPlacing();
@@ -3698,7 +4444,7 @@ canvas.addEventListener("pointerdown", e => {
   canvas.setPointerCapture(e.pointerId);
   if(touches.size === 2){
     // second finger: abandon any stroke in progress and start a pinch
-    live = null; dragCut = null; activeId = null; placeDrag = null; moveDrag = null; if(BECK) gridCancel();
+    live = null; dragCut = null; activeId = null; placeDrag = null; moveDrag = null; gridCancel();
     const [a, b] = [...touches.values()];
     pinch = { d0: Math.max(10, Math.hypot(a[0] - b[0], a[1] - b[1])), mid0: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], scale0: view.scale, ox0: view.ox, oy0: view.oy,
               a0: Math.atan2(b[1] - a[1], b[0] - a[0]), stamp: placing ? { w: placing.w, rot: placing.rot } : null };
@@ -3722,7 +4468,7 @@ canvas.addEventListener("pointerdown", e => {
     moveDrag = { x, y, dr: moving.dr, dc: moving.dc };
   }else if(placing){
     placeDrag = { dx: placing.cx - x, dy: placing.cy - y };
-  }else if(BECK && (tool === "draw" || tool === "erase")){
+  }else if(GRID() && (tool === "draw" || tool === "erase")){
     gridBegin(x, y, tool === "erase");
   }else if(tool === "draw"){
     liveStart = [round2(x), round2(y)];
@@ -3764,7 +4510,7 @@ canvas.addEventListener("pointermove", e => {
       if(moveDrag){ const g = gridGeom(); moving.dc = moveDrag.dc + Math.round((x - moveDrag.x) / g.cell); moving.dr = moveDrag.dr + Math.round((y - moveDrag.y) / g.cell); applyMove(); }
     }else if(placing){
       if(placeDrag){ placing.cx = x + placeDrag.dx; placing.cy = y + placeDrag.dy; }
-    }else if(BECK && gridStroke){
+    }else if(gridStroke){
       gridTo(x, y);
     }else if(tool === "draw" && live){
       if(design.rule === "free"){
@@ -3788,7 +4534,7 @@ function endPointer(e){
   if(e.pointerId !== activeId) return;
   activeId = null; placeDrag = null; moveDrag = null;
   if(mirDrag){ mirDrag = null; save(); setTimeout(() => showHint(""), 1500); render(); return; }
-  if(BECK && gridStroke){ gridEnd(); render(); return; }
+  if(gridStroke){ gridEnd(); render(); return; }
   if(tool === "draw" && live && !placing){
     const add = mirrored(live);
     commit(() => design.strokes.push(...add));
@@ -3817,9 +4563,8 @@ function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
 // ---------- history ----------
 // A restore point: the strokes, plus (in Beck) a copy of each colour's grid.
-function snapshot(){ return BECK ? { strokes: design.strokes.slice(), grid: gridLayers.map(m => new Map(m.cells)) } : design.strokes.slice(); }
+function snapshot(){ return { strokes: design.strokes.slice(), grid: gridLayers.map(m => new Map(m.cells)) }; }
 function restoreSnap(sn){
-  if(!BECK){ design.strokes = sn; return; }
   design.strokes = sn.strokes; gridLayers.forEach((m, i) => { m.cells = new Map(sn.grid[i]); m.version++; });
 }
 function commit(fn){
@@ -3914,7 +4659,7 @@ chipDia.addEventListener("change", () => { syncSpecText(); save(); });
 // Four grids, one per colour (layer 0-2 = inks 1-3, layer 3 = colour 4, the panel colour, which knocks out what is
 // under it). A finger crossing from cell to cell links them at 90 or 45 degrees; the Drawn Codes engine turns the
 // links into rounded strokes and filled enclosures. The grid is centred on the case so mirrors land on cells.
-const gridLayers = BECK ? [0, 1, 2, 3].map(() => new DrawnCodes.GridModel()) : [];
+const gridLayers = [0, 1, 2, 3].map(() => new DrawnCodes.GridModel());
 const L2C = L => L < 3 ? L : -1, C2L = c => c >= 0 ? c : 3;
 const BECK_DEFAULT = { cell: 4, snap: true, a45: [true, true, true, true], a90: [true, true, true, true], fill: [true, true, true, true], order: [0, 1, 2, 3], layers: [[], [], [], []] };
 function beckInit(){
@@ -3956,7 +4701,6 @@ function drawGridLayers(){
 // finely (about 0.1 mm). Cached, because the geometry caches on the identity of the strokes list.
 let geoCache = { sig: null, strokes: null };
 function geoDesign(){
-  if(!BECK) return design;
   const g = gridGeom(), S = clamp(Math.round(g.cell / 0.11), 16, 44);
   const sig = [g.cell, g.ox, g.oy, design.beck.order.join(""), design.beck.fill.join(""), gridLayers.map(m => m.version).join("."), design.strokes.length].join("|");
   if(geoCache.sig !== sig || geoCache.ref !== design.strokes){
@@ -4093,13 +4837,12 @@ function turnMove(cw){
   moving.dr = moving.dc = 0; applyMove();
 }
 function syncBeck(){
-  if(!BECK) return;
   buildStack();
   const L = C2L(ink), b = design.beck;
   b45.classList.toggle("on", b.a45[L]); b90.classList.toggle("on", b.a90[L]); bFill.classList.toggle("on", b.fill[L]); bSnap.classList.toggle("on", b.snap);
   cellMm.value = b.cell;
 }
-if(BECK){
+{
   const flag = (btn, key) => btn.onclick = () => { const L = C2L(ink); design.beck[key][L] = !design.beck[key][L]; if(tool !== "draw") setTool("draw"); syncBeck(); save(); render(); };
   flag(b45, "a45"); flag(b90, "a90"); flag(bFill, "fill");
   bSnap.onclick = () => { design.beck.snap = !design.beck.snap; syncBeck(); save(); };
@@ -4139,8 +4882,8 @@ function rulePts(a, b){
 }
 // Where the mirror lines are (they can be dragged off-centre by their handles).
 // (In Beck they snap to half cells, so a mirrored cell is always a whole cell.)
-const mirCX = () => { const v = design.mirrorCX != null ? design.mirrorCX : spec.width / 2; if(!BECK) return v; const g = gridGeom(); return g.ox + Math.round((v - g.ox) / g.cell * 2) / 2 * g.cell; };
-const mirCY = () => { const v = design.mirrorCY != null ? design.mirrorCY : spec.length / 2; if(!BECK) return v; const g = gridGeom(); return g.oy + Math.round((v - g.oy) / g.cell * 2) / 2 * g.cell; };
+const mirCX = () => { const v = design.mirrorCX != null ? design.mirrorCX : spec.width / 2; if(!GRID()) return v; const g = gridGeom(); return g.ox + Math.round((v - g.ox) / g.cell * 2) / 2 * g.cell; };
+const mirCY = () => { const v = design.mirrorCY != null ? design.mirrorCY : spec.length / 2; if(!GRID()) return v; const g = gridGeom(); return g.oy + Math.round((v - g.oy) / g.cell * 2) / 2 * g.cell; };
 // A stroke or filled shape plus its mirror copies, duplicates dropped (a V stripe mirrored top-bottom is itself).
 function mirrored(s){
   const W = spec.width, L = spec.length, out = [s];
@@ -4500,7 +5243,7 @@ btnFit.onclick = () => { fitView(); render(); };
 const toolBtns = { draw: toolDraw, erase: toolErase, cutouts: toolCut };
 const hints = {
   draw: "Draw with your finger. Strokes are clipped to the plate.",
-  erase: BECK ? "Drag over cells to rub out the selected colour." : "Tap or drag over a stroke to remove it.",
+  erase: "Tap or drag over a stroke (or, in Beck, over grid cells) to remove it.",
   cutouts: "Drag a cutout to move it. Use the slider for a round one's diameter."
 };
 function setTool(t){
@@ -4517,8 +5260,8 @@ toolErase.onclick = () => {
   const now = performance.now(), dbl = now - eraseTap < 400;
   eraseTap = dbl ? 0 : now;
   if(!dbl){ setTool("erase"); showHint("Tap or drag over a stroke to remove it. Double-tap Erase to clear everything."); return; }
-  if(!design.strokes.length && !(BECK && gridLayers.some(m => !m.isEmpty))){ showHint("Nothing to clear."); return; }
-  commit(() => { design.strokes = []; if(BECK) gridLayers.forEach(m => m.clear()); });
+  if(!design.strokes.length && !gridLayers.some(m => !m.isEmpty)){ showHint("Nothing to clear."); return; }
+  commit(() => { design.strokes = []; gridLayers.forEach(m => m.clear()); });
   render(); showHint("Cleared. Undo brings it back.");
 };
 toolCut.onclick = () => setTool("cutouts");
@@ -4700,7 +5443,7 @@ fileIn.addEventListener("change", async () => {
     if(o.spec) spec = validateSpec(o.spec);
     if(o.design) design = Object.assign(clone(DEFAULT_DESIGN), o.design);
     undoStack = []; redoStack = []; ink = 0;
-    if(BECK) beckInit();
+    beckInit(); syncSurface();
     buildInks(); syncSpecText(); syncColorInputs(); syncMode(); updateHistoryButtons(); fitView(); save(); render();
     fileMsg.textContent = `Opened ${f.name} (${design.strokes.length} strokes).`;
   }catch(e){ fileMsg.textContent = "Couldn't open that file: " + e.message; }
@@ -4748,9 +5491,9 @@ ${inks}
 };
 
 btnClear.onclick = () => {
-  if(!design.strokes.length && !(BECK && gridLayers.some(m => !m.isEmpty))) return;
+  if(!design.strokes.length && !gridLayers.some(m => !m.isEmpty)) return;
   if(!confirm("Remove every stroke? You can undo this.")) return;
-  commit(() => { design.strokes = []; if(BECK) gridLayers.forEach(m => m.clear()); });
+  commit(() => { design.strokes = []; gridLayers.forEach(m => m.clear()); });
   render(); closeSheet();
 };
 
@@ -5125,24 +5868,38 @@ phoneSel.addEventListener("change", () => {
   showHint(`${p.name}: ${spec.width} × ${spec.length} × ${spec.thickness} mm. Your drawing is kept; check it still fits.`);
 });
 
-appDraw.onclick = () => { if(BECK) location.href = "../"; else closeSheet(); };
-appBeck.onclick = () => { if(!BECK) location.href = "beck/"; else closeSheet(); };
-(BECK ? appBeck : appDraw).classList.add("on");
+// ---------- drawing surface: Freehand or Beck ----------
+function syncSurface(){
+  const g = GRID();
+  for(const b of surfSeg.querySelectorAll("button")) b.classList.toggle("on", (b.dataset.surf === "grid") === g);
+  ruleSeg.style.display = g ? "none" : "";
+  document.querySelector(".width").style.visibility = g ? "hidden" : "";
+  for(const el of [beckSeg, cellWrap, btnFromCodes, btnMove, document.getElementById("stack")]) el.style.display = g ? "" : "none";
+}
+for(const b of surfSeg.querySelectorAll("button")) b.onclick = () => {
+  const g = b.dataset.surf === "grid"; if(g === GRID()) return;
+  if(moving) endMove(true);
+  gridCancel(); live = null;
+  design.surface = g ? "grid" : "free";
+  if(tool === "cutouts") setTool("draw");
+  syncSurface(); syncBeck(); save(); render();
+  showHint(g ? "Beck: drawing on the grid. Your freehand drawing stays underneath." : "Freehand. Your Beck drawing stays on top of it.");
+};
 
 // ---------- boot ----------
 load();
-if(BECK){
-  beckInit();
-  document.querySelector("header h1").textContent = "Beck";
-  ruleSeg.style.display = "none"; document.querySelector(".width").style.visibility = "hidden";
-  for(const el of [beckSeg, cellWrap, btnFromCodes, btnMove, document.getElementById("stack")]) el.style.display = "";
-}
+mergeOldBeck();
+if(window.APP_MODE === "beck") design.surface = "grid";   // /beck/ opens on the grid
+beckInit();
+syncSurface();
 buildInks();
 syncRules();
 document.getElementById("subtitle").textContent = `${spec.phone || "Phone"}, back view`;
 widthIn.value = width; widthOut.textContent = width.toFixed(1) + " mm";
 new ResizeObserver(resize).observe(canvas);
 resize();
+if(mergeSave) save();   // the joined design is written once, straight away
+if(mergeNote) setTimeout(() => showHint(mergeNote), 400);
 })();
 </script>
 </body>

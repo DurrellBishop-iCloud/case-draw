@@ -88,6 +88,7 @@
   .stack{position:absolute; right:10px; bottom:54px; display:flex; flex-direction:column; gap:8px; align-items:center}
   .stack .dot{width:32px; height:32px; border-radius:50%; box-shadow:0 0 0 1px rgba(0,0,0,.3); border:2px solid var(--panel); cursor:grab; touch-action:none}
   .stack .dot.on{box-shadow:0 0 0 3px var(--text)}
+  #surfSeg button.on{background:var(--text); color:var(--panel)}
   .rules .num, .placebar > .num{display:inline-flex; align-items:center; gap:4px; font-size:13px}
   .rules .num input, .placebar > .num input{width:54px; font:inherit; font-size:15px; padding:6px; border:1px solid var(--line); border-radius:8px}
   .rules .sep{width:1px; align-self:stretch; background:var(--line); margin:4px 2px}
@@ -165,7 +166,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.10.1</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.11.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -187,8 +188,13 @@
 
 <footer>
   <div class="row rules" id="rules">
+    <div class="seg" id="surfSeg" role="group" aria-label="Drawing surface">
+      <button data-surf="free" title="Draw freely">Freehand</button>
+      <button data-surf="grid" title="Draw on the grid, in 90 and 45 degree lines (Drawn Codes)">Beck</button>
+    </div>
+    <span class="sep"></span>
     <div class="seg" id="ruleSeg" role="group" aria-label="Drawing rule">
-      <button data-rule="free" class="on">Free</button>
+      <button data-rule="free" class="on">Pen</button>
       <button data-rule="line">Line</button>
       <button data-rule="vstripe">V stripes</button>
       <button data-rule="hstripe">H stripes</button>
@@ -313,14 +319,6 @@
       <p id="phoneNote" style="margin-top:8px"></p>
     </section>
 
-    <section>
-      <h3>Apps</h3>
-      <div class="row">
-        <button id="appDraw">Case Draw</button>
-        <button id="appBeck">Beck</button>
-      </div>
-      <p style="margin-top:8px">Case Draw is freehand. Beck draws on a grid, in 90° and 45° lines. Each keeps its own design.</p>
-    </section>
 
     <section>
       <h3>Drawing sits</h3>
@@ -457,6 +455,7 @@ const DEFAULT_DESIGN = {
   inkDepth: 0.6,          // inlay: how deep every ink is pocketed
   inkHeights: [0.8, 0.8, 0.8], // relief: how far each ink stands proud; 0 = flush
   maxInkHeight: 5,        // top of the height sliders in the 3D view
+  surface: "free",        // drawing surface: free (Freehand) | grid (Beck)
   rule: "free",           // drawing rule: free | line | vstripe | hstripe
   mirrorX: false,         // mirror left-right
   mirrorY: false,         // mirror top-bottom
@@ -466,9 +465,10 @@ const DEFAULT_DESIGN = {
   textStyle: { family: "system-ui, -apple-system, Helvetica, Arial, sans-serif", weight: 700, size: 8, lead: 120, track: 0, align: "center" },
   strokes: []            // { c: inkIndex, w: mm, pts: [[x,y],...] } or a filled shape { c, fill: MultiPolygon mm }
 };
-// One source, two apps (build.py sets APP_MODE): Case Draw draws freehand; Beck draws on the Drawn Codes grid.
-const BECK = window.APP_MODE === "beck";
-const STORE_KEY = BECK ? "casedraw.beck.v1" : "casedraw.v1";
+// One design, two drawing surfaces: Freehand and Beck (the Drawn Codes grid). design.surface says which one the
+// finger is using; both drawings always show and always print. /beck/ opens with the grid selected.
+const GRID = () => design.surface === "grid";
+const STORE_KEY = "casedraw.v1", BECK_KEY = "casedraw.beck.v1";   // BECK_KEY: Beck's old separate save, merged once
 
 // ---------- state ----------
 let spec = clone(DEFAULT_SPEC);
@@ -501,8 +501,31 @@ function load(){
     if(Array.isArray(design.stripeColors)) design.stripeColors = [...new Set(design.stripeColors.map(k => k === "case" ? "plate" : k))];
   }catch(e){ /* storage unavailable; run in memory */ }
 }
+// Beck used to keep its own design. The first time the joined app loads, bring that drawing in: its grids, its
+// photos and text. Colours: whichever of the two had a drawing keeps its palette (the freehand one if both did).
+function mergeOldBeck(){
+  try{
+    if(design.beckMerged) return;
+    const raw = localStorage.getItem(BECK_KEY); design.beckMerged = true;
+    if(!raw) return;
+    const o = JSON.parse(raw), bd = o.design || {}, bb = bd.beck || {};
+    const hasGrid = Array.isArray(bb.layers) && bb.layers.some(l => l && l.length);
+    if(!hasGrid && !(bd.strokes || []).length) return;
+    const freeEmpty = !design.strokes.length;
+    if(freeEmpty){
+      for(const k of ["plateColor", "inks", "caseInk", "stripeColors", "inkHeights", "mode", "caseStyle"]) if(bd[k] !== undefined) design[k] = clone(bd[k]);
+      if(o.spec && !localStorage.getItem(STORE_KEY)) spec = Object.assign(clone(DEFAULT_SPEC), o.spec);
+    }
+    design.beck = clone(bb);
+    design.strokes = [...design.strokes, ...(bd.strokes || [])];
+    mergeSave = true;
+    if(hasGrid && !freeEmpty) mergeNote = "Your Beck drawing has joined this design (in these colours).";
+    else if(hasGrid) mergeNote = "Your Beck drawing is here. Freehand and Beck are now one design: switch with the buttons at the left of the row.";
+  }catch(e){}
+}
+let mergeNote = "", mergeSave = false;
 // what gets saved: in Beck the grids are written back into the design first
-function designForSave(){ if(BECK) design.beck.layers = gridLayers.map(m => m.serialize()); return design; }
+function designForSave(){ design.beck.layers = gridLayers.map(m => m.serialize()); return design; }
 let saveT = null;
 function save(){
   clearTimeout(saveT);
@@ -632,9 +655,9 @@ function render(){
   ctx.clip();
   { const keep = new Path2D(); keep.rect(-50, -50, spec.width + 100, spec.length + 100); keep.addPath(cutoutsPath(im)); ctx.clip(keep, "evenodd"); }
   ctx.lineCap = "round"; ctx.lineJoin = "round";
-  if(BECK) drawGridLines();
-  for(const s of design.strokes) if(!s.top) drawStroke(s);
-  if(BECK) drawGridLayers();
+  if(GRID()) drawGridLines();
+  for(const s of design.strokes) if(!s.top) drawStroke(s);   // freehand under the grid drawing, text on top of both
+  drawGridLayers();
   if(live) for(const m of mirrored(live)) drawStroke(m);
   for(const s of design.strokes) if(s.top) drawStroke(s);
   if(placing) drawPlacing();
@@ -730,7 +753,7 @@ canvas.addEventListener("pointerdown", e => {
   canvas.setPointerCapture(e.pointerId);
   if(touches.size === 2){
     // second finger: abandon any stroke in progress and start a pinch
-    live = null; dragCut = null; activeId = null; placeDrag = null; moveDrag = null; if(BECK) gridCancel();
+    live = null; dragCut = null; activeId = null; placeDrag = null; moveDrag = null; gridCancel();
     const [a, b] = [...touches.values()];
     pinch = { d0: Math.max(10, Math.hypot(a[0] - b[0], a[1] - b[1])), mid0: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], scale0: view.scale, ox0: view.ox, oy0: view.oy,
               a0: Math.atan2(b[1] - a[1], b[0] - a[0]), stamp: placing ? { w: placing.w, rot: placing.rot } : null };
@@ -754,7 +777,7 @@ canvas.addEventListener("pointerdown", e => {
     moveDrag = { x, y, dr: moving.dr, dc: moving.dc };
   }else if(placing){
     placeDrag = { dx: placing.cx - x, dy: placing.cy - y };
-  }else if(BECK && (tool === "draw" || tool === "erase")){
+  }else if(GRID() && (tool === "draw" || tool === "erase")){
     gridBegin(x, y, tool === "erase");
   }else if(tool === "draw"){
     liveStart = [round2(x), round2(y)];
@@ -796,7 +819,7 @@ canvas.addEventListener("pointermove", e => {
       if(moveDrag){ const g = gridGeom(); moving.dc = moveDrag.dc + Math.round((x - moveDrag.x) / g.cell); moving.dr = moveDrag.dr + Math.round((y - moveDrag.y) / g.cell); applyMove(); }
     }else if(placing){
       if(placeDrag){ placing.cx = x + placeDrag.dx; placing.cy = y + placeDrag.dy; }
-    }else if(BECK && gridStroke){
+    }else if(gridStroke){
       gridTo(x, y);
     }else if(tool === "draw" && live){
       if(design.rule === "free"){
@@ -820,7 +843,7 @@ function endPointer(e){
   if(e.pointerId !== activeId) return;
   activeId = null; placeDrag = null; moveDrag = null;
   if(mirDrag){ mirDrag = null; save(); setTimeout(() => showHint(""), 1500); render(); return; }
-  if(BECK && gridStroke){ gridEnd(); render(); return; }
+  if(gridStroke){ gridEnd(); render(); return; }
   if(tool === "draw" && live && !placing){
     const add = mirrored(live);
     commit(() => design.strokes.push(...add));
@@ -849,9 +872,8 @@ function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
 // ---------- history ----------
 // A restore point: the strokes, plus (in Beck) a copy of each colour's grid.
-function snapshot(){ return BECK ? { strokes: design.strokes.slice(), grid: gridLayers.map(m => new Map(m.cells)) } : design.strokes.slice(); }
+function snapshot(){ return { strokes: design.strokes.slice(), grid: gridLayers.map(m => new Map(m.cells)) }; }
 function restoreSnap(sn){
-  if(!BECK){ design.strokes = sn; return; }
   design.strokes = sn.strokes; gridLayers.forEach((m, i) => { m.cells = new Map(sn.grid[i]); m.version++; });
 }
 function commit(fn){
@@ -946,7 +968,7 @@ chipDia.addEventListener("change", () => { syncSpecText(); save(); });
 // Four grids, one per colour (layer 0-2 = inks 1-3, layer 3 = colour 4, the panel colour, which knocks out what is
 // under it). A finger crossing from cell to cell links them at 90 or 45 degrees; the Drawn Codes engine turns the
 // links into rounded strokes and filled enclosures. The grid is centred on the case so mirrors land on cells.
-const gridLayers = BECK ? [0, 1, 2, 3].map(() => new DrawnCodes.GridModel()) : [];
+const gridLayers = [0, 1, 2, 3].map(() => new DrawnCodes.GridModel());
 const L2C = L => L < 3 ? L : -1, C2L = c => c >= 0 ? c : 3;
 const BECK_DEFAULT = { cell: 4, snap: true, a45: [true, true, true, true], a90: [true, true, true, true], fill: [true, true, true, true], order: [0, 1, 2, 3], layers: [[], [], [], []] };
 function beckInit(){
@@ -988,7 +1010,6 @@ function drawGridLayers(){
 // finely (about 0.1 mm). Cached, because the geometry caches on the identity of the strokes list.
 let geoCache = { sig: null, strokes: null };
 function geoDesign(){
-  if(!BECK) return design;
   const g = gridGeom(), S = clamp(Math.round(g.cell / 0.11), 16, 44);
   const sig = [g.cell, g.ox, g.oy, design.beck.order.join(""), design.beck.fill.join(""), gridLayers.map(m => m.version).join("."), design.strokes.length].join("|");
   if(geoCache.sig !== sig || geoCache.ref !== design.strokes){
@@ -1125,13 +1146,12 @@ function turnMove(cw){
   moving.dr = moving.dc = 0; applyMove();
 }
 function syncBeck(){
-  if(!BECK) return;
   buildStack();
   const L = C2L(ink), b = design.beck;
   b45.classList.toggle("on", b.a45[L]); b90.classList.toggle("on", b.a90[L]); bFill.classList.toggle("on", b.fill[L]); bSnap.classList.toggle("on", b.snap);
   cellMm.value = b.cell;
 }
-if(BECK){
+{
   const flag = (btn, key) => btn.onclick = () => { const L = C2L(ink); design.beck[key][L] = !design.beck[key][L]; if(tool !== "draw") setTool("draw"); syncBeck(); save(); render(); };
   flag(b45, "a45"); flag(b90, "a90"); flag(bFill, "fill");
   bSnap.onclick = () => { design.beck.snap = !design.beck.snap; syncBeck(); save(); };
@@ -1171,8 +1191,8 @@ function rulePts(a, b){
 }
 // Where the mirror lines are (they can be dragged off-centre by their handles).
 // (In Beck they snap to half cells, so a mirrored cell is always a whole cell.)
-const mirCX = () => { const v = design.mirrorCX != null ? design.mirrorCX : spec.width / 2; if(!BECK) return v; const g = gridGeom(); return g.ox + Math.round((v - g.ox) / g.cell * 2) / 2 * g.cell; };
-const mirCY = () => { const v = design.mirrorCY != null ? design.mirrorCY : spec.length / 2; if(!BECK) return v; const g = gridGeom(); return g.oy + Math.round((v - g.oy) / g.cell * 2) / 2 * g.cell; };
+const mirCX = () => { const v = design.mirrorCX != null ? design.mirrorCX : spec.width / 2; if(!GRID()) return v; const g = gridGeom(); return g.ox + Math.round((v - g.ox) / g.cell * 2) / 2 * g.cell; };
+const mirCY = () => { const v = design.mirrorCY != null ? design.mirrorCY : spec.length / 2; if(!GRID()) return v; const g = gridGeom(); return g.oy + Math.round((v - g.oy) / g.cell * 2) / 2 * g.cell; };
 // A stroke or filled shape plus its mirror copies, duplicates dropped (a V stripe mirrored top-bottom is itself).
 function mirrored(s){
   const W = spec.width, L = spec.length, out = [s];
@@ -1532,7 +1552,7 @@ btnFit.onclick = () => { fitView(); render(); };
 const toolBtns = { draw: toolDraw, erase: toolErase, cutouts: toolCut };
 const hints = {
   draw: "Draw with your finger. Strokes are clipped to the plate.",
-  erase: BECK ? "Drag over cells to rub out the selected colour." : "Tap or drag over a stroke to remove it.",
+  erase: "Tap or drag over a stroke (or, in Beck, over grid cells) to remove it.",
   cutouts: "Drag a cutout to move it. Use the slider for a round one's diameter."
 };
 function setTool(t){
@@ -1549,8 +1569,8 @@ toolErase.onclick = () => {
   const now = performance.now(), dbl = now - eraseTap < 400;
   eraseTap = dbl ? 0 : now;
   if(!dbl){ setTool("erase"); showHint("Tap or drag over a stroke to remove it. Double-tap Erase to clear everything."); return; }
-  if(!design.strokes.length && !(BECK && gridLayers.some(m => !m.isEmpty))){ showHint("Nothing to clear."); return; }
-  commit(() => { design.strokes = []; if(BECK) gridLayers.forEach(m => m.clear()); });
+  if(!design.strokes.length && !gridLayers.some(m => !m.isEmpty)){ showHint("Nothing to clear."); return; }
+  commit(() => { design.strokes = []; gridLayers.forEach(m => m.clear()); });
   render(); showHint("Cleared. Undo brings it back.");
 };
 toolCut.onclick = () => setTool("cutouts");
@@ -1732,7 +1752,7 @@ fileIn.addEventListener("change", async () => {
     if(o.spec) spec = validateSpec(o.spec);
     if(o.design) design = Object.assign(clone(DEFAULT_DESIGN), o.design);
     undoStack = []; redoStack = []; ink = 0;
-    if(BECK) beckInit();
+    beckInit(); syncSurface();
     buildInks(); syncSpecText(); syncColorInputs(); syncMode(); updateHistoryButtons(); fitView(); save(); render();
     fileMsg.textContent = `Opened ${f.name} (${design.strokes.length} strokes).`;
   }catch(e){ fileMsg.textContent = "Couldn't open that file: " + e.message; }
@@ -1780,9 +1800,9 @@ ${inks}
 };
 
 btnClear.onclick = () => {
-  if(!design.strokes.length && !(BECK && gridLayers.some(m => !m.isEmpty))) return;
+  if(!design.strokes.length && !gridLayers.some(m => !m.isEmpty)) return;
   if(!confirm("Remove every stroke? You can undo this.")) return;
-  commit(() => { design.strokes = []; if(BECK) gridLayers.forEach(m => m.clear()); });
+  commit(() => { design.strokes = []; gridLayers.forEach(m => m.clear()); });
   render(); closeSheet();
 };
 
@@ -2157,24 +2177,38 @@ phoneSel.addEventListener("change", () => {
   showHint(`${p.name}: ${spec.width} × ${spec.length} × ${spec.thickness} mm. Your drawing is kept; check it still fits.`);
 });
 
-appDraw.onclick = () => { if(BECK) location.href = "../"; else closeSheet(); };
-appBeck.onclick = () => { if(!BECK) location.href = "beck/"; else closeSheet(); };
-(BECK ? appBeck : appDraw).classList.add("on");
+// ---------- drawing surface: Freehand or Beck ----------
+function syncSurface(){
+  const g = GRID();
+  for(const b of surfSeg.querySelectorAll("button")) b.classList.toggle("on", (b.dataset.surf === "grid") === g);
+  ruleSeg.style.display = g ? "none" : "";
+  document.querySelector(".width").style.visibility = g ? "hidden" : "";
+  for(const el of [beckSeg, cellWrap, btnFromCodes, btnMove, document.getElementById("stack")]) el.style.display = g ? "" : "none";
+}
+for(const b of surfSeg.querySelectorAll("button")) b.onclick = () => {
+  const g = b.dataset.surf === "grid"; if(g === GRID()) return;
+  if(moving) endMove(true);
+  gridCancel(); live = null;
+  design.surface = g ? "grid" : "free";
+  if(tool === "cutouts") setTool("draw");
+  syncSurface(); syncBeck(); save(); render();
+  showHint(g ? "Beck: drawing on the grid. Your freehand drawing stays underneath." : "Freehand. Your Beck drawing stays on top of it.");
+};
 
 // ---------- boot ----------
 load();
-if(BECK){
-  beckInit();
-  document.querySelector("header h1").textContent = "Beck";
-  ruleSeg.style.display = "none"; document.querySelector(".width").style.visibility = "hidden";
-  for(const el of [beckSeg, cellWrap, btnFromCodes, btnMove, document.getElementById("stack")]) el.style.display = "";
-}
+mergeOldBeck();
+if(window.APP_MODE === "beck") design.surface = "grid";   // /beck/ opens on the grid
+beckInit();
+syncSurface();
 buildInks();
 syncRules();
 document.getElementById("subtitle").textContent = `${spec.phone || "Phone"}, back view`;
 widthIn.value = width; widthOut.textContent = width.toFixed(1) + " mm";
 new ResizeObserver(resize).observe(canvas);
 resize();
+if(mergeSave) save();   // the joined design is written once, straight away
+if(mergeNote) setTimeout(() => showHint(mergeNote), 400);
 })();
 </script>
 </body>
