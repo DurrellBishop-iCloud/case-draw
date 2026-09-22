@@ -83,7 +83,7 @@ window.PHONES = [
    "length": 150.01,
    "thickness": 8.75,
    "lipDrop": 1.0,
-   "cutoutEdge": 3.0,
+   "cutoutInset": 2.7,
    "cornerProfile": [
     0.0,
     0.04,

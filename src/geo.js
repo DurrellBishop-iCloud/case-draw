@@ -290,11 +290,14 @@
   }
   // A back cutout grown by `grow` beyond its clearance: a circle { x, y, d } or a rounded rectangle
   // { x, y, w, h, r } (x, y = centre), e.g. the Phone (3)'s camera island.
-  // `cutoutEdge`: a rounded-rectangle cutout is first shrunk so its opening (clearance included) stays that far in
-  // from the phone's edge; growing it afterwards keeps every outline (panel hole, collar, case hole) a clean
-  // rounded rectangle.
+  // `cutoutInset`: a rounded-rectangle cutout is first shrunk on all four sides by that much (the iPhone 17 Pro's
+  // plateau base slopes, so the opening can come in off the slope). `cutoutEdge`: it is also kept that far in from
+  // the phone's edge, clearance included. Growing it afterwards keeps every outline (panel hole, collar, case hole)
+  // a clean rounded rectangle.
   function cutShape(spec, c, grow) {
     const k = (spec.cutoutClearance || 0) / 2 + (grow || 0);
+    if (c.w && spec.cutoutInset > 0 && c.w > 2 * spec.cutoutInset + 1 && c.h > 2 * spec.cutoutInset + 1)
+      c = { ...c, w: c.w - 2 * spec.cutoutInset, h: c.h - 2 * spec.cutoutInset, r: Math.min(c.r || 0, (c.w - 2 * spec.cutoutInset) / 2, (c.h - 2 * spec.cutoutInset) / 2) };
     if (c.w && spec.cutoutEdge) {
       const e = spec.cutoutEdge + (spec.cutoutClearance || 0) / 2;
       const x0 = Math.max(c.x - c.w / 2, e), x1 = Math.min(c.x + c.w / 2, spec.width - e), y0 = Math.max(c.y - c.h / 2, e), y1 = Math.min(c.y + c.h / 2, spec.length - e);
