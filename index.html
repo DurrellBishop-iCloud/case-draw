@@ -165,7 +165,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.10.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.10.1</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnSave" aria-label="Save">Save</button>
   <button id="btn3d" aria-label="3D preview">3D</button>
@@ -4636,10 +4636,12 @@ async function download(name, text, type){
   const binary = text instanceof Uint8Array;
   const hosted = await hostedSave(name, text);
   if(hosted) return hosted;
-  // 1. native share sheet (best on phones: Files, AirDrop, Drive)
+  // 1. native share sheet, on phones and tablets only (Files, AirDrop, Drive). Desktop Safari offers one too,
+  //    but there a straight download into Downloads is what you want.
+  const touchDevice = navigator.maxTouchPoints > 1 && !/Macintosh|Windows/.test(navigator.userAgent) || /iPhone|iPad|Android/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   try{
     const file = new File([text], name, { type });
-    if(navigator.canShare && navigator.canShare({ files: [file] })){
+    if(touchDevice && navigator.canShare && navigator.canShare({ files: [file] })){
       await navigator.share({ files: [file], title: name });
       return "shared";
     }
