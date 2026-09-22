@@ -93,7 +93,7 @@ mode with its own drawing surface. Tag `draw-v1.7.0` = Case Draw before Beck exi
 ## Phones (v1.10.0)
 
 - `lipDrop` (v1.11.3): the lip and the top of the wall sit this far below the screen face, for phones whose edges curve away. Button `fromScreen` is still measured from the screen face (`frameLevels().zScreen`). Set per phone in `LIP_DROP` in tools/make_phones.py; iPhone 17 = 0.7, iPhone 17 Pro = 1.0 (Durrell, from the phone).
-- `cutoutEdge` (v1.12.0): the back opening is clipped to `phoneOutline(spec, grow - cutoutEdge)` inside `cutoutRegion`, so panel hole, case hole and collars all move in together. Per phone in `CUTOUT_EDGE` in make_phones.py; iPhone 17 Pro = 3 (its measured bar plateau reaches 0.6 from the edge but the base slopes).
+- `cutoutEdge` (v1.12.0): `cutShape` shrinks a rounded-rect cutout so its opening (with clearance) is that far from the edge, then grows it as usual, so panel hole, collar and case hole stay clean concentric rounded rects (v1.13.2; v1.12.0 clipped to an inset outline, which left kinked corners). Per phone in `CUTOUT_EDGE` in make_phones.py; iPhone 17 Pro = 3 (its measured bar plateau reaches 0.6 from the edge but the base slopes).
 - `buttonChamfer` (v1.12.0, default 0.8, every phone): `windowRects` grows each button slot by (chamfer - depth) near the outside face; skipped within 0.4 mm of the lip and the floor. `windowRects` is exported for tests.
 Settings > Phone picks a preset; it replaces only the phone's keys (`PHONE_KEYS`), never the case settings.
 - Nothing Phone (3) = `DEFAULT_SPEC` (hand-measured). `specVersion: 4`: button slots 5.2 high, `buttonClearance` 1.2.

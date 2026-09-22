@@ -290,8 +290,16 @@
   }
   // A back cutout grown by `grow` beyond its clearance: a circle { x, y, d } or a rounded rectangle
   // { x, y, w, h, r } (x, y = centre), e.g. the Phone (3)'s camera island.
+  // `cutoutEdge`: a rounded-rectangle cutout is first shrunk so its opening (clearance included) stays that far in
+  // from the phone's edge; growing it afterwards keeps every outline (panel hole, collar, case hole) a clean
+  // rounded rectangle.
   function cutShape(spec, c, grow) {
     const k = (spec.cutoutClearance || 0) / 2 + (grow || 0);
+    if (c.w && spec.cutoutEdge) {
+      const e = spec.cutoutEdge + (spec.cutoutClearance || 0) / 2;
+      const x0 = Math.max(c.x - c.w / 2, e), x1 = Math.min(c.x + c.w / 2, spec.width - e), y0 = Math.max(c.y - c.h / 2, e), y1 = Math.min(c.y + c.h / 2, spec.length - e);
+      if (x1 - x0 > 1 && y1 - y0 > 1) c = { ...c, x: (x0 + x1) / 2, y: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0, r: Math.min(c.r || 0, (x1 - x0) / 2, (y1 - y0) / 2) };
+    }
     if (c.w) {
       const w = c.w + 2 * k, h = c.h + 2 * k;
       return [roundedRect(w, h, (c.r || 0) + k, 12)[0].map(p => [p[0] + c.x - w / 2, p[1] + c.y - h / 2])].map(r => [r]);
@@ -313,10 +321,7 @@
       const a = cs[i], b = cs[j], hw = Math.min(half(a), half(b)) + k, dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1, nx = -dy / l * hw, ny = dx / l * hw;
       extra.push([[[[a.x + nx, a.y + ny], [b.x + nx, b.y + ny], [b.x - nx, b.y - ny], [a.x - nx, a.y - ny], [a.x + nx, a.y + ny]]]]);
     }
-    const all = ops.union(...shapes, ...extra);
-    // `cutoutEdge`: the opening (with its clearance) stays this far in from the phone's edge; a grown region moves out
-    // with it, so collars keep their width
-    return spec.cutoutEdge ? ops.intersection(all, phoneOutline(spec, (grow || 0) - spec.cutoutEdge, 16)) : all;
+    return ops.union(...shapes, ...extra);
   }
   // the collar stops short of the side wall (a camera can sit closer to the edge than the collar is wide)
   const cutRing = (spec, wall) => ops.intersection(ops.difference(cutoutRegion(spec, wall), cutoutRegion(spec, 0)), phoneOutline(spec, (spec.phoneClearance || 0) - (spec.collarClearance || 0.15), 16));
