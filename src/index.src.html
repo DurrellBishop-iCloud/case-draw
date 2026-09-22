@@ -181,7 +181,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.15.3</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.16.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnNew" aria-label="New design">New</button>
   <button id="btnSave" aria-label="Save">Save</button>
@@ -357,7 +357,7 @@
         <output id="inkDepthOut" style="font:700 15px var(--dot)">0.6 mm</output>
       </label>
       <label class="field" style="margin-top:10px"><input type="checkbox" id="beyondChk"> Drawing beyond the edge</label>
-      <p style="margin-top:4px">Anything drawn outside the case outline, and touching it, becomes a solid piece in that colour: flush with the back and going towards the screen as deep as the <b>Beyond</b> slider in the 3D view says (from 1 mm, the panel alone, to the whole depth of the case). Pen strokes only: photos, text and Beck drawings stay inside the case. Loose shapes that don't touch the case are left out. Button holes and ports are cut through the pieces.</p>
+      <p style="margin-top:4px">Anything drawn outside the case outline, and touching it, becomes a solid piece in that colour: flush with the back and going towards the screen as deep as the <b>Beyond</b> slider in the 3D view says (from 1 mm, the panel alone, to the whole depth of the case). Pen strokes and Beck shapes only: photos and text stay inside the case. Loose shapes that don't touch the case are left out. Button holes and ports are cut through the pieces.</p>
     </section>
 
     <section>
@@ -564,7 +564,7 @@ function mergeOldBeck(){
 }
 let mergeNote = "", mergeSave = false;
 // what gets saved: in Beck the grids are written back into the design first
-function designForSave(){ design.beck.layers = gridLayers.map(m => m.serialize()); return design; }
+function designForSave(){ design.beck.layers = gridLayers.map(m => m.serialize()); const g = gridGeom(); design.beck.nx = g.nx; design.beck.ny = g.ny; return design; }
 let saveT = null;
 function save(){
   clearTimeout(saveT);
@@ -590,7 +590,7 @@ function resize(){
 let fitScale = 0;
 function zoomed(){ return fitScale && Math.abs(view.scale - fitScale) > 1e-6; }
 function fitView(){
-  const pad = 28, m = 2 * frameOuter() + (design.beyond ? 30 : 0);   // room to draw round the case
+  const pad = 28, m = 2 * frameOuter() + (design.beyond ? 2 * BEYOND_ROOM : 0);   // room to draw round the case
   view.scale = Math.min((W - pad * 2) / (spec.width + m), (H - pad * 2) / (spec.length + m));
   view.ox = (W - spec.width * view.scale) / 2;
   view.oy = (H - spec.length * view.scale) / 2;
@@ -692,13 +692,14 @@ function render(){
     ctx.restore();
   }
   if(design.beyond){
-    // drawing beyond the edge: the pen strokes again, outside the case outline (photos, text and Beck stay inside)
+    // drawing beyond the edge: the pen strokes and the Beck drawing again, outside the case outline (photos and text stay inside)
     ctx.save();
     const out = new Path2D(); out.rect(-1000, -1000, spec.width + 2000, spec.length + 2000);
     const ring = CaseGeo.phoneOutline(spec, frameOuter(), 16)[0]; out.moveTo(ring[0][0], ring[0][1]); for(let i = 1; i < ring.length; i++) out.lineTo(ring[i][0], ring[i][1]); out.closePath();
     ctx.clip(out, "evenodd");
     ctx.lineCap = "round"; ctx.lineJoin = "round";
     for(const s of design.strokes) if(!s.fill && s.c !== HOLE) drawStroke(s);
+    drawGridLayers();
     if(live && live.c !== HOLE) for(const m of mirrored(live)) drawStroke(m);
     ctx.restore();
   }
@@ -956,14 +957,30 @@ canvas.addEventListener("pointercancel", () => { eraseBatchOpen = false; });
 // links into rounded strokes and filled enclosures. The grid is centred on the case so mirrors land on cells.
 const gridLayers = [0, 1, 2, 3].map(() => new DrawnCodes.GridModel());
 const L2C = L => L < 3 ? L : -1, C2L = c => c >= 0 ? c : 3;
+const BEYOND_ROOM = 15;   // mm of drawing room past the case, on the grid and in the fitted view
 const BECK_DEFAULT = { cell: 4, snap: true, a45: [true, true, true, true], a90: [true, true, true, true], fill: [true, true, true, true], order: [0, 1, 2, 3], layers: [[], [], [], []] };
 function beckInit(){
   design.beck = Object.assign(clone(BECK_DEFAULT), design.beck || {});
-  gridLayers.forEach((m, i) => { m.restore(design.beck.layers[i] || []); m.undoStack = []; });
+  // the grid is counted out from the case's centre, so a different phone, cell size or grid margin renumbers the
+  // cells: shift a saved drawing by the difference so it stays where it was drawn
+  const g = gridGeom(), was = design.beck.nx ? { nx: design.beck.nx, ny: design.beck.ny } : gridGeomBefore(g.cell);
+  const dc = (g.nx - was.nx) / 2, dr = (g.ny - was.ny) / 2;
+  gridLayers.forEach((m, i) => {
+    let list = design.beck.layers[i] || [];
+    if(dc || dr) list = list.map(([r, c, code]) => [r + dr, c + dc, code]);
+    m.restore(list); m.undoStack = [];
+  });
+  design.beck.nx = g.nx; design.beck.ny = g.ny;
+}
+// the grid before v1.16.0, when it stopped one cell past the case: how many cells a drawing saved then was counted in
+function gridGeomBefore(cell){
+  const m = frameOuter() + cell;
+  return { nx: 2 * Math.ceil((spec.width / 2 + m) / cell), ny: 2 * Math.ceil((spec.length / 2 + m) / cell) };
 }
 // cell (r, c) covers x from ox + c*cell; the case centre sits on a cell boundary
 function gridGeom(){
-  const cell = clamp((design.beck && design.beck.cell) || 4, 2, 12), m = frameOuter() + cell;
+  // BEYOND_ROOM: the grid carries on past the case, so Beck can draw pieces beyond the edge as well
+  const cell = clamp((design.beck && design.beck.cell) || 4, 2, 12), m = frameOuter() + cell + BEYOND_ROOM;
   const nx = Math.ceil((spec.width / 2 + m) / cell), ny = Math.ceil((spec.length / 2 + m) / cell);
   return { cell, nx: 2 * nx, ny: 2 * ny, ox: spec.width / 2 - nx * cell, oy: spec.length / 2 - ny * cell };
 }
@@ -1004,7 +1021,7 @@ function geoDesign(){
       const sil = layerSil(L, S); if(!sil) continue;
       const rings = sil.loops.map(lp => { const r = lp.map(q => [round2(g.ox + (q[0] + 0.5) * g.cell), round2(g.oy + (q[1] + 0.5) * g.cell)]); r.push(r[0]); return CaseGeo.simplify(r, 0.03); });
       const fill = CaseGeo.ringsToRegion(rings);
-      if(fill.length) fills.push({ c: L2C(L), fill });
+      if(fill.length) fills.push({ c: L2C(L), fill, beck: true });   // beck: may also go beyond the edge
     }
     geoCache = { sig, ref: design.strokes, strokes: [...design.strokes, ...fills] };
   }

@@ -95,7 +95,7 @@ mode with its own drawing surface. Tag `draw-v1.7.0` = Case Draw before Beck exi
 
 ## Drawing beyond the edge (v1.13.0)
 
-- Pen strokes only (v1.13.1): photo/text/Beck fills are sampled over the phone + 2 mm, so past the outline they would be a sliver; `beyondRegions` runs paintCells on the non-fill strokes and restores `cellCache`.
+- Pen strokes and Beck shapes (v1.16.0): `beyondRegions` runs paintCells on `!st.fill || st.beck` and restores `cellCache`. Photo/text fills are sampled over the phone + 2 mm, so past the outline they would be a sliver (v1.13.1). Beck's grid now runs `BEYOND_ROOM` (15 mm) past the case; `beckInit` shifts a saved drawing by the difference between the stored `beck.nx/ny` and the current grid (or, for saves before v1.16.0, `gridGeomBefore`), so it stays put.
 - `design.beyond` + `design.beyondDepth` (mm from the panel face towards the screen, 1 .. panel + case H). `beyondRegions` (geo.js): per ink, paint cells minus the case outline (`phoneOutline(c + wall)`), keeping only pieces touching the outline. Panel gets "Ink N beyond the edge" parts (full panel thickness, + ink height in relief); the case gets keys `beyond0..2` from z = 0 to `beyondDepth - panelT`, with `windowRects(spec, z, 400)` cut through so buttons/ports stay open. Separate parts (not merged into ink meshes) so touching faces never make bad edges.
 - UI: Settings > Case sides checkbox, and a "Beyond edge" button + dashed-dot depth slider in the 3D view. The 2D view draws strokes a second time clipped to outside the case outline. `node test/beyond.js`.
 

@@ -355,8 +355,8 @@
   // Drawing beyond the edge (design.beyond): what is drawn outside the case outline, per ink, becomes solid pieces
   // that carry on from the back towards the screen, design.beyondDepth mm deep measured from the panel's face.
   // Only pieces that touch the case outline are kept (a loose island would fall off). Cached on the strokes.
-  // Pen strokes only: filled shapes (photo, text, Beck) are sampled over the phone plus a 2 mm border, which past the
-  // case outline would only be a hair-thin sliver.
+  // Pen strokes and Beck shapes only: photo and text shapes are sampled over the phone plus a 2 mm border, which past
+  // the case outline would only be a hair-thin sliver.
   let beyondCache = {};
   function beyondRegions(spec, design) {
     if (!design.beyond || !(design.beyondDepth > 0)) return null;
@@ -364,7 +364,7 @@
     const sig = JSON.stringify([spec.width, spec.length, spec.cornerRadius, spec.cornerProfile, spec.cornerProfileY, o, n]);
     if (beyondCache.ref === design.strokes && beyondCache.len === design.strokes.length && beyondCache.sig === sig) return beyondCache.out;
     const outline = phoneOutline(spec, o, 16), lists = Array.from({ length: n }, () => []);
-    const saved = cellCache, pen = (design.strokes || []).filter(st => !st.fill);
+    const saved = cellCache, pen = (design.strokes || []).filter(st => !st.fill || st.beck);
     for (const C of paintCells(pen, n)) if (C.ink >= 0) lists[C.ink].push(C.region);
     cellCache = saved;   // keep the full drawing's partition cached
     let per = lists.map(l => { if (!l.length) return []; const u = l.length === 1 ? l[0] : ops.union(...l); return clean(ops.difference(u, outline), 0.2); });
