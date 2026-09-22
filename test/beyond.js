@@ -17,5 +17,7 @@ for(const [mode,caseStyle] of [["inlay","plain"],["inlay","extrude"],["relief","
   if(bad) process.exitCode=1;
   console.log(mode,caseStyle,depth,ps.map(p=>p.name).filter(x=>/beyond/.test(x)).join(","),"bad",bad,n.join(" "));
  }}
+const photo={c:0,fill:[[[[-2,-2],[W+2,-2],[W+2,L+2],[-2,L+2],[-2,-2]]]]};
+if(G.beyondRegions(S,{...D,strokes:[photo],beyond:true,beyondDepth:5})){process.exitCode=1;console.log("FAIL: a photo's 2 mm border made a beyond piece");}
 const c=G.buildCoupon(S,{...D,strokes,beyond:true,beyondDepth:6},32);const cb=badEdges(c.parts);if(cb[0]) process.exitCode=1;console.log("coupon bad",cb[0]);
 console.log(process.exitCode?"FAIL":"OK: beyond-the-edge pieces export clean");
