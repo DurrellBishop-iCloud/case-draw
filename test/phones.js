@@ -7,7 +7,7 @@ const html = fs.readFileSync(path.join(__dirname, '../src/index.src.html'), 'utf
 const BASE = eval('(' + html.match(/const DEFAULT_SPEC = (\{[\s\S]*?\n\});/)[1] + ')');
 const D = eval('(' + html.match(/const DEFAULT_DESIGN = (\{[\s\S]*?\n\});/)[1] + ')');
 const window = {}; eval(fs.readFileSync(path.join(__dirname, '../src/phones.js'), 'utf8'));
-const KEYS = ['phone', 'width', 'length', 'thickness', 'lipDrop', 'cutoutEdge', 'cutoutInset', 'cornerRadius', 'cornerProfile', 'cornerProfileY', 'cutouts', 'sideCutouts', 'source'];
+const KEYS = ['phone', 'width', 'length', 'thickness', 'lipDrop', 'lipRaise', 'cutoutEdge', 'cutoutInset', 'cornerRadius', 'cornerProfile', 'cornerProfileY', 'cutouts', 'sideCutouts', 'source'];
 
 function badEdges(parts) {
   const xml = new TextDecoder().decode(G.to3MF(parts, 't')); let bad = 0;

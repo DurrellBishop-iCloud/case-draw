@@ -745,7 +745,7 @@
   // ---------- body ----------
   // One-piece case body in its own print coordinates: z=0 is the outer back face (on the bed), walls rise from it.
   function frameLevels(spec) {
-    const slabT = spec.slabThickness || 1.0, c = spec.phoneClearance || 0, lipT = spec.lipThickness || 0.8;
+    const slabT = spec.slabThickness || 1.0, c = spec.phoneClearance || 0, lipT = (spec.lipThickness || 0.8) + (spec.lipRaise || 0);   // lipRaise: per phone, a taller lip that stands proud of the glass
     const zPhone = slabT + c;                       // where the phone's back rests
     const zScreen = zPhone + spec.thickness;        // the screen face
     const zLip = zScreen - (spec.lipDrop || 0);      // top of the side wall: lower where the phone's edge curves away

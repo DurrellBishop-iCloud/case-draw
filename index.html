@@ -181,7 +181,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.15.1</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.15.2</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnNew" aria-label="New design">New</button>
   <button id="btnSave" aria-label="Save">Save</button>
@@ -395,7 +395,7 @@
       <h3>Phone and case dimensions <span class="tag">mm</span></h3>
       <p>Back view: x from the left edge, y from the top edge. A cutout is a circle (<code>x, y, d</code>) or a rounded rectangle (<code>x, y</code> = centre, <code>w, h, r</code>), like the camera island. <code>cutoutClearance</code> is added all round. Side cutouts run along an edge, measured from the top-left corner. Anything marked <code>placeholder</code> is a guess, so measure and correct it, or drag camera cutouts with the Cutouts tool.</p>
       <p><code>inkMargin</code> keeps strokes clear of the plate edge and the cutouts, so raised ink never sits flush with an edge where it could catch.</p>
-      <p>Case: one piece, printed back-down. A back slab (<code>slabThickness</code>) with the wall (<code>frameWall</code>) rising from it and a lip over the screen (<code>lipDepth</code>, <code>lipThickness</code>; <code>lipDrop</code> lowers it below the screen face for phones whose edges curve away, e.g. 0.7 on iPhone 17). Button holes are rounded slots in the wall: <code>from</code>/<code>to</code> along the edge from the top-left corner, <code>fromScreen</code> = centre below the screen face, <code>height</code>; <code>buttonClearance</code> is added at each end and <code>buttonChamfer</code> bevels the outside edge. <code>cutoutInset</code> brings the camera opening in that far on every side; <code>cutoutEdge</code> keeps it that far in from the edge of the phone. A side cutout without <code>fromScreen</code> runs the full wall height with <code>windowRadius</code> corners.</p>
+      <p>Case: one piece, printed back-down. A back slab (<code>slabThickness</code>) with the wall (<code>frameWall</code>) rising from it and a lip over the screen (<code>lipDepth</code>, <code>lipThickness</code>; <code>lipDrop</code> lowers it below the screen face for phones whose edges curve away, e.g. 0.7 on iPhone 17; <code>lipRaise</code> makes it thicker, so it stands proud of the glass). Button holes are rounded slots in the wall: <code>from</code>/<code>to</code> along the edge from the top-left corner, <code>fromScreen</code> = centre below the screen face, <code>height</code>; <code>buttonClearance</code> is added at each end and <code>buttonChamfer</code> bevels the outside edge. <code>cutoutInset</code> brings the camera opening in that far on every side; <code>cutoutEdge</code> keeps it that far in from the edge of the phone. A side cutout without <code>fromScreen</code> runs the full wall height with <code>windowRadius</code> corners.</p>
       <p>Panel: a flat plate the size of the case back (<code>panelThickness</code>), glued to the slab. In inlay mode it carries short collars round the camera holes (<code>collars</code>, <code>collarWall</code>, <code>collarClearance</code>) that key into oversized holes in the slab, so it can only go on straight.</p>
       <textarea id="specJson" spellcheck="false"></textarea>
       <div class="row" style="margin-top:8px">
@@ -1210,7 +1210,7 @@
   // ---------- body ----------
   // One-piece case body in its own print coordinates: z=0 is the outer back face (on the bed), walls rise from it.
   function frameLevels(spec) {
-    const slabT = spec.slabThickness || 1.0, c = spec.phoneClearance || 0, lipT = spec.lipThickness || 0.8;
+    const slabT = spec.slabThickness || 1.0, c = spec.phoneClearance || 0, lipT = (spec.lipThickness || 0.8) + (spec.lipRaise || 0);   // lipRaise: per phone, a taller lip that stands proud of the glass
     const zPhone = slabT + c;                       // where the phone's back rests
     const zScreen = zPhone + spec.thickness;        // the screen face
     const zLip = zScreen - (spec.lipDrop || 0);      // top of the side wall: lower where the phone's edge curves away
@@ -2477,6 +2477,7 @@ window.PHONES = [
    "length": 150.01,
    "thickness": 8.75,
    "lipDrop": 1.0,
+   "lipRaise": 0.5,
    "cutoutInset": 2.7,
    "cornerProfile": [
     0.0,
@@ -6013,7 +6014,7 @@ window.addEventListener("keydown", e => {
 
 // ---------- phones ----------
 // Presets replace only what belongs to the phone; the case settings (wall, clearances...) stay as they are.
-const PHONE_KEYS = ["phone", "width", "length", "thickness", "lipDrop", "cutoutEdge", "cutoutInset", "cornerRadius", "cornerProfile", "cornerProfileY", "cutouts", "sideCutouts", "source"];
+const PHONE_KEYS = ["phone", "width", "length", "thickness", "lipDrop", "lipRaise", "cutoutEdge", "cutoutInset", "cornerRadius", "cornerProfile", "cornerProfileY", "cutouts", "sideCutouts", "source"];
 const PHONES = [{ id: "nothing-3", name: "Nothing Phone (3)", group: "Nothing", note: "Measured by hand with calipers (the USB-C opening is still an estimate).", spec: Object.fromEntries(PHONE_KEYS.filter(k => k in DEFAULT_SPEC).map(k => [k, DEFAULT_SPEC[k]])) }].concat(window.PHONES || []);
 function buildPhoneList(){
   phoneSel.innerHTML = "";
@@ -6024,7 +6025,7 @@ function buildPhoneList(){
     phoneSel.appendChild(og);
   }
   const cur = PHONES.find(p => p.spec.phone === spec.phone);
-  if(cur){ let ch = false; for(const k of ["lipDrop", "cutoutInset"]) if(cur.spec[k] != null && spec[k] == null){ spec[k] = cur.spec[k]; ch = true; } if(ch) save(); }   // designs saved before the preset had these
+  if(cur){ let ch = false; for(const k of ["lipDrop", "lipRaise", "cutoutInset"]) if(cur.spec[k] != null && spec[k] == null){ spec[k] = cur.spec[k]; ch = true; } if(ch) save(); }   // designs saved before the preset had these
   if(cur) phoneSel.value = cur.id; else { const o = document.createElement("option"); o.value = ""; o.textContent = spec.phone || "Custom"; phoneSel.prepend(o); phoneSel.value = ""; }
   phoneNote.textContent = cur ? (cur.note || "") : "Custom dimensions (edited below).";
 }

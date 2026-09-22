@@ -19,6 +19,8 @@ r2 = lambda v: round(v + 1e-9, 2)
 
 # the case lip can sit this far below the screen face, where the phone's edge has already curved in (checked on the phone)
 LIP_DROP = {"iphone-17": 0.7, "iphone-17-pro": 1.0}
+# ...and this much thicker than lipThickness, so its top stands proud of the glass and guards it in a fall (checked on the phone)
+LIP_RAISE = {"iphone-17-pro": 0.5}
 # the camera opening comes in this far on all four sides, off the plateau's sloping base (checked on the phone):
 # 2.7 puts it 3 mm in from the phone's edge on the top and sides
 CUTOUT_INSET = {"iphone-17-pro": 2.7}
@@ -37,6 +39,7 @@ def preset(d):
         notes.append("camera outline (" + ", ".join(sorted(m["plateau"])) + ") measured from Apple's linework to about 0.2 mm, as the sheet does not dimension it")
     spec = {"phone": d["name"], "width": W, "length": L, "thickness": T}
     if d["id"] in LIP_DROP: spec["lipDrop"] = LIP_DROP[d["id"]]
+    if d["id"] in LIP_RAISE: spec["lipRaise"] = LIP_RAISE[d["id"]]
     if d["id"] in CUTOUT_INSET: spec["cutoutInset"] = CUTOUT_INSET[d["id"]]
     prof = (d.get("corner") or {}).get("profile")
     if prof and len(prof) >= 4:
