@@ -84,6 +84,11 @@ mode with its own drawing surface. Tag `draw-v1.7.0` = Case Draw before Beck exi
 - Tests: `node test/manifold.js` covers shared geometry; Beck tracing needs a browser (Playwright WebKit was used:
   draw by mouse drags, call `window.__beckExport()` for the Save bytes, count non-manifold edges, then the Orca CLI).
 
+## Drawing beyond the edge (v1.13.0)
+
+- `design.beyond` + `design.beyondDepth` (mm from the panel face towards the screen, 1 .. panel + case H). `beyondRegions` (geo.js): per ink, paint cells minus the case outline (`phoneOutline(c + wall)`), keeping only pieces touching the outline. Panel gets "Ink N beyond the edge" parts (full panel thickness, + ink height in relief); the case gets keys `beyond0..2` from z = 0 to `beyondDepth - panelT`, with `windowRects(spec, z, 400)` cut through so buttons/ports stay open. Separate parts (not merged into ink meshes) so touching faces never make bad edges.
+- UI: Settings > Case sides checkbox, and a "Beyond edge" button + dashed-dot depth slider in the 3D view. The 2D view draws strokes a second time clipped to outside the case outline. `node test/beyond.js`.
+
 ## Phones (v1.10.0)
 
 - `lipDrop` (v1.11.3): the lip and the top of the wall sit this far below the screen face, for phones whose edges curve away. Button `fromScreen` is still measured from the screen face (`frameLevels().zScreen`). Set per phone in `LIP_DROP` in tools/make_phones.py; iPhone 17 = 0.7, iPhone 17 Pro = 1.0 (Durrell, from the phone).

@@ -322,6 +322,28 @@
   const cutRing = (spec, wall) => ops.intersection(ops.difference(cutoutRegion(spec, wall), cutoutRegion(spec, 0)), phoneOutline(spec, (spec.phoneClearance || 0) - (spec.collarClearance || 0.15), 16));
   function throughOn(design) { return design.caseStyle === "extrude"; }
   function collarOn(spec, design) { return spec.collars !== false && design.mode === "inlay" && spec.cutouts.length > 0; }
+  // Drawing beyond the edge (design.beyond): what is drawn outside the case outline, per ink, becomes solid pieces
+  // that carry on from the back towards the screen, design.beyondDepth mm deep measured from the panel's face.
+  // Only pieces that touch the case outline are kept (a loose island would fall off). Cached on the strokes.
+  let beyondCache = {};
+  function beyondRegions(spec, design) {
+    if (!design.beyond || !(design.beyondDepth > 0)) return null;
+    const o = (spec.phoneClearance || 0) + spec.frameWall, n = (design.inks || []).length;
+    const sig = JSON.stringify([spec.width, spec.length, spec.cornerRadius, spec.cornerProfile, spec.cornerProfileY, o, n]);
+    if (beyondCache.ref === design.strokes && beyondCache.len === design.strokes.length && beyondCache.sig === sig) return beyondCache.out;
+    const outline = phoneOutline(spec, o, 16), lists = Array.from({ length: n }, () => []);
+    for (const C of paintCells(design.strokes || [], n)) if (C.ink >= 0) lists[C.ink].push(C.region);
+    let per = lists.map(l => { if (!l.length) return []; const u = l.length === 1 ? l[0] : ops.union(...l); return clean(ops.difference(u, outline), 0.2); });
+    const all = per.filter(r => r.length);
+    let out = null;
+    if (all.length) {
+      const band = ops.difference(phoneOutline(spec, o + 0.05, 16), outline);
+      const touching = (all.length === 1 ? all[0] : ops.union(...all)).filter(poly => ops.intersection([poly], band).length);
+      if (touching.length) { per = per.map(r => r.length ? clean(ops.intersection(r, touching), 0.2) : r); if (per.some(r => r.length)) out = per; }
+    }
+    beyondCache = { ref: design.strokes, len: design.strokes.length, sig, out };
+    return out;
+  }
   function buildRegions(spec, design) {
     const off = plateOffsets(spec);
     const holes = spec.cutouts.length ? [cutoutRegion(spec, 0)] : [];
@@ -594,6 +616,21 @@
   // ---------- parts ----------
   // Returns { parts: [{ name, color, mesh }], mode, notes }
   function buildParts(spec, design, clip) {
+    const res = buildPanelParts(spec, design, clip), ext = beyondRegions(spec, design);
+    if (!ext) return res;
+    // beyond pieces in the panel: the panel's full thickness (plus the ink's height in relief), same orientation
+    const T = plateLevels(spec).skinT, W = spec.width, L = spec.length, inlay = design.mode === "inlay";
+    const xf = inlay ? (x, y) => [W - x, L - y] : (x, y) => [x, L - y];
+    const K = mp => (clip && mp.length) ? ops.intersection(mp, clip) : mp;
+    ext.forEach((r, i) => {
+      r = K(r); if (!r.length) return;
+      const h = inlay ? 0 : Math.max(0, (design.inkHeights && design.inkHeights[i]) || 0), m = new Mesh();
+      extrude(r, 0, T + h, m, xf);
+      res.parts.push({ name: `Ink ${i + 1} beyond the edge`, color: design.inks[i], mesh: m });
+    });
+    return res;
+  }
+  function buildPanelParts(spec, design, clip) {
     const lv = plateLevels(spec);
     const K = mp => (clip && mp.length) ? ops.intersection(mp, clip) : mp;
     const d = Math.min(design.inkDepth || 0.6, lv.skinT - 0.3);
@@ -684,8 +721,9 @@
   // `buttonClearance` is added to each end along the edge.
   // Button holes get a 45-degree chamfer `buttonChamfer` deep on the outside face (default 0), so a finger finds the
   // button: at depth d into the wall the slot is grown by (chamfer - d). The chamfer stops 0.4 mm short of the lip
-  // and of the case floor, so it never eats into them.
-  function windowRects(spec, z) {
+  // and of the case floor, so it never eats into them. `reach`: how far out past the wall the opening runs (default
+  // 1 mm; the drawing-beyond-the-edge pieces are cut with a long reach so the buttons and ports stay open).
+  function windowRects(spec, z, reach) {
     const c = spec.phoneClearance || 0, wall = spec.frameWall, W = spec.width, L = spec.length, m = c + wall + 1, t = c + wall;
     const { zPhone, zScreen, zLip } = frameLevels(spec), gap = spec.buttonClearance || 0;
     const out = [];
@@ -712,11 +750,11 @@
         for (let i = 0; i <= n; i++) {
           const d = ch * i / n, s = span(k, h, r, zc, ch - d);
           if (!s) break;
-          rows.push([i === 0 ? -1 : d, s[0], s[1]]);
+          rows.push([i === 0 ? -(reach || 1) : d, s[0], s[1]]);
         }
         if (!rows.length) continue;
         if (through) rows.push([t + 1, through[0], through[1]]);
-      } else if (through) rows.push([-1, through[0], through[1]], [t + 1, through[0], through[1]]);
+      } else if (through) rows.push([-(reach || 1), through[0], through[1]], [t + 1, through[0], through[1]]);
       else continue;
       if (rows.length < 2) continue;
       const ring = rows.map(([d, a]) => at(k.side, d, a)).concat(rows.slice().reverse().map(([d, , b]) => at(k.side, d, b)));
@@ -740,12 +778,13 @@
   function keyColor(key, design) {
     if (key === "case") { const k = design.caseInk; return (k >= 0 && design.inks && design.inks[k]) || design.plateColor || "#F2F2EF"; }   // the case is made of one of the four colours
     if (key === "plate") return design.plateColor || "#F2F2EF";
-    const i = parseInt(key.slice(3), 10);
+    const i = parseInt(key.replace(/^\D+/, ""), 10);
     return (design.inks && design.inks[i]) || "#888888";
   }
   function keyName(key) {
     if (key === "case") return "Case";
     if (key === "plate") return "Case (panel colour)";
+    if (key.startsWith("beyond")) return "Case ink " + (parseInt(key.slice(6), 10) + 1) + " beyond the edge";
     return "Case ink " + (parseInt(key.slice(3), 10) + 1);
   }
 
@@ -827,6 +866,21 @@
         }
       }
       for (const b of runs) pieces.push({ key: b.key, region: b.region, z0, z1 });
+    }
+    // drawing beyond the edge: from the back towards the screen, as deep as the slider says (from the panel's face),
+    // with the button holes and ports cut out through it so they stay usable
+    const ext = beyondRegions(spec, design);
+    if (ext) {
+      const zE = Math.min(H, design.beyondDepth - plateLevels(spec).skinT);
+      if (zE > 0.1) for (const [z0, z1a, kind] of zs) {
+        if (z0 >= zE - 1e-6) break;
+        const z1 = Math.min(z1a, zE), w = kind === "window" ? windowRects(spec, (z0 + z1) / 2, 400) : [];
+        ext.forEach((r, i) => {
+          if (!r.length) return;
+          const reg = w.length ? clean(ops.difference(r, ...w)) : r;
+          if (reg.length) pieces.push({ key: "beyond" + i, region: reg, z0, z1 });
+        });
+      }
     }
     // Merge a run's layers wherever its footprint doesn't change (everywhere except round the button windows),
     // so walls are one solid rather than a stack of 0.2 mm slices with coincident faces.
@@ -1108,5 +1162,5 @@ ${items} </build>
   }
 
 
-  return { cutoutRegion, windowRects, ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
+  return { cutoutRegion, windowRects, beyondRegions, ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
 });
