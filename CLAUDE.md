@@ -85,6 +85,8 @@ mode with its own drawing surface. Tag `draw-v1.7.0` = Case Draw before Beck exi
   draw by mouse drags, call `window.__beckExport()` for the Save bytes, count non-manifold edges, then the Orca CLI).
 
 ## Phones (v1.10.0)
+
+- `lipDrop` (v1.11.3): the lip and the top of the wall sit this far below the screen face, for phones whose edges curve away. Button `fromScreen` is still measured from the screen face (`frameLevels().zScreen`). Set per phone in `LIP_DROP` in tools/make_phones.py; iPhone 17 = 0.7 (Durrell, from the phone).
 Settings > Phone picks a preset; it replaces only the phone's keys (`PHONE_KEYS`), never the case settings.
 - Nothing Phone (3) = `DEFAULT_SPEC` (hand-measured). `specVersion: 4`: button slots 5.2 high, `buttonClearance` 1.2.
 - 26 iPhones (12 mini ... 17 Pro Max, 16e, 17e, Air) from Apple's public dimensional drawings

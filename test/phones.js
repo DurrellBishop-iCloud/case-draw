@@ -7,7 +7,7 @@ const html = fs.readFileSync(path.join(__dirname, '../src/index.src.html'), 'utf
 const BASE = eval('(' + html.match(/const DEFAULT_SPEC = (\{[\s\S]*?\n\});/)[1] + ')');
 const D = eval('(' + html.match(/const DEFAULT_DESIGN = (\{[\s\S]*?\n\});/)[1] + ')');
 const window = {}; eval(fs.readFileSync(path.join(__dirname, '../src/phones.js'), 'utf8'));
-const KEYS = ['phone', 'width', 'length', 'thickness', 'cornerRadius', 'cornerProfile', 'cornerProfileY', 'cutouts', 'sideCutouts', 'source'];
+const KEYS = ['phone', 'width', 'length', 'thickness', 'lipDrop', 'cornerRadius', 'cornerProfile', 'cornerProfileY', 'cutouts', 'sideCutouts', 'source'];
 
 function badEdges(parts) {
   const xml = new TextDecoder().decode(G.to3MF(parts, 't')); let bad = 0;
@@ -38,7 +38,7 @@ for (const ph of window.PHONES) {
   for (const k of spec.sideCutouts) {
     const lim = k.side === 'left' || k.side === 'right' ? L : W;
     if (!(k.from - gap > 3 && k.to + gap < lim - 3)) issues.push(`${k.name}: opening runs into a corner (${k.from}-${k.to})`);
-    if (typeof k.fromScreen === 'number') { const top = lv.zLip - k.fromScreen + k.height / 2, bot = lv.zLip - k.fromScreen - k.height / 2; if (top > lv.zLip - 0.15 || bot < lv.zPhone + 0.15) issues.push(`${k.name}: slot ${k.height} high does not fit the ${spec.thickness} wall`); }
+    if (typeof k.fromScreen === 'number') { const top = lv.zScreen - k.fromScreen + k.height / 2, bot = lv.zScreen - k.fromScreen - k.height / 2; if (top > lv.zLip - 0.15 || bot < lv.zPhone + 0.15) issues.push(`${k.name}: slot ${k.height} high does not fit the ${spec.thickness} wall`); }
     (bySide[k.side] = bySide[k.side] || []).push(k);
   }
   for (const list of Object.values(bySide)) { list.sort((a, b) => a.from - b.from); for (let i = 1; i < list.length; i++) if (list[i].from - gap - (list[i - 1].to + gap) < 1.2) issues.push(`${list[i - 1].name} / ${list[i].name}: less than 1.2 mm of wall between the openings`); }

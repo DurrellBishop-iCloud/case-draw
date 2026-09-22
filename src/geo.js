@@ -671,8 +671,9 @@
   function frameLevels(spec) {
     const slabT = spec.slabThickness || 1.0, c = spec.phoneClearance || 0, lipT = spec.lipThickness || 0.8;
     const zPhone = slabT + c;                       // where the phone's back rests
-    const zLip = zPhone + spec.thickness;           // top of the side wall
-    return { slabT, zPhone, zLip, H: zLip + lipT };
+    const zScreen = zPhone + spec.thickness;        // the screen face
+    const zLip = zScreen - (spec.lipDrop || 0);      // top of the side wall: lower where the phone's edge curves away
+    return { slabT, zPhone, zScreen, zLip, H: zLip + lipT };
   }
   // Openings through the side wall at height z (case print coordinates). A cutout with `fromScreen` is a button
   // hole: a rounded slot `height` tall (default 4) centred that far below the screen face, with `radius` ends
@@ -680,11 +681,11 @@
   // `buttonClearance` is added to each end along the edge.
   function windowRects(spec, z) {
     const c = spec.phoneClearance || 0, wall = spec.frameWall, W = spec.width, L = spec.length, m = c + wall + 1;
-    const { zPhone, zLip } = frameLevels(spec), gap = spec.buttonClearance || 0;
+    const { zPhone, zScreen, zLip } = frameLevels(spec), gap = spec.buttonClearance || 0;
     const out = [];
     for (const k of spec.sideCutouts || []) {
       let zc, h, r;
-      if (typeof k.fromScreen === "number") { h = k.height || 4; zc = zLip - k.fromScreen; r = Math.min(k.radius != null ? k.radius : h / 2, h / 2); }
+      if (typeof k.fromScreen === "number") { h = k.height || 4; zc = zScreen - k.fromScreen; r = Math.min(k.radius != null ? k.radius : h / 2, h / 2); }
       else { h = zLip - zPhone; zc = (zPhone + zLip) / 2; r = Math.min(spec.windowRadius || 0, h / 2); }
       const dz = Math.abs(z - zc); if (dz >= h / 2) continue;
       const e = dz - (h / 2 - r), inset = e > 0 ? r - Math.sqrt(Math.max(0, r * r - e * e)) : 0;
