@@ -378,6 +378,32 @@
     beyondCache = { ref: design.strokes, len: design.strokes.length, sig, out };
     return out;
   }
+  // A metal magnet ring (MagSafe size) let into the back: an annular channel `t` deep with `lip` mm of plastic
+  // inside and outside it, its top flush with the highest thing on the back. `fit` is the total play on the
+  // diameter, for printer tolerance. Returns null when the ring is off.
+  function ringGeom(spec, design) {
+    const r = design && design.ring;
+    if (!r || !r.on) return null;
+    const fit = r.fit != null ? r.fit : 0.3, t = r.t || 0.64, lip = r.lip != null ? r.lip : 1.0;
+    const rOut = (r.od || 55) / 2 + fit / 2, rIn = Math.max(1, (r.id || 45) / 2 - fit / 2);
+    const cx = r.cx != null ? r.cx : spec.width / 2, cy = r.cy != null ? r.cy : spec.length / 2;
+    const disc = q => circle(cx, cy, q, 128);
+    return { cx, cy, rIn, rOut, lip, t,
+      channel: ops.difference(disc(rOut), disc(rIn)),            // where the metal ring sits
+      keepout: ops.difference(disc(rOut + lip), disc(rIn - lip)), // no drawing here: ring plus its plastic lips
+      inLip: ops.difference(disc(rIn), disc(rIn - lip)),
+      outLip: ops.difference(disc(rOut + lip), disc(rOut)) };
+  }
+  // Why the ring won't do, in a sentence, or "" when it fits.
+  function ringProblem(spec, design) {
+    const g = ringGeom(spec, design); if (!g) return "";
+    if (g.rIn - g.lip <= 0.5) return "The inner lip leaves no room: make the ring's inner size bigger.";
+    const outer = circle(g.cx, g.cy, g.rOut + g.lip, 128);
+    if (ops.difference(outer, phoneOutline(spec, -1, 16)).length) return "The ring runs off the back: move its centre, or use a smaller ring.";
+    const cuts = withHoles(spec, design);
+    if ((cuts.cutouts || []).length || cuts._holes) { if (ops.intersection(outer, cutoutRegion(cuts, 1)).length) return "The ring overlaps the camera opening or a drawn hole: move its centre."; }
+    return "";
+  }
   function buildRegions(spec, design) {
     spec = withHoles(spec, design);
     const off = plateOffsets(spec);
@@ -415,8 +441,17 @@
     groups.sort((a, b) => a.ink - b.ink || a.top - b.top);
     const inks = design.inks.map((_, i) => { const l = groups.filter(g => g.ink === i).map(g => g.region); return l.length ? (l.length === 1 ? l[0] : ops.union(...l)) : []; });
     const all = allInkRegion(design.strokes, design.inks.length);
-    const allInk = all.length ? ops.intersection(all, inkArea) : [];
-    return { plate: plateRegion, plateWide, inks, groups, allInk, off };
+    let allInk = all.length ? ops.intersection(all, inkArea) : [];
+    let plate = plateRegion;
+    const ring = ringGeom(spec, design);
+    if (ring) {   // the drawing keeps out of the ring and its lips
+      const cut = mp => mp.length ? clean(ops.difference(mp, ring.keepout)) : mp;
+      inks.forEach((r, i) => { inks[i] = cut(r); });
+      for (const g of groups) g.region = cut(g.region);
+      allInk = cut(allInk);
+      if (design.mode === "inlay") plate = clean(ops.difference(plate, ring.channel));   // the channel is a groove in the panel's face
+    }
+    return { plate, plateWide, inks, groups: groups.filter(g => g.region.length), allInk, off, ring };
   }
 
   // ---------- meshing ----------
@@ -654,6 +689,25 @@
   function buildParts(spec, design, clip) {
     spec = withHoles(spec, design);
     const res = buildPanelParts(spec, design, clip), ext = beyondRegions(spec, design);
+    const ring = ringGeom(spec, design);
+    if (ring) {
+      // one part, so the surround can print in its own colour: the floor under the metal ring, and the lips beside it
+      const T = plateLevels(spec).skinT, W = spec.width, L = spec.length, inlay = design.mode === "inlay";
+      const K = mp => (clip && mp.length) ? ops.intersection(mp, clip) : mp;
+      const m = new Mesh();
+      if (inlay) {
+        // face-down: the channel is a groove in the face, so this part is what is left under it
+        const xf = (x, y) => [W - x, L - y];
+        const floor = K(ring.channel); if (floor.length) extrude(floor, ring.t, T, m, xf);
+      } else {
+        // relief: a boss standing on the back, as tall as the tallest ink (and never shorter than the ring plus a floor)
+        const xf = (x, y) => [x, L - y];
+        const hi = Math.max(ring.t + 0.4, ...design.inks.map((_, i) => Math.max(0, (design.inkHeights && design.inkHeights[i]) || 0)));
+        for (const band of [ring.inLip, ring.outLip]) { const r = K(band); if (r.length) extrude(r, T - 0.02, T + hi, m, xf); }
+        const floor = K(ring.channel); if (floor.length) extrude(floor, T - 0.02, T + hi - ring.t, m, xf);
+      }
+      if (m.t.length) res.parts.push({ name: "Magnet ring surround", color: design.plateColor, mesh: m });
+    }
     if (!ext) return res;
     // beyond pieces in the panel: the panel's full thickness (plus the ink's height in relief), same orientation
     const T = plateLevels(spec).skinT, W = spec.width, L = spec.length, inlay = design.mode === "inlay";
@@ -1200,5 +1254,5 @@ ${items} </build>
   }
 
 
-  return { cutoutRegion, windowRects, beyondRegions, ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
+  return { cutoutRegion, windowRects, beyondRegions, ringGeom, ringProblem, ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
 });
