@@ -386,8 +386,9 @@
     const plateRegion = region(off.narrow, holes);
     const plateWide = region(off.wide, holes);
     // inks keep clear of the plate edge and the cutouts by inkMargin
-    // "Through" style: inks run to the outer edge so the drawing carries on down the case sides.
-    const m = spec.inkMargin || 0, edgeM = throughOn(design) ? 0 : m;
+    // "Through" style, and drawing beyond the edge: inks run right to the outer edge, so the drawing carries on down
+    // the case sides, or into the piece beyond, with no band of panel colour between
+    const m = spec.inkMargin || 0, edgeM = (throughOn(design) || design.beyond) ? 0 : m;
     const inkArea = m > 0
       ? region(off.narrow - edgeM, hasCuts(spec) ? [cutoutRegion(spec, m)] : [])
       : plateRegion;

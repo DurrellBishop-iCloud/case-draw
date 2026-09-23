@@ -181,7 +181,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.16.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.16.1</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnNew" aria-label="New design">New</button>
   <button id="btnSave" aria-label="Save">Save</button>
@@ -672,7 +672,7 @@ function render(){
 
   // strokes clipped to the plate's outer face, kept inkMargin clear of the edge and the holes
   ctx.save();
-  const im = spec.inkMargin || 0;
+  const im = design.beyond ? 0 : (spec.inkMargin || 0);   // beyond the edge: the drawing runs to the edge and on
   outlinePath(plateOff().narrow - im);
   ctx.clip();
   { const keep = new Path2D(); keep.rect(-50, -50, spec.width + 100, spec.length + 100); keep.addPath(cutoutsPath(im)); ctx.clip(keep, "evenodd"); }
