@@ -181,7 +181,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.16.1</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.17.0-ring</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnNew" aria-label="New design">New</button>
   <button id="btnSave" aria-label="Save">Save</button>
@@ -378,6 +378,22 @@
         <label class="field"><input type="checkbox" id="sc_ink1"> Ink 2</label>
         <label class="field"><input type="checkbox" id="sc_ink2"> Ink 3</label>
       </div>
+    </section>
+
+    <section>
+      <h3>Magnet ring</h3>
+      <label class="field"><input type="checkbox" id="ringOn"> A metal magnet ring in the back</label>
+      <p>A channel for a stick-on metal ring (MagSafe size), with plastic lips inside and outside it. Its top comes flush with the highest thing on the back, and the drawing keeps out of it. The surround prints as its own part, so it can have its own colour.</p>
+      <div class="row" id="ringOpts" style="display:none">
+        <label class="field">Outer <input type="number" id="ringOd" min="10" max="120" step="0.1" style="width:72px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm</label>
+        <label class="field">Inner <input type="number" id="ringId" min="5" max="115" step="0.1" style="width:72px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm</label>
+        <label class="field">Thick <input type="number" id="ringT" min="0.2" max="5" step="0.01" style="width:72px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm</label>
+        <label class="field">Lip <input type="number" id="ringLip" min="0.4" max="5" step="0.1" style="width:72px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm</label>
+        <label class="field">Play <input type="number" id="ringFit" min="0" max="1" step="0.05" style="width:72px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm</label>
+        <label class="field">Centre x <input type="number" id="ringCx" title="from the left edge" min="0" max="200" step="0.5" style="width:72px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm</label>
+        <label class="field">y from top <input type="number" id="ringCy" title="from the top edge; on an iPhone the magnets are 71.5 mm up from the bottom" min="0" max="250" step="0.5" style="width:72px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm</label>
+      </div>
+      <div class="err" id="ringErr"></div>
     </section>
 
     <section>
@@ -843,6 +859,32 @@
     beyondCache = { ref: design.strokes, len: design.strokes.length, sig, out };
     return out;
   }
+  // A metal magnet ring (MagSafe size) let into the back: an annular channel `t` deep with `lip` mm of plastic
+  // inside and outside it, its top flush with the highest thing on the back. `fit` is the total play on the
+  // diameter, for printer tolerance. Returns null when the ring is off.
+  function ringGeom(spec, design) {
+    const r = design && design.ring;
+    if (!r || !r.on) return null;
+    const fit = r.fit != null ? r.fit : 0.3, t = r.t || 0.64, lip = r.lip != null ? r.lip : 1.0;
+    const rOut = (r.od || 55) / 2 + fit / 2, rIn = Math.max(1, (r.id || 45) / 2 - fit / 2);
+    const cx = r.cx != null ? r.cx : spec.width / 2, cy = r.cy != null ? r.cy : spec.length / 2;
+    const disc = q => circle(cx, cy, q, 128);
+    return { cx, cy, rIn, rOut, lip, t,
+      channel: ops.difference(disc(rOut), disc(rIn)),            // where the metal ring sits
+      keepout: ops.difference(disc(rOut + lip), disc(rIn - lip)), // no drawing here: ring plus its plastic lips
+      inLip: ops.difference(disc(rIn), disc(rIn - lip)),
+      outLip: ops.difference(disc(rOut + lip), disc(rOut)) };
+  }
+  // Why the ring won't do, in a sentence, or "" when it fits.
+  function ringProblem(spec, design) {
+    const g = ringGeom(spec, design); if (!g) return "";
+    if (g.rIn - g.lip <= 0.5) return "The inner lip leaves no room: make the ring's inner size bigger.";
+    const outer = circle(g.cx, g.cy, g.rOut + g.lip, 128);
+    if (ops.difference(outer, phoneOutline(spec, -1, 16)).length) return "The ring runs off the back: move its centre, or use a smaller ring.";
+    const cuts = withHoles(spec, design);
+    if ((cuts.cutouts || []).length || cuts._holes) { if (ops.intersection(outer, cutoutRegion(cuts, 1)).length) return "The ring overlaps the camera opening or a drawn hole: move its centre."; }
+    return "";
+  }
   function buildRegions(spec, design) {
     spec = withHoles(spec, design);
     const off = plateOffsets(spec);
@@ -880,8 +922,17 @@
     groups.sort((a, b) => a.ink - b.ink || a.top - b.top);
     const inks = design.inks.map((_, i) => { const l = groups.filter(g => g.ink === i).map(g => g.region); return l.length ? (l.length === 1 ? l[0] : ops.union(...l)) : []; });
     const all = allInkRegion(design.strokes, design.inks.length);
-    const allInk = all.length ? ops.intersection(all, inkArea) : [];
-    return { plate: plateRegion, plateWide, inks, groups, allInk, off };
+    let allInk = all.length ? ops.intersection(all, inkArea) : [];
+    let plate = plateRegion;
+    const ring = ringGeom(spec, design);
+    if (ring) {   // the drawing keeps out of the ring and its lips
+      const cut = mp => mp.length ? clean(ops.difference(mp, ring.keepout)) : mp;
+      inks.forEach((r, i) => { inks[i] = cut(r); });
+      for (const g of groups) g.region = cut(g.region);
+      allInk = cut(allInk);
+      if (design.mode === "inlay") plate = clean(ops.difference(plate, ring.channel));   // the channel is a groove in the panel's face
+    }
+    return { plate, plateWide, inks, groups: groups.filter(g => g.region.length), allInk, off, ring };
   }
 
   // ---------- meshing ----------
@@ -1119,6 +1170,25 @@
   function buildParts(spec, design, clip) {
     spec = withHoles(spec, design);
     const res = buildPanelParts(spec, design, clip), ext = beyondRegions(spec, design);
+    const ring = ringGeom(spec, design);
+    if (ring) {
+      // one part, so the surround can print in its own colour: the floor under the metal ring, and the lips beside it
+      const T = plateLevels(spec).skinT, W = spec.width, L = spec.length, inlay = design.mode === "inlay";
+      const K = mp => (clip && mp.length) ? ops.intersection(mp, clip) : mp;
+      const m = new Mesh();
+      if (inlay) {
+        // face-down: the channel is a groove in the face, so this part is what is left under it
+        const xf = (x, y) => [W - x, L - y];
+        const floor = K(ring.channel); if (floor.length) extrude(floor, ring.t, T, m, xf);
+      } else {
+        // relief: a boss standing on the back, as tall as the tallest ink (and never shorter than the ring plus a floor)
+        const xf = (x, y) => [x, L - y];
+        const hi = Math.max(ring.t + 0.4, ...design.inks.map((_, i) => Math.max(0, (design.inkHeights && design.inkHeights[i]) || 0)));
+        for (const band of [ring.inLip, ring.outLip]) { const r = K(band); if (r.length) extrude(r, T - 0.02, T + hi, m, xf); }
+        const floor = K(ring.channel); if (floor.length) extrude(floor, T - 0.02, T + hi - ring.t, m, xf);
+      }
+      if (m.t.length) res.parts.push({ name: "Magnet ring surround", color: design.plateColor, mesh: m });
+    }
     if (!ext) return res;
     // beyond pieces in the panel: the panel's full thickness (plus the ink's height in relief), same orientation
     const T = plateLevels(spec).skinT, W = spec.width, L = spec.length, inlay = design.mode === "inlay";
@@ -1665,7 +1735,7 @@ ${items} </build>
   }
 
 
-  return { cutoutRegion, windowRects, beyondRegions, ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
+  return { cutoutRegion, windowRects, beyondRegions, ringGeom, ringProblem, ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
 });
 
 </script>
@@ -4301,6 +4371,8 @@ const DEFAULT_DESIGN = {
   mirrorCY: null,
   caseInk: -1,            // which of the four colours the case body is made of: -1 = the panel colour, 0-2 = an ink
   textStyle: { family: "system-ui, -apple-system, Helvetica, Arial, sans-serif", weight: 700, size: 8, lead: 120, track: 0, align: "center" },
+  // a metal magnet ring (MagSafe size) let into the back; off unless you turn it on
+  ring: { on: false, od: 55, id: 45, t: 0.64, lip: 1.0, fit: 0.3, cx: null, cy: null },
   beyond: false,          // drawing beyond the edge of the case becomes solid pieces
   beyondDepth: 4,         // ...this deep, from the panel's face towards the screen (mm)
   strokes: []            // { c: inkIndex, w: mm, pts: [[x,y],...] } or a filled shape { c, fill: MultiPolygon mm }
@@ -4516,6 +4588,20 @@ function render(){
     if(live && live.c !== HOLE) for(const m of mirrored(live)) drawStroke(m);
     ctx.restore();
   }
+  // the magnet ring: the drawing keeps out of it, so it covers the strokes
+  const rg = CaseGeo.ringGeom(spec, design);
+  if(rg){
+    const disc = (r, path) => { path.moveTo(rg.cx + r, rg.cy); path.arc(rg.cx, rg.cy, r, 0, Math.PI * 2); return path; };
+    ctx.save();
+    const lips = new Path2D(); disc(rg.rOut + rg.lip, lips); disc(rg.rIn - rg.lip, lips);
+    ctx.fillStyle = design.plateColor; ctx.fill(lips, "evenodd");
+    const band = new Path2D(); disc(rg.rOut, band); disc(rg.rIn, band);
+    ctx.fillStyle = "#B9BDC4"; ctx.fill(band, "evenodd");   // the metal ring itself
+    ctx.lineWidth = 1 / view.scale; ctx.strokeStyle = "rgba(0,0,0,.35)";
+    ctx.stroke(lips); ctx.stroke(band);
+    ctx.restore();
+  }
+
   // mirror lines
   if(design.mirrorX || design.mirrorY){
     ctx.save(); ctx.setLineDash([2, 2]); ctx.lineWidth = 1 / view.scale; ctx.strokeStyle = "rgba(0,0,0,.45)"; ctx.beginPath();
@@ -5432,7 +5518,7 @@ function syncCaseBtn(){ if(caseBtn) caseBtn.style.boxShadow = `inset 0 0 0 5px $
 
 // ---------- settings sheet ----------
 const sheet = document.getElementById("sheet"), scrim = document.getElementById("scrim");
-function openSheet(){ buildPhoneList(); syncSpecText(); syncColorInputs(); syncMode(); syncInkDepth(); syncStyle(); sheet.classList.add("open"); scrim.classList.add("open"); }
+function openSheet(){ buildPhoneList(); syncSpecText(); syncColorInputs(); syncMode(); syncInkDepth(); syncStyle(); syncRing(); sheet.classList.add("open"); scrim.classList.add("open"); }
 function closeSheet(){ sheet.classList.remove("open"); scrim.classList.remove("open"); }
 btnSettings.onclick = openSheet; btnClose.onclick = closeSheet; scrim.onclick = closeSheet;
 
@@ -5658,6 +5744,44 @@ btnExport3mf.onclick = () => {
     btnExport3mf.disabled = false;
   }, 30);
 };
+
+// ---------- magnet ring ----------
+const ringFields = { od: ringOd, id: ringId, t: ringT, lip: ringLip, fit: ringFit, cx: ringCx, cy: ringCy };
+function ringDef(){ if(!design.ring) design.ring = clone(DEFAULT_DESIGN.ring); return design.ring; }
+// Where a ring goes when you first turn it on. On an iPhone, where Apple's magnets are: centred across the phone,
+// its centre MAGSAFE_UP mm up from the bottom (Durrell, measured on the 17 Pro). Otherwise across the middle of the
+// back, pushed down if the camera is in the way.
+const MAGSAFE_UP = 71.5;
+function ringHome(){
+  const r = ringDef(), rad = (r.od || 55) / 2 + (r.fit != null ? r.fit : 0.3) / 2 + (r.lip != null ? r.lip : 1);
+  let y;
+  if(/iphone/i.test(spec.phone || "")) y = spec.length - MAGSAFE_UP;
+  else{
+    let camBottom = 0;
+    for(const poly of CaseGeo.cutoutRegion(spec, 0)) for(const q of poly[0]) camBottom = Math.max(camBottom, q[1]);
+    y = Math.max(spec.length / 2, camBottom + rad + 2);
+  }
+  return [round2(spec.width / 2), round2(Math.min(Math.max(y, rad + 2), spec.length - rad - 2))];
+}
+function syncRing(){
+  const r = ringDef();
+  ringOn.checked = !!r.on;
+  ringOpts.style.display = r.on ? "" : "none";
+  const home = ringHome();
+  for(const k in ringFields) ringFields[k].value = r[k] != null ? r[k] : k === "cx" ? home[0] : home[1];
+  ringErr.textContent = r.on ? CaseGeo.ringProblem(spec, design) : "";
+}
+function ringChanged(){ syncRing(); save(); render(); if(viewer.classList.contains("open")) scheduleRebuild(); }
+ringOn.addEventListener("change", () => {
+  const r = ringDef(); r.on = ringOn.checked;
+  if(r.on && r.cx == null){ const [x, y] = ringHome(); r.cx = x; r.cy = y; }
+  ringChanged();
+  if(r.on) showHint("Magnet ring on. Set its size and centre in Settings; the drawing keeps out of it.");
+});
+for(const k in ringFields) ringFields[k].addEventListener("change", () => {
+  const v = parseFloat(ringFields[k].value); if(!isFinite(v)) return;
+  ringDef()[k] = v; ringChanged();
+});
 
 // ---------- case style ----------
 const styHelp = {

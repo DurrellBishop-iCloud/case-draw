@@ -84,6 +84,11 @@ mode with its own drawing surface. Tag `draw-v1.7.0` = Case Draw before Beck exi
 - Tests: `node test/manifold.js` covers shared geometry; Beck tracing needs a browser (Playwright WebKit was used:
   draw by mouse drags, call `window.__beckExport()` for the Save bytes, count non-manifold edges, then the Orca CLI).
 
+## Magnet ring (v1.17.0, branch `ring`)
+
+- `design.ring = { on, od 55, id 45, t 0.64, lip 1, fit 0.3, cx, cy }`: a channel for a stick-on MagSafe-size metal ring. `ringGeom` (geo.js) gives the channel, the keepout (channel + lip each side) and the lips; `buildRegions` cuts the keepout out of every ink and, in inlay, the channel out of the panel. `buildParts` adds one part, "Magnet ring surround": in inlay the floor left under the groove (z = t..T), in relief a boss from the panel face to the tallest ink (never under t + 0.4), with the channel floor t below its top, so the ring finishes flush with the highest thing on the back. `ringProblem(spec, design)` returns why it does not fit (off the back, over the camera, no room for the inner lip); Settings shows it.
+- Default centre: iPhones get Apple's magnet position, centred across the phone and 71.5 mm up from the bottom (`MAGSAFE_UP`, Durrell, measured on the 17 Pro); other phones get the middle of the back, pushed clear of the camera. `node test/ring.js`.
+
 ## Holes (v1.15.0)
 
 - The old Cutouts tool (drag the phone's camera cutouts) is gone; cutouts are edited in the Settings JSON. The **Holes** tool draws pen strokes with `c: HOLE` (-2): windows through the back. geo: `withHoles(spec, design)` puts the hole strokes on a spec copy (`_holes`) at buildRegions/buildParts/buildFrame; `cutoutRegion` unions `drawnHoles(spec, grow)` (strokes drawn `w + 2*grow`, clipped to `phoneOutline(spec, grow - 2)`), so holes get panel holes, collars and oversized case holes exactly like the camera. `hasCuts(spec)` replaces `spec.cutouts.length` checks. paintCells/allInkRegion ignore c = -2. 2D draws holes last in bed colour, clipped 2 mm inside the phone.
