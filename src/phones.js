@@ -9,6 +9,7 @@ window.PHONES = [
    "width": 77.98,
    "length": 163.43,
    "thickness": 8.75,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0.0,
     0.04,
@@ -82,6 +83,7 @@ window.PHONES = [
    "width": 71.85,
    "length": 150.01,
    "thickness": 8.75,
+   "magnetsUp": 71.5,
    "lipDrop": 1.0,
    "lipRaise": 0.5,
    "cutoutInset": 2.7,
@@ -158,6 +160,7 @@ window.PHONES = [
    "width": 74.7,
    "length": 156.18,
    "thickness": 5.64,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.04,
@@ -231,6 +234,7 @@ window.PHONES = [
    "width": 71.45,
    "length": 149.61,
    "thickness": 7.95,
+   "magnetsUp": 71.5,
    "lipDrop": 0.7,
    "cornerProfile": [
     0.0,
@@ -312,6 +316,7 @@ window.PHONES = [
    "width": 71.52,
    "length": 146.71,
    "thickness": 7.8,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.06,
@@ -396,6 +401,7 @@ window.PHONES = [
    "width": 77.58,
    "length": 163.03,
    "thickness": 8.25,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.04,
@@ -469,6 +475,7 @@ window.PHONES = [
    "width": 71.45,
    "length": 149.61,
    "thickness": 8.25,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0.0,
     0.04,
@@ -542,6 +549,7 @@ window.PHONES = [
    "width": 77.76,
    "length": 160.89,
    "thickness": 7.81,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.04,
@@ -622,6 +630,7 @@ window.PHONES = [
    "width": 71.63,
    "length": 147.64,
    "thickness": 7.81,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.04,
@@ -702,6 +711,7 @@ window.PHONES = [
    "width": 71.52,
    "length": 146.71,
    "thickness": 7.8,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.06,
@@ -786,6 +796,7 @@ window.PHONES = [
    "width": 76.73,
    "length": 159.86,
    "thickness": 8.25,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.05,
@@ -851,6 +862,7 @@ window.PHONES = [
    "width": 70.6,
    "length": 146.61,
    "thickness": 8.25,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.05,
@@ -916,6 +928,7 @@ window.PHONES = [
    "width": 77.76,
    "length": 160.89,
    "thickness": 7.81,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.04,
@@ -982,6 +995,7 @@ window.PHONES = [
    "width": 71.63,
    "length": 147.64,
    "thickness": 7.81,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.04,
@@ -1048,6 +1062,7 @@ window.PHONES = [
    "width": 77.58,
    "length": 160.71,
    "thickness": 7.85,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.21,
@@ -1122,6 +1137,7 @@ window.PHONES = [
    "width": 71.45,
    "length": 147.46,
    "thickness": 7.85,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.08,
@@ -1187,6 +1203,7 @@ window.PHONES = [
    "width": 78.07,
    "length": 160.84,
    "thickness": 7.8,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.17,
@@ -1261,6 +1278,7 @@ window.PHONES = [
    "width": 71.52,
    "length": 146.71,
    "thickness": 7.8,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.06,
@@ -1335,6 +1353,7 @@ window.PHONES = [
    "width": 78.07,
    "length": 160.84,
    "thickness": 7.65,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.08,
@@ -1400,6 +1419,7 @@ window.PHONES = [
    "width": 71.52,
    "length": 146.71,
    "thickness": 7.65,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.07,
@@ -1465,6 +1485,7 @@ window.PHONES = [
    "width": 71.52,
    "length": 146.7,
    "thickness": 7.65,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.07,
@@ -1530,6 +1551,7 @@ window.PHONES = [
    "width": 64.21,
    "length": 131.5,
    "thickness": 7.65,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.06,
@@ -1595,6 +1617,7 @@ window.PHONES = [
    "width": 78.07,
    "length": 160.84,
    "thickness": 7.39,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.14,
@@ -1660,6 +1683,7 @@ window.PHONES = [
    "width": 71.52,
    "length": 146.71,
    "thickness": 7.39,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.13,
@@ -1725,6 +1749,7 @@ window.PHONES = [
    "width": 71.52,
    "length": 146.71,
    "thickness": 7.39,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.13,
@@ -1790,6 +1815,7 @@ window.PHONES = [
    "width": 64.21,
    "length": 131.5,
    "thickness": 7.39,
+   "magnetsUp": 71.5,
    "cornerProfile": [
     0,
     0.11,
