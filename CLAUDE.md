@@ -86,7 +86,7 @@ mode with its own drawing surface. Tag `draw-v1.7.0` = Case Draw before Beck exi
 
 ## Erase button (v1.18.0)
 
-- Tap = one rub-out: `setTool("erase")`, then `eraseDone()` in `endPointer` (and after a grid erase stroke) puts the pen back. Press and hold 500 ms = `eraseSticky`, erase stays on until another tool is chosen. Double-tap opens `#askClear`, a yes/cancel dialog, instead of clearing straight away; clearing still goes through `commit` so Undo restores it. Handled on pointerdown/up (no onclick), since iOS Safari does not send dblclick reliably.
+- Tap = one rub-out: `setTool("erase")`, then `eraseDone()` in `endPointer` (and after a grid erase stroke) puts the pen back. Press and hold 500 ms = `eraseSticky`, erase stays on until another tool is chosen. Double-tap opens `#askClear`, a yes/cancel dialog, instead of clearing straight away; clearing still goes through `commit` so Undo restores it. Handled on pointerdown/up (no onclick), since iOS Safari does not send dblclick reliably. v1.18.1: the double is counted on the second *pointerdown* (waiting for the release lost taps), the window is 600 ms, and `button{touch-action:manipulation}` stops Safari's double-tap-to-zoom swallowing the second tap.
 
 ## Magnet ring (v1.17.0, branch `ring`)
 

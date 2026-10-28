@@ -73,6 +73,7 @@
   button{
     font:inherit; font-size:14px; background:var(--panel); color:var(--text);
     border:1px solid var(--line); border-radius:8px; padding:8px 12px; min-height:38px; cursor:pointer;
+    touch-action:manipulation;
   }
   button:disabled{opacity:.35; cursor:default}
   button:focus-visible, input:focus-visible, textarea:focus-visible{outline:2px solid var(--text); outline-offset:2px}
@@ -181,7 +182,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.18.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.18.1</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnNew" aria-label="New design">New</button>
   <button id="btnSave" aria-label="Save">Save</button>
@@ -5507,25 +5508,27 @@ function setTool(t){
 toolDraw.onclick = () => setTool("draw");
 // Erase: a tap erases once and goes back to Draw; press and hold and it stays on; double-tap clears everything
 // (after a yes). Timed by hand, since iOS Safari doesn't reliably send dblclick.
-let eraseTap = 0, eraseSticky = false, eraseHold = null, eraseHeld = false;
+let eraseTap = 0, eraseSticky = false, eraseHold = null, eraseHeld = false, eraseDbl = false;
+const ERASE_DBL = 600, ERASE_HOLD = 600;      // the second tap counts within this; a press this long sticks
 toolErase.addEventListener("pointerdown", e => {
   e.preventDefault();
   eraseHeld = false;
-  clearTimeout(eraseHold);
+  clearTimeout(eraseHold); eraseHold = null;
+  const now = performance.now();
+  // the second press is what opens the dialog: waiting for the release loses taps on a phone
+  if(now - eraseTap < ERASE_DBL){ eraseTap = 0; eraseDbl = true; askClearOpen(); return; }
+  eraseTap = now; eraseDbl = false;
   eraseHold = setTimeout(() => {
     eraseHeld = true; eraseSticky = true; eraseTap = 0; setTool("erase");
     showHint("Erase stays on. Tap Draw when you have finished.");
-  }, 500);
+  }, ERASE_HOLD);
 });
 const eraseLetGo = () => { clearTimeout(eraseHold); eraseHold = null; };
 toolErase.addEventListener("pointercancel", eraseLetGo);
 toolErase.addEventListener("pointerleave", eraseLetGo);
 toolErase.addEventListener("pointerup", e => {
   e.preventDefault(); eraseLetGo();
-  if(eraseHeld) return;                       // the hold already switched it on for good
-  const now = performance.now(), dbl = now - eraseTap < 400;
-  eraseTap = dbl ? 0 : now;
-  if(dbl){ askClearOpen(); return; }
+  if(eraseHeld || eraseDbl){ eraseDbl = false; return; }   // the hold, or the second tap, has dealt with it
   eraseSticky = false; setTool("erase");
   showHint("Erase: one go, then back to drawing. Hold Erase to keep it on, double-tap to clear everything.");
 });
