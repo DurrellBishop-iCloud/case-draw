@@ -84,6 +84,10 @@ mode with its own drawing surface. Tag `draw-v1.7.0` = Case Draw before Beck exi
 - Tests: `node test/manifold.js` covers shared geometry; Beck tracing needs a browser (Playwright WebKit was used:
   draw by mouse drags, call `window.__beckExport()` for the Save bytes, count non-manifold edges, then the Orca CLI).
 
+## Erase button (v1.18.0)
+
+- Tap = one rub-out: `setTool("erase")`, then `eraseDone()` in `endPointer` (and after a grid erase stroke) puts the pen back. Press and hold 500 ms = `eraseSticky`, erase stays on until another tool is chosen. Double-tap opens `#askClear`, a yes/cancel dialog, instead of clearing straight away; clearing still goes through `commit` so Undo restores it. Handled on pointerdown/up (no onclick), since iOS Safari does not send dblclick reliably.
+
 ## Magnet ring (v1.17.0, branch `ring`)
 
 - `design.ring = { on, od 55, id 45, t 0.64, lip 1, fit 0.3, cx, cy }`: a channel for a stick-on MagSafe-size metal ring. `ringGeom` (geo.js) gives the channel, the keepout (channel + lip each side) and the lips; `buildRegions` cuts the keepout out of every ink and, in inlay, the channel out of the panel. `buildParts` adds one part, "Magnet ring surround": in inlay the floor left under the groove (z = t..T), in relief a boss from the panel face to the tallest ink (never under t + 0.4), with the channel floor t below its top, so the ring finishes flush with the highest thing on the back. `ringProblem(spec, design)` returns why it does not fit (off the back, over the camera, no room for the inner lip); Settings shows it.

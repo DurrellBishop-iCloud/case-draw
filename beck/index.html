@@ -181,7 +181,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.17.1</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.18.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnNew" aria-label="New design">New</button>
   <button id="btnSave" aria-label="Save">Save</button>
@@ -322,6 +322,16 @@
       <button class="main" id="newSave">Save, then start new</button>
       <button id="newNoSave">Start new without saving</button>
       <button id="newCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+<div class="ask" id="askClear" role="dialog" aria-modal="true" aria-labelledby="askClearTitle">
+  <div class="card">
+    <h2 id="askClearTitle">Erase everything?</h2>
+    <p>This removes the whole drawing, freehand and Beck. Undo brings it back until you reload.</p>
+    <div class="btns">
+      <button class="main" id="clearYes">Erase everything</button>
+      <button id="clearNo">Cancel</button>
     </div>
   </div>
 </div>
@@ -4787,13 +4797,19 @@ function endPointer(e){
   if(e.pointerId !== activeId) return;
   activeId = null; placeDrag = null; moveDrag = null;
   if(mirDrag){ mirDrag = null; save(); setTimeout(() => showHint(""), 1500); render(); return; }
-  if(gridStroke){ gridEnd(); render(); return; }
+  if(gridStroke){ const wasErase = gridStroke.erasing; gridEnd(); if(wasErase) eraseDone(); render(); return; }
   if((tool === "draw" || tool === "holes") && live && !placing){
     const add = mirrored(live);
     commit(() => design.strokes.push(...add));
     live = null;
   }
+  if(tool === "erase") eraseDone();
   render();
+}
+// one tap of Erase rubs out once; then the pen is back, unless Erase was held down to keep it on
+function eraseDone(){
+  if(eraseSticky || tool !== "erase") return;
+  setTool("draw"); showHint("Back to drawing. Hold Erase to keep erasing.");
 }
 canvas.addEventListener("pointerup", endPointer);
 canvas.addEventListener("pointercancel", endPointer);
@@ -5489,15 +5505,41 @@ function setTool(t){
   render();
 }
 toolDraw.onclick = () => setTool("draw");
-// Erase: tap to pick the tool; double-tap to clear the whole drawing (undoable). Timed by hand, since iOS
-// Safari doesn't reliably send dblclick.
-let eraseTap = 0;
-toolErase.onclick = () => {
+// Erase: a tap erases once and goes back to Draw; press and hold and it stays on; double-tap clears everything
+// (after a yes). Timed by hand, since iOS Safari doesn't reliably send dblclick.
+let eraseTap = 0, eraseSticky = false, eraseHold = null, eraseHeld = false;
+toolErase.addEventListener("pointerdown", e => {
+  e.preventDefault();
+  eraseHeld = false;
+  clearTimeout(eraseHold);
+  eraseHold = setTimeout(() => {
+    eraseHeld = true; eraseSticky = true; eraseTap = 0; setTool("erase");
+    showHint("Erase stays on. Tap Draw when you have finished.");
+  }, 500);
+});
+const eraseLetGo = () => { clearTimeout(eraseHold); eraseHold = null; };
+toolErase.addEventListener("pointercancel", eraseLetGo);
+toolErase.addEventListener("pointerleave", eraseLetGo);
+toolErase.addEventListener("pointerup", e => {
+  e.preventDefault(); eraseLetGo();
+  if(eraseHeld) return;                       // the hold already switched it on for good
   const now = performance.now(), dbl = now - eraseTap < 400;
   eraseTap = dbl ? 0 : now;
-  if(!dbl){ setTool("erase"); showHint("Tap or drag over a stroke to remove it. Double-tap Erase to clear everything."); return; }
-  if(!design.strokes.length && !gridLayers.some(m => !m.isEmpty)){ showHint("Nothing to clear."); return; }
+  if(dbl){ askClearOpen(); return; }
+  eraseSticky = false; setTool("erase");
+  showHint("Erase: one go, then back to drawing. Hold Erase to keep it on, double-tap to clear everything.");
+});
+function askClearOpen(){
+  if(!design.strokes.length && !gridLayers.some(m => !m.isEmpty)){ showHint("Nothing to clear."); setTool("draw"); return; }
+  askClear.classList.add("open"); clearYes.focus();
+}
+clearNo.onclick = () => { askClear.classList.remove("open"); setTool("draw"); };
+askClear.addEventListener("click", e => { if(e.target === askClear) clearNo.click(); });
+clearYes.onclick = () => {
+  askClear.classList.remove("open");
+  endMove(true); gridCancel(); live = null;
   commit(() => { design.strokes = []; gridLayers.forEach(m => m.clear()); });
+  eraseSticky = false; setTool("draw");
   render(); showHint("Cleared. Undo brings it back.");
 };
 toolHole.onclick = () => { setTool("holes"); showHint(hints.holes); };
