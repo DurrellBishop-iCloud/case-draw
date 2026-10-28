@@ -84,6 +84,10 @@ mode with its own drawing surface. Tag `draw-v1.7.0` = Case Draw before Beck exi
 - Tests: `node test/manifold.js` covers shared geometry; Beck tracing needs a browser (Playwright WebKit was used:
   draw by mouse drags, call `window.__beckExport()` for the Save bytes, count non-manifold edges, then the Orca CLI).
 
+## Photo import (v1.18.2)
+
+- Decoded with `createImageBitmap(file, {imageOrientation:"from-image"})` (falling back to `createImageBitmap(file)`, then to `<img>`): pixels and reported size always agree, so an EXIF-rotated phone photo cannot come out stretched. The hint states the photo's pixel size. Proportions are kept everywhere after that: `startPlacing` sets `w = max(spec.width, spec.length * aspect) + 4` (covers the back, crops the sides), `drawPlacing` and `placeApply` both use `h = w / aspect`.
+
 ## Erase button (v1.18.0)
 
 - Tap = one rub-out: `setTool("erase")`, then `eraseDone()` in `endPointer` (and after a grid erase stroke) puts the pen back. Press and hold 500 ms = `eraseSticky`, erase stays on until another tool is chosen. Double-tap opens `#askClear`, a yes/cancel dialog, instead of clearing straight away; clearing still goes through `commit` so Undo restores it. Handled on pointerdown/up (no onclick), since iOS Safari does not send dblclick reliably. v1.18.1: the double is counted on the second *pointerdown* (waiting for the release lost taps), the window is 600 ms, and `button{touch-action:manipulation}` stops Safari's double-tap-to-zoom swallowing the second tap.

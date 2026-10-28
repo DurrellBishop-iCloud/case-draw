@@ -182,7 +182,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.18.1</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.18.2</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnNew" aria-label="New design">New</button>
   <button id="btnSave" aria-label="Save">Save</button>
@@ -5281,17 +5281,32 @@ function endPlacing(){
   placing = null; placeDrag = null; placebar.style.display = "none"; document.getElementById("rules").style.display = ""; render();
 }
 btnPhoto.onclick = () => photoIn.click();
-photoIn.addEventListener("change", () => {
+// A photo keeps its proportions, whatever the case is shaped like: it is decoded with createImageBitmap, which
+// turns a phone photo the right way up and reports the size of what it actually drew. (An <img> can report the
+// size before the turn on some browsers, and the picture then comes out stretched.) Pixels are copied with
+// drawImage at that exact size, so nothing is squashed; sizing and cropping happen later, on the case.
+photoIn.addEventListener("change", async () => {
   const f = photoIn.files[0]; photoIn.value = ""; if(!f) return;
-  const img = new Image(), url = URL.createObjectURL(f);
-  img.onload = () => {
-    const k = Math.min(1, 900 / Math.max(img.naturalWidth, img.naturalHeight));
-    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
-    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+  try{
+    let w, h, draw;
+    if(window.createImageBitmap){
+      let bm;
+      try{ bm = await createImageBitmap(f, { imageOrientation: "from-image" }); }
+      catch(e){ bm = await createImageBitmap(f); }
+      w = bm.width; h = bm.height; draw = (x, cw, ch) => { x.drawImage(bm, 0, 0, cw, ch); bm.close && bm.close(); };
+    }else{
+      const url = URL.createObjectURL(f);
+      const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+      w = img.naturalWidth; h = img.naturalHeight; draw = (x, cw, ch) => { x.drawImage(img, 0, 0, cw, ch); URL.revokeObjectURL(url); };
+    }
+    if(!(w > 0 && h > 0)) throw new Error("no size");
+    const k = Math.min(1, 900 / Math.max(w, h));
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+    draw(c.getContext("2d"), c.width, c.height);
     startPlacing({ kind: "photo", src: c, aspect: c.width / c.height, photoPal: photoPalette(c) });
-  };
-  img.onerror = () => { URL.revokeObjectURL(url); alert("That file couldn't be read as a picture."); };
-  img.src = url;
+    showHint(`Photo ${w} x ${h}. Drag to move, pinch (or scroll) to size and turn; the sides are cropped at the edge of the case.`, true);
+  }catch(e){ alert("That file couldn't be read as a picture."); }
 });
 btnText.onclick = () => { startPlacing({ kind: "text", text: textIn.value || "Hello" }); setTimeout(() => { textIn.focus(); textIn.select(); }, 50); };
 // after a pinch or scroll, the text's Size follows its new width
