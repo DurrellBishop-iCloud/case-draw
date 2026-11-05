@@ -93,6 +93,16 @@
     ring.push(ring[0]);
     return [ring];
   }
+  // The case's own outline, `o` mm outside the phone. Normally it follows the phone's corners; with
+  // `squareCorners` it is the phone's rectangle instead (corners `squareRadius` mm round, 0 = sharp), so the wall
+  // is thicker at the corners and the back is a plain rectangle.
+  function caseOutline(spec, o, segs) {
+    if (!spec.squareCorners) return phoneOutline(spec, o, segs);
+    const w = spec.width + 2 * o, h = spec.length + 2 * o;
+    if (w <= 0 || h <= 0) throw new Error("outline offset smaller than the case");
+    const r = Math.max(0, (spec.squareRadius || 0) + Math.min(o, 0));
+    return [roundedRect(w, h, r, Math.max(2, segs || 8))[0].map(q => [q[0] - o, q[1] - o])];
+  }
   function segmentQuad(a, b, hw) {
     const dx = b[0] - a[0], dy = b[1] - a[1];
     const len = Math.hypot(dx, dy);
@@ -363,7 +373,7 @@
     const o = (spec.phoneClearance || 0) + spec.frameWall, n = (design.inks || []).length;
     const sig = JSON.stringify([spec.width, spec.length, spec.cornerRadius, spec.cornerProfile, spec.cornerProfileY, o, n]);
     if (beyondCache.ref === design.strokes && beyondCache.len === design.strokes.length && beyondCache.sig === sig) return beyondCache.out;
-    const outline = phoneOutline(spec, o, 16), lists = Array.from({ length: n }, () => []);
+    const outline = caseOutline(spec, o, 16), lists = Array.from({ length: n }, () => []);
     const saved = cellCache, pen = (design.strokes || []).filter(st => !st.fill || st.beck);
     for (const C of paintCells(pen, n)) if (C.ink >= 0) lists[C.ink].push(C.region);
     cellCache = saved;   // keep the full drawing's partition cached
@@ -371,7 +381,7 @@
     const all = per.filter(r => r.length);
     let out = null;
     if (all.length) {
-      const band = ops.difference(phoneOutline(spec, o + 0.05, 16), outline);
+      const band = ops.difference(caseOutline(spec, o + 0.05, 16), outline);
       const touching = (all.length === 1 ? all[0] : ops.union(...all)).filter(poly => ops.intersection([poly], band).length);
       if (touching.length) { per = per.map(r => r.length ? clean(ops.intersection(r, touching), 0.2) : r); if (per.some(r => r.length)) out = per; }
     }
@@ -408,7 +418,7 @@
     spec = withHoles(spec, design);
     const off = plateOffsets(spec);
     const holes = hasCuts(spec) ? [cutoutRegion(spec, 0)] : [];
-    const region = (o, hs) => { const p = phoneOutline(spec, o, 16); return hs.length ? ops.difference(p, ...hs) : ops.union(p); };
+    const region = (o, hs) => { const p = caseOutline(spec, o, 16); return hs.length ? ops.difference(p, ...hs) : ops.union(p); };
     const plateRegion = region(off.narrow, holes);
     const plateWide = region(off.wide, holes);
     // inks keep clear of the plate edge and the cutouts by inkMargin
@@ -887,7 +897,7 @@
     const style = design.caseStyle || "plain";
     const c = spec.phoneClearance || 0, wall = spec.frameWall, lipDepth = spec.lipDepth || 0;
     const { slabT, zPhone, zLip, H } = frameLevels(spec);
-    const outer = phoneOutline(spec, c + wall, 16);
+    const outer = caseOutline(spec, c + wall, 16);
     const collars = collarOn(spec, design);
     const extra = collars ? (spec.collarWall || 0.8) + (spec.collarClearance || 0.15) : 0;
     const holes = hasCuts(spec) ? [ops.intersection(cutoutRegion(spec, extra), phoneOutline(spec, c, 16))].filter(h => h.length) : [];
@@ -912,7 +922,7 @@
       lipRuns = colourBy(lipRuns[0].region);
       slabBand = wallRuns;
     }
-    const slabInterior = minusHoles(slabBand ? phoneOutline(spec, c, 16) : outer);
+    const slabInterior = minusHoles(slabBand ? phoneOutline(spec, c, 16) : outer);   // the pocket keeps the phone's corners
 
     // z intervals: [z0, z1, kind]  kind: slab | band | window | lip
     // the wall in 0.2 mm layers (the print's layer height), so rounded openings are exact where sliced;
@@ -1254,5 +1264,5 @@ ${items} </build>
   }
 
 
-  return { cutoutRegion, windowRects, beyondRegions, ringGeom, ringProblem, ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
+  return { cutoutRegion, windowRects, beyondRegions, ringGeom, ringProblem, caseOutline, ringsToRegion, orderedStrokes, traceMask, buildPrintSet, buildCoupon, zipFiles: zip, buildRegions, buildParts, buildFrame, plateLevels, frameInPlateSpace, transformMesh, frameLevels, plateOffsets, phoneOutline, to3MF, simplify, extrude, extrudePocketed, Mesh };
 });
