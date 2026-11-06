@@ -182,7 +182,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.19.0</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.19.1</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnNew" aria-label="New design">New</button>
   <button id="btnSave" aria-label="Save">Save</button>
@@ -394,11 +394,12 @@
     <section id="ringSection">
       <h3>Magnet ring</h3>
       <label class="field"><input type="checkbox" id="ringOn"> A metal magnet ring in the back</label>
-      <p>A channel for a stick-on metal ring (MagSafe size), with plastic lips inside and outside it. Its top comes flush with the highest thing on the back, and the drawing keeps out of it. The surround prints as its own part, so it can have its own colour.</p>
+      <p>A channel for a stick-on metal ring (MagSafe size), with plastic lips inside and outside it. The lips come flush with the highest thing on the back, and the drawing keeps out of them. The surround prints as its own part, so it can have its own colour.</p>
+      <p><b>Depth</b> is how deep the channel is cut, so it sets how far the lips stand above the ring: start at the ring's own thickness and take off however much the lips stand proud on the print. <b>Play</b> is the slack on the diameter.</p>
       <div class="row" id="ringOpts" style="display:none">
         <label class="field">Outer <input type="number" id="ringOd" min="10" max="120" step="0.1" style="width:72px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm</label>
         <label class="field">Inner <input type="number" id="ringId" min="5" max="115" step="0.1" style="width:72px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm</label>
-        <label class="field">Thick <input type="number" id="ringT" min="0.2" max="5" step="0.01" style="width:72px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm</label>
+        <label class="field" title="How deep the channel is cut. Make it shallower if the plastic edges stand proud of the metal ring.">Depth <input type="number" id="ringT" min="0.1" max="5" step="0.05" style="width:72px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm</label>
         <label class="field">Lip <input type="number" id="ringLip" min="0.4" max="5" step="0.1" style="width:72px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm</label>
         <label class="field">Play <input type="number" id="ringFit" min="0" max="1" step="0.05" style="width:72px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm</label>
         <label class="field">Centre x <input type="number" id="ringCx" title="from the left edge" min="0" max="200" step="0.5" style="width:72px;font:inherit;padding:6px;border:1px solid var(--line);border-radius:8px"> mm</label>
@@ -529,7 +530,7 @@ const DEFAULT_DESIGN = {
   caseInk: -1,            // which of the four colours the case body is made of: -1 = the panel colour, 0-2 = an ink
   textStyle: { family: "system-ui, -apple-system, Helvetica, Arial, sans-serif", weight: 700, size: 8, lead: 120, track: 0, align: "center" },
   // a metal magnet ring (MagSafe size) let into the back; off unless you turn it on
-  ring: { on: false, od: 55, id: 45, t: 0.64, lip: 1.0, fit: 0.3, cx: null, cy: null },
+  ring: { on: false, od: 55, id: 45, t: 0.64, lip: 1.0, fit: 0.3, cx: null, cy: null },   // t = how deep the channel is cut
   beyond: false,          // drawing beyond the edge of the case becomes solid pieces
   beyondDepth: 4,         // ...this deep, from the panel's face towards the screen (mm)
   strokes: []            // { c: inkIndex, w: mm, pts: [[x,y],...] } or a filled shape { c, fill: MultiPolygon mm }

@@ -388,13 +388,14 @@
     beyondCache = { ref: design.strokes, len: design.strokes.length, sig, out };
     return out;
   }
-  // A metal magnet ring (MagSafe size) let into the back: an annular channel `t` deep with `lip` mm of plastic
-  // inside and outside it, its top flush with the highest thing on the back. `fit` is the total play on the
+  // A metal magnet ring (MagSafe size) let into the back: an annular channel `t` deep (the recess depth, set by
+  // hand: the ring's own thickness less however much the lips stand proud on the print) with `lip` mm of plastic
+  // inside and outside it, the lips flush with the highest thing on the back. `fit` is the total play on the
   // diameter, for printer tolerance. Returns null when the ring is off.
   function ringGeom(spec, design) {
     const r = design && design.ring;
     if (!r || !r.on) return null;
-    const fit = r.fit != null ? r.fit : 0.3, t = r.t || 0.64, lip = r.lip != null ? r.lip : 1.0;
+    const fit = r.fit != null ? r.fit : 0.3, t = Math.max(0.1, r.t || 0.64), lip = r.lip != null ? r.lip : 1.0;
     const rOut = (r.od || 55) / 2 + fit / 2, rIn = Math.max(1, (r.id || 45) / 2 - fit / 2);
     const cx = r.cx != null ? r.cx : spec.width / 2, cy = r.cy != null ? r.cy : spec.length / 2;
     const disc = q => circle(cx, cy, q, 128);
