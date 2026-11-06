@@ -182,7 +182,7 @@
 <body>
 
 <header>
-  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.19.1</span>
+  <h1>Case Draw</h1><span class="tag" id="appVersion">v1.20.0</span>
   <div class="sub" id="subtitle">Nothing Phone (3), back view</div>
   <button id="btnNew" aria-label="New design">New</button>
   <button id="btnSave" aria-label="Save">Save</button>
@@ -239,6 +239,7 @@
       <button data-pal="mine" class="on">My colours</button>
       <button data-pal="photo">Photo's colours</button>
     </div>
+    <div class="chips" id="palUse" style="display:none" aria-label="Colours the photo may use"></div>
     <div class="textopts" id="textOpts">
       <textarea id="textIn" rows="2" aria-label="Text">Hello</textarea>
       <div class="row">
@@ -5241,6 +5242,36 @@ function photoPalette(src){
   return cent.map((q, k) => [q, count[k]]).sort((a, b) => b[1] - a[1]).map(x => x[0]);
 }
 function currentPal(){ return placing.pal === "photo" ? placing.photoPal : [design.plateColor, ...design.inks].map(hexToRgb); }
+// Which of the four a photo is allowed to use (tap a swatch in the bar to drop one). Returns the colours left and
+// where each sits in the full four, so a dropped colour's pixels go to the nearest colour still in.
+function usablePal(){
+  const full = currentPal(), use = placing.use || [true, true, true, true];
+  const pal = [], map = [];
+  full.forEach((c, i) => { if(use[i] !== false){ pal.push(c); map.push(i); } });
+  if(!pal.length){ pal.push(full[0]); map.push(0); }
+  return { pal, map };
+}
+function syncPalUse(){
+  const box = document.getElementById("palUse");
+  box.style.display = placing && placing.kind === "photo" ? "" : "none";
+  if(!placing || placing.kind !== "photo") return;
+  const cols = currentPal(), use = placing.use;
+  box.innerHTML = "";
+  cols.forEach((rgb, i) => {
+    const b = document.createElement("button");
+    b.className = "chip-sw" + (use[i] !== false ? " on" : "") + (i === 0 ? " sq" : "");
+    b.style.background = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    b.title = (i === 0 ? "Panel colour" : "Ink " + i) + (use[i] !== false ? " (in use)" : " (not used)");
+    b.setAttribute("aria-label", b.title); b.setAttribute("aria-pressed", use[i] !== false);
+    b.onclick = () => {
+      const on = placing.use.filter(Boolean).length;
+      if(use[i] !== false && on <= 1) return;         // keep at least one
+      placing.use[i] = use[i] === false;
+      syncPalUse(); makePreview(); render();
+    };
+    box.appendChild(b);
+  });
+}
 // Preview: the photo reduced to the four colours (panel-colour areas paint the panel colour), or the text in the ink.
 function makePreview(){
   const P = placing;
@@ -5267,11 +5298,11 @@ function makePreview(){
   const s = P.src, k = Math.min(1, 260 / Math.max(s.width, s.height));
   const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(s.width * k)); c.height = Math.max(1, Math.round(s.height * k));
   const x = c.getContext("2d"); x.drawImage(s, 0, 0, c.width, c.height);
-  const im = x.getImageData(0, 0, c.width, c.height), d = im.data, pal = currentPal();
+  const im = x.getImageData(0, 0, c.width, c.height), d = im.data, { pal, map } = usablePal();
   for(let i = 0; i < d.length; i += 4){
     if(d[i + 3] < 128){ d[i + 3] = 0; continue; }
-    const q = nearestIdx(d[i], d[i + 1], d[i + 2], pal);
-    const col = placing.pal === "photo" ? pal[q] : hexToRgb(inkCol(q - 1));
+    const q = map[nearestIdx(d[i], d[i + 1], d[i + 2], pal)];
+    const col = placing.pal === "photo" ? currentPal()[q] : hexToRgb(inkCol(q - 1));
     d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
   }
   x.putImageData(im, 0, 0); P.prev = c;
@@ -5292,7 +5323,7 @@ function drawPlacing(){
   }
 }
 function startPlacing(P){
-  placing = Object.assign({ cx: spec.width / 2, cy: spec.length / 2, rot: 0, pal: "mine" }, P);
+  placing = Object.assign({ cx: spec.width / 2, cy: spec.length / 2, rot: 0, pal: "mine", use: [true, true, true, true] }, P);
   if(tool !== "draw") setTool("draw");
   makePreview();
   if(placing.kind !== "text") placing.w = Math.max(spec.width, spec.length * placing.aspect) + 4;   // cover the whole back to start
@@ -5304,13 +5335,14 @@ function startPlacing(P){
     ensureFont(textStyle().family).then(() => { if(placing && placing.kind === "text"){ makePreview(); render(); } }).catch(() => {});
   }
   for(const b of palSeg.querySelectorAll("button")) b.classList.toggle("on", b.dataset.pal === placing.pal);
+  syncPalUse();
   document.getElementById("rules").style.display = "none";
-  showHint(placing.kind === "photo" ? "Drag to move, pinch (or scroll) to size and turn. Outside the case is cut off." : "Type, then drag to move and pinch to size and turn. It uses the selected ink.", true);
+  showHint(placing.kind === "photo" ? "Drag to move, pinch (or scroll) to size and turn. Tap a colour swatch to leave that colour out. Outside the case is cut off." : "Type, then drag to move and pinch to size and turn. It uses the selected ink.", true);
   render();
 }
 function endPlacing(){
   showHint("");
-  placing = null; placeDrag = null; placebar.style.display = "none"; document.getElementById("rules").style.display = ""; render();
+  placing = null; placeDrag = null; placebar.style.display = "none"; document.getElementById("palUse").style.display = "none"; document.getElementById("rules").style.display = ""; render();
 }
 btnPhoto.onclick = () => photoIn.click();
 photoIn.addEventListener("change", () => {
@@ -5457,7 +5489,7 @@ for(const b of alignSeg.querySelectorAll("button")) b.onclick = () => { setTextS
 const numIn = (el, key, lo, hi) => el.addEventListener("input", () => { const v = parseFloat(el.value); if(isFinite(v) && v >= lo && v <= hi) setTextStyle({ [key]: v }); });
 numIn(tSize, "size", 1, 120); numIn(tLead, "lead", 60, 300); numIn(tTrack, "track", -20, 100);
 tTop.addEventListener("change", () => setTextStyle({ onTop: tTop.checked }));
-for(const b of palSeg.querySelectorAll("button")) b.onclick = () => { placing.pal = b.dataset.pal; for(const o of palSeg.querySelectorAll("button")) o.classList.toggle("on", o === b); makePreview(); render(); };
+for(const b of palSeg.querySelectorAll("button")) b.onclick = () => { placing.pal = b.dataset.pal; for(const o of palSeg.querySelectorAll("button")) o.classList.toggle("on", o === b); syncPalUse(); makePreview(); render(); };
 rotL.onclick = () => { if(placing){ placing.rot -= Math.PI / 2; render(); } };
 rotR.onclick = () => { if(placing){ placing.rot += Math.PI / 2; render(); } };
 placeCancel.onclick = endPlacing;
@@ -5471,7 +5503,7 @@ placeApply.onclick = () => {
       const g = P.kind === "text" ? 0.2 : 0.4, W = spec.width, L = spec.length, h = P.w / P.aspect;
       const x0 = -2, y0 = -2, nx = Math.ceil((W + 4) / g), ny = Math.ceil((L + 4) / g);
       const sd = P.src.getContext("2d").getImageData(0, 0, P.src.width, P.src.height).data, sw = P.src.width, sh = P.src.height;
-      const pal = P.kind === "photo" ? currentPal() : null, cos = Math.cos(-P.rot), sin = Math.sin(-P.rot);
+      const up = P.kind === "photo" ? usablePal() : null, cos = Math.cos(-P.rot), sin = Math.sin(-P.rot);
       const NONE = -9; let idx = new Int8Array(nx * ny).fill(NONE);   // -1 = panel colour, 0..2 = inks
       for(let j = 0; j < ny; j++) for(let i = 0; i < nx; i++){
         const dx = x0 + (i + 0.5) * g - P.cx, dy = y0 + (j + 0.5) * g - P.cy;
@@ -5480,7 +5512,7 @@ placeApply.onclick = () => {
         const k = 4 * (Math.floor(v * sh) * sw + Math.floor(u * sw));
         if(sd[k + 3] < 128) continue;
         if(P.kind === "text") idx[j * nx + i] = ink;
-        else idx[j * nx + i] = nearestIdx(sd[k], sd[k + 1], sd[k + 2], pal) - 1;
+        else idx[j * nx + i] = up.map[nearestIdx(sd[k], sd[k + 1], sd[k + 2], up.pal)] - 1;
       }
       if(P.kind === "photo"){
         // buckets: 0 = nothing, 1 = panel colour, 2..4 = inks
