@@ -820,7 +820,9 @@
   // Openings through the side wall at height z (case print coordinates). A cutout with `fromScreen` is a button
   // hole: a rounded slot `height` tall (default 4) centred that far below the screen face, with `radius` ends
   // (default: fully round). Without it the opening runs the whole wall height with `windowRadius` corners.
-  // `buttonClearance` is added to each end along the edge.
+  // `buttonClearance` is added to each end along the edge. A full-height opening (the bottom ports) is shortened
+  // by `portTrim` (the cutout's own `trim` wins), half off each side, so the case keeps a little more material
+  // above and below the connector.
   // Button holes get a 45-degree chamfer `buttonChamfer` deep on the outside face (default 0), so a finger finds the
   // button: at depth d into the wall the slot is grown by (chamfer - d). The chamfer stops 0.4 mm short of the lip
   // and of the case floor, so it never eats into them. `reach`: how far out past the wall the opening runs (default
@@ -844,7 +846,10 @@
         h = k.height || 4; zc = zScreen - k.fromScreen; r = Math.min(k.radius != null ? k.radius : h / 2, h / 2);
         if (z > zPhone + 0.4 && z < zLip - 0.4) ch = Math.min(spec.buttonChamfer || 0, wall - 0.3);
       }
-      else { h = zLip - zPhone; zc = (zPhone + zLip) / 2; r = Math.min(spec.windowRadius || 0, h / 2); }
+      else {
+        const trim = Math.max(0, k.trim != null ? k.trim : (spec.portTrim || 0));
+        h = Math.max(1, zLip - zPhone - trim); zc = (zPhone + zLip) / 2; r = Math.min(spec.windowRadius || 0, h / 2);
+      }
       const through = span(k, h, r, zc, 0);
       const rows = [];   // [depth, a, b], outside to inside
       if (ch > 0) {

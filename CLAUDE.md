@@ -112,6 +112,8 @@ mode with its own drawing surface. Tag `draw-v1.7.0` = Case Draw before Beck exi
 
 ## Phones (v1.10.0)
 
+- `portTrim` (v1.20.1): a full-height side opening (the bottom ports) is cut `portTrim` mm shorter than the wall, half off each side, in `windowRects`; a cutout's own `trim` overrides it. `PORT_TRIM` 1.0 on every iPhone preset (Durrell, on the 17 Pro: the connector still fits and the bottom edge keeps more material). Nothing stays 0. The 17 Pro's opening is then 6.75 high, about Apple's recommended 6.60 connector keepout.
+
 - `lipDrop` (v1.11.3): the lip and the top of the wall sit this far below the screen face, for phones whose edges curve away. Button `fromScreen` is still measured from the screen face (`frameLevels().zScreen`). Set per phone in `LIP_DROP` in tools/make_phones.py; iPhone 17 = 0.7, iPhone 17 Pro = 1.0 (Durrell, from the phone).
 - `lipRaise` (v1.15.2): added to lipThickness in `frameLevels`; iPhone 17 Pro = 0.5 (`LIP_RAISE` in make_phones.py): with lipDrop 1.0 the lip top was 0.3 below the glass, now ~0.3 above. A separate key (not lipThickness) so saved specs, which carry the default 0.8, pick it up in buildPhoneList.
 - `cutoutInset` (v1.15.1): shrinks a rounded-rect cutout on all four sides before anything else; iPhone 17 Pro = 2.7 (`CUTOUT_INSET` in make_phones.py). `cutoutEdge` alone only moved the three sides near the phone's edges, not the bottom of the camera opening. Saved 17 Pro specs keep cutoutEdge 3 (now a no-op) and pick up cutoutInset via `adoptPresetKeys()` at boot and on Open design (until v1.15.3 it only ran when Settings was opened, so prints used the old numbers). The 2D view strokes `cutoutsPath(0)` (the real geometry), not the raw cutout rectangles.

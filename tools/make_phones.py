@@ -24,6 +24,9 @@ LIP_RAISE = {"iphone-17-pro": 0.5}
 # every iPhone here (12 and later) has MagSafe magnets: their ring is centred across the phone, this far up from
 # the bottom (measured on the 17 Pro)
 MAGNETS_UP = 71.5
+# the bottom opening is this much shorter than the wall, half off each side: the connector still goes in and the
+# case keeps more material along the bottom edge (Durrell, on the 17 Pro)
+PORT_TRIM = 1.0
 # the camera opening comes in this far on all four sides, off the plateau's sloping base (checked on the phone):
 # 2.7 puts it 3 mm in from the phone's edge on the top and sides
 CUTOUT_INSET = {"iphone-17-pro": 2.7}
@@ -40,7 +43,7 @@ def preset(d):
     if m and m.get("plateau"):
         d.setdefault("camera", {}).setdefault("plateau", {}); d["camera"]["plateau"] = {**(d["camera"]["plateau"] or {}), **m["plateau"]}
         notes.append("camera outline (" + ", ".join(sorted(m["plateau"])) + ") measured from Apple's linework to about 0.2 mm, as the sheet does not dimension it")
-    spec = {"phone": d["name"], "width": W, "length": L, "thickness": T, "magnetsUp": MAGNETS_UP}
+    spec = {"phone": d["name"], "width": W, "length": L, "thickness": T, "magnetsUp": MAGNETS_UP, "portTrim": PORT_TRIM}
     if d["id"] in LIP_DROP: spec["lipDrop"] = LIP_DROP[d["id"]]
     if d["id"] in LIP_RAISE: spec["lipRaise"] = LIP_RAISE[d["id"]]
     if d["id"] in CUTOUT_INSET: spec["cutoutInset"] = CUTOUT_INSET[d["id"]]
